@@ -24,12 +24,14 @@ interface ReceiptVerificationViewProps {
   initialReceiptNumber?: string;
   onNavigateToPortal?: () => void;
   onNavigateToAdmin?: () => void;
+  onNavigateToHome?: () => void;
 }
 
 export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = ({
   initialReceiptNumber = '',
   onNavigateToPortal,
-  onNavigateToAdmin
+  onNavigateToAdmin,
+  onNavigateToHome
 }) => {
   const [receiptNumber, setReceiptNumber] = useState(initialReceiptNumber);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -336,6 +338,14 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
           Finger of God Estate Security Management • Official Verification Service
         </div>
         <div className="flex items-center gap-3">
+          {onNavigateToHome && (
+            <button
+              onClick={onNavigateToHome}
+              className="text-slate-600 font-semibold hover:text-slate-900 cursor-pointer"
+            >
+              Public Home
+            </button>
+          )}
           {onNavigateToPortal && (
             <button
               onClick={onNavigateToPortal}

@@ -39,12 +39,39 @@ import { ReceiptVerificationView } from './components/receipts/ReceiptVerificati
 import { StagePlaceholderView } from './components/placeholders/StagePlaceholderView';
 import { SupabaseSetupModal } from './components/setup/SupabaseSetupModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { PublicHomeView } from './components/public/PublicHomeView';
+import { PublicAnnouncementsView } from './components/public/PublicAnnouncementsView';
+import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
+import { AnnouncementsView } from './components/admin/AnnouncementsView';
 
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
+function getInitialNav(): { tab: NavigationTab; slug: string } {
+  const path = window.location.pathname.toLowerCase();
+  if (path === '/announcements') {
+    return { tab: 'public_announcements', slug: '' };
+  }
+  if (path.startsWith('/announcements/')) {
+    const slug = window.location.pathname.replace(/^\/announcements\//i, '').replace(/\/$/, '');
+    return { tab: 'announcement_detail', slug };
+  }
+  if (path === '/verify-receipt' || path === '/verify_receipt') {
+    return { tab: 'verify_receipt', slug: '' };
+  }
+  if (path === '/pay-security-levy' || path === '/resident-portal' || path === '/portal') {
+    return { tab: 'resident_portal', slug: '' };
+  }
+  if (path === '/admin' || path === '/admin/dashboard' || path === '/dashboard') {
+    return { tab: 'dashboard', slug: '' };
+  }
+  return { tab: 'home', slug: '' };
+}
+
 export default function App() {
   // Navigation State
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
+  const initialNav = getInitialNav();
+  const [currentTab, setCurrentTab] = useState<NavigationTab>(initialNav.tab);
+  const [selectedNoticeSlug, setSelectedNoticeSlug] = useState<string>(initialNav.slug);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [viewingResidentProfile, setViewingResidentProfile] = useState<Resident | null>(null);
 
@@ -237,6 +264,168 @@ export default function App() {
     setActivityLogs(logs);
   };
 
+  if (currentTab === 'home') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <PublicHomeView
+          estateSettings={estateSettings}
+          onNavigateToAnnouncements={() => setCurrentTab('public_announcements')}
+          onNavigateToAnnouncementDetail={(slug) => {
+            setSelectedNoticeSlug(slug);
+            setCurrentTab('announcement_detail');
+          }}
+          onNavigateToVerifyReceipt={() => setCurrentTab('verify_receipt')}
+          onNavigateToPortal={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+          onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
+          onOpenAdminLogin={() => {
+            if (!adminUser) setIsAuthModalOpen(true);
+            setCurrentTab('dashboard');
+          }}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
+          }}
+        />
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onAuthenticated={(user: any) => {
+            setAdminUser(user);
+            setIsAuthModalOpen(false);
+            showToast(`Logged in as ${user.full_name || user.email}`, 'success');
+            setCurrentTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'public_announcements') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <PublicAnnouncementsView
+          estateSettings={estateSettings}
+          onSelectAnnouncement={(slug) => {
+            setSelectedNoticeSlug(slug);
+            setCurrentTab('announcement_detail');
+          }}
+          onNavigateHome={() => setCurrentTab('home')}
+          onNavigateToVerifyReceipt={() => setCurrentTab('verify_receipt')}
+          onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
+          onOpenPayLevy={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'announcement_detail') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <AnnouncementDetailView
+          slug={selectedNoticeSlug}
+          estateSettings={estateSettings}
+          onBackToAnnouncements={() => setCurrentTab('public_announcements')}
+          onNavigateHome={() => setCurrentTab('home')}
+          onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
+          onOpenPayLevy={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
+          }}
+        />
+      </div>
+    );
+  }
+
   if (currentTab === 'resident_portal') {
     return (
       <div className="min-h-screen bg-slate-50">
@@ -264,7 +453,7 @@ export default function App() {
               residentSessionService.logoutResident();
               setCurrentResident(null);
               showToast('Signed out of resident portal', 'info');
-              setCurrentTab('dashboard');
+              setCurrentTab('home');
             }}
             onSwitchResident={() => setIsResidentLoginOpen(true)}
             onNavigateToVerifyReceipt={(recNum) => {
@@ -272,6 +461,7 @@ export default function App() {
               setCurrentTab('verify_receipt');
             }}
             onNavigateToAdmin={() => setCurrentTab('dashboard')}
+            onNavigateToHome={() => setCurrentTab('home')}
             estateSettings={estateSettings}
           />
         ) : (
@@ -289,10 +479,10 @@ export default function App() {
                 Sign In to Resident Portal
               </button>
               <button
-                onClick={() => setCurrentTab('dashboard')}
+                onClick={() => setCurrentTab('home')}
                 className="text-xs text-slate-500 hover:underline block mx-auto cursor-pointer"
               >
-                Back to Admin Dashboard
+                Return to Public Homepage
               </button>
             </div>
           </div>
@@ -302,7 +492,7 @@ export default function App() {
           isOpen={isResidentLoginOpen}
           onClose={() => {
             setIsResidentLoginOpen(false);
-            if (!currentResident) setCurrentTab('dashboard');
+            if (!currentResident) setCurrentTab('home');
           }}
           onSuccess={(res) => {
             setCurrentResident(res);
@@ -342,6 +532,7 @@ export default function App() {
             setCurrentTab('resident_portal');
           }}
           onNavigateToAdmin={() => setCurrentTab('dashboard')}
+          onNavigateToHome={() => setCurrentTab('home')}
         />
 
         <ResidentLoginModal
@@ -521,7 +712,18 @@ export default function App() {
               <ActivityLogsView logs={activityLogs} />
             )}
 
-            {['announcements', 'admins'].includes(currentTab) && (
+            {currentTab === 'announcements' && (
+              <AnnouncementsView
+                adminUser={adminUser}
+                estateSettings={estateSettings}
+                onPreviewPublic={(slug) => {
+                  setSelectedNoticeSlug(slug);
+                  setCurrentTab('announcement_detail');
+                }}
+              />
+            )}
+
+            {currentTab === 'admins' && (
               <StagePlaceholderView
                 tab={currentTab}
                 estateSettings={estateSettings}

@@ -11,7 +11,11 @@ import {
   SMSLog, 
   SMSSummaryStats,
   ResidentDashboardData,
-  PublicReceiptVerification
+  PublicReceiptVerification,
+  Announcement,
+  AnnouncementCategory,
+  AnnouncementPriority,
+  AnnouncementStatus
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
@@ -130,7 +134,8 @@ const STORAGE_KEYS = {
   PAYMENTS: 'estate_security_monthly_payments',
   TRANSACTIONS: 'estate_security_payment_transactions',
   RECEIPTS: 'estate_security_receipts',
-  SMS_LOGS: 'estate_security_sms_logs'
+  SMS_LOGS: 'estate_security_sms_logs',
+  ANNOUNCEMENTS: 'estate_security_announcements'
 };
 
 const INITIAL_PAYMENTS_SEED: MonthlyPayment[] = [
@@ -424,6 +429,86 @@ function saveLocalSettings(settings: EstateSettings) {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   } catch (err) {
     console.error('Failed to save settings to local storage', err);
+  }
+}
+
+const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
+  {
+    id: 'ann-001',
+    title: 'Updated Estate Security Protocols & RFID Gate Automation',
+    slug: 'updated-estate-security-protocols-rfid-gate-automation',
+    category: 'SECURITY',
+    priority: 'URGENT',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-15T08:00:00.000Z',
+    expires_at: null,
+    author_name: 'Estate Security EXCO',
+    body: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols. All residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
+    created_at: '2026-09-15T08:00:00.000Z',
+    updated_at: '2026-09-15T08:00:00.000Z'
+  },
+  {
+    id: 'ann-002',
+    title: 'Commencement of Online Security Levy Payments (October 2026)',
+    slug: 'commencement-of-online-security-levy-payments-october-2026',
+    category: 'PAYMENT',
+    priority: 'IMPORTANT',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-20T09:00:00.000Z',
+    expires_at: null,
+    author_name: 'Finance Committee',
+    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    created_at: '2026-09-20T09:00:00.000Z',
+    updated_at: '2026-09-20T09:00:00.000Z'
+  },
+  {
+    id: 'ann-003',
+    title: 'Quarterly Residents Townhall & Security Architecture Briefing',
+    slug: 'quarterly-residents-townhall-security-architecture-briefing',
+    category: 'MEETING',
+    priority: 'NORMAL',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-22T10:00:00.000Z',
+    expires_at: null,
+    author_name: 'Estate Secretariat',
+    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request). Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.',
+    created_at: '2026-09-22T10:00:00.000Z',
+    updated_at: '2026-09-22T10:00:00.000Z'
+  },
+  {
+    id: 'ann-004',
+    title: 'Drainage Infrastructure & Streetlight Upgrade Notice',
+    slug: 'drainage-infrastructure-streetlight-upgrade-notice',
+    category: 'MAINTENANCE',
+    priority: 'NORMAL',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-23T11:00:00.000Z',
+    expires_at: null,
+    author_name: 'Facilities & Works Committee',
+    body: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily. Residents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
+    created_at: '2026-09-23T11:00:00.000Z',
+    updated_at: '2026-09-23T11:00:00.000Z'
+  }
+];
+
+function getLocalAnnouncements(): Announcement[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(INITIAL_ANNOUNCEMENTS_SEED));
+      return INITIAL_ANNOUNCEMENTS_SEED;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_ANNOUNCEMENTS_SEED;
+  }
+}
+
+function saveLocalAnnouncements(announcements: Announcement[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+  } catch (err) {
+    console.error('Failed to save announcements to local storage', err);
   }
 }
 
@@ -2316,6 +2401,209 @@ export const dbService = {
         })
       });
     } catch {}
+  },
+
+  // ==========================================
+  // STAGE 8: ANNOUNCEMENTS & ESTATE NOTICES
+  // ==========================================
+
+  async getPublicAnnouncements(category?: string, query?: string): Promise<Announcement[]> {
+    try {
+      const params = new URLSearchParams();
+      if (category && category !== 'ALL') params.append('category', category);
+      if (query) params.append('query', query.trim());
+      const res = await fetch(`/api/announcements/public?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.announcements)) {
+          return json.announcements;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend public announcements unavailable, using local store:', e);
+    }
+
+    // Local fallback
+    const list = getLocalAnnouncements();
+    const now = new Date();
+    return list.filter(a => {
+      if (a.status !== 'PUBLISHED') return false;
+      if (new Date(a.publish_at) > now) return false;
+      if (a.expires_at && new Date(a.expires_at) <= now) return false;
+      if (category && category !== 'ALL' && a.category !== category) return false;
+      if (query && !a.title.toLowerCase().includes(query.toLowerCase()) && !a.body.toLowerCase().includes(query.toLowerCase())) return false;
+      return true;
+    });
+  },
+
+  async getPublicAnnouncementBySlug(slug: string): Promise<Announcement | null> {
+    try {
+      const res = await fetch(`/api/announcements/public/${encodeURIComponent(slug)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.announcement) {
+          return json.announcement;
+        }
+      }
+    } catch {}
+
+    const list = getLocalAnnouncements();
+    const now = new Date();
+    return list.find(a => 
+      (a.slug === slug || a.id === slug) &&
+      a.status === 'PUBLISHED' &&
+      new Date(a.publish_at) <= now &&
+      (!a.expires_at || new Date(a.expires_at) > now)
+    ) || null;
+  },
+
+  async getAdminAnnouncements(filters?: { status?: string; category?: string; priority?: string; query?: string }): Promise<Announcement[]> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.status && filters.status !== 'ALL') params.append('status', filters.status);
+      if (filters?.category && filters.category !== 'ALL') params.append('category', filters.category);
+      if (filters?.priority && filters.priority !== 'ALL') params.append('priority', filters.priority);
+      if (filters?.query) params.append('query', filters.query);
+
+      const res = await fetch(`/api/admin/announcements?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.announcements)) {
+          return json.announcements;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend admin announcements unavailable, using local store:', e);
+    }
+
+    let list = getLocalAnnouncements();
+    if (filters?.status && filters.status !== 'ALL') {
+      list = list.filter(a => a.status === filters.status);
+    }
+    if (filters?.category && filters.category !== 'ALL') {
+      list = list.filter(a => a.category === filters.category);
+    }
+    if (filters?.priority && filters.priority !== 'ALL') {
+      list = list.filter(a => a.priority === filters.priority);
+    }
+    if (filters?.query) {
+      const q = filters.query.toLowerCase();
+      list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q));
+    }
+    return list;
+  },
+
+  async createAnnouncement(data: Partial<Announcement>, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+    try {
+      const res = await fetch('/api/admin/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, admin_email: adminEmail })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.announcement) {
+          const locals = getLocalAnnouncements();
+          locals.unshift(json.announcement);
+          saveLocalAnnouncements(locals);
+          return json.announcement;
+        }
+      }
+    } catch {}
+
+    const id = `ann-${Date.now()}`;
+    const slug = (data.title || 'notice').toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '');
+    const item: Announcement = {
+      id,
+      title: data.title || 'Untitled Notice',
+      slug,
+      body: data.body || '',
+      content: data.body || '',
+      category: data.category || 'GENERAL',
+      priority: data.priority || 'NORMAL',
+      status: data.status || 'DRAFT',
+      publish_at: data.publish_at || new Date().toISOString(),
+      expires_at: data.expires_at || null,
+      author_name: data.author_name || 'Estate Administrator',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    const locals = getLocalAnnouncements();
+    locals.unshift(item);
+    saveLocalAnnouncements(locals);
+    return item;
+  },
+
+  async updateAnnouncement(id: string, data: Partial<Announcement>, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+    try {
+      const res = await fetch(`/api/admin/announcements/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, admin_email: adminEmail })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.announcement) {
+          const locals = getLocalAnnouncements();
+          const idx = locals.findIndex(a => a.id === id);
+          if (idx !== -1) {
+            locals[idx] = json.announcement;
+            saveLocalAnnouncements(locals);
+          }
+          return json.announcement;
+        }
+      }
+    } catch {}
+
+    const locals = getLocalAnnouncements();
+    const idx = locals.findIndex(a => a.id === id);
+    if (idx !== -1) {
+      locals[idx] = { ...locals[idx], ...data, updated_at: new Date().toISOString() };
+      saveLocalAnnouncements(locals);
+      return locals[idx];
+    }
+    throw new Error('Announcement not found');
+  },
+
+  async updateAnnouncementStatus(id: string, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED', adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+    try {
+      const res = await fetch(`/api/admin/announcements/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, admin_email: adminEmail })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.announcement) {
+          const locals = getLocalAnnouncements();
+          const idx = locals.findIndex(a => a.id === id);
+          if (idx !== -1) {
+            locals[idx] = json.announcement;
+            saveLocalAnnouncements(locals);
+          }
+          return json.announcement;
+        }
+      }
+    } catch {}
+
+    return this.updateAnnouncement(id, { status }, adminEmail);
+  },
+
+  async deleteAnnouncement(id: string, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/admin/announcements/${id}?admin_email=${encodeURIComponent(adminEmail)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const locals = getLocalAnnouncements().filter(a => a.id !== id);
+        saveLocalAnnouncements(locals);
+        return true;
+      }
+    } catch {}
+
+    const locals = getLocalAnnouncements().filter(a => a.id !== id);
+    saveLocalAnnouncements(locals);
+    return true;
   }
 };
 

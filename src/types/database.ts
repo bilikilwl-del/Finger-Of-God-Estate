@@ -179,15 +179,48 @@ export interface Receipt {
   resident?: Resident;
 }
 
+export type AnnouncementCategory = 
+  | 'GENERAL' 
+  | 'SECURITY' 
+  | 'PAYMENT' 
+  | 'MAINTENANCE' 
+  | 'MEETING' 
+  | 'EMERGENCY' 
+  | 'OTHER';
+
+export type AnnouncementPriority = 
+  | 'NORMAL' 
+  | 'IMPORTANT' 
+  | 'URGENT'
+  | 'Low' 
+  | 'Normal' 
+  | 'High' 
+  | 'Emergency';
+
+export type AnnouncementStatus = 
+  | 'DRAFT' 
+  | 'PUBLISHED' 
+  | 'ARCHIVED';
+
 export interface Announcement {
   id: string;
   title: string;
-  content: string;
-  priority: 'Low' | 'Normal' | 'High' | 'Emergency';
-  published_by: string;
-  is_published: boolean;
-  published_at: string;
+  slug: string;
+  body: string;
+  content?: string;
+  category: AnnouncementCategory;
+  priority: AnnouncementPriority;
+  status: AnnouncementStatus;
+  publish_at: string;
+  expires_at?: string | null;
+  author_id?: string;
+  author_name?: string;
+  published_by?: string;
+  is_published?: boolean;
+  attachment_url?: string | null;
+  image_url?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface ActivityLog {
@@ -208,8 +241,13 @@ export interface ActivityLog {
     | 'PAYMENT_VIEWED'
     | 'RECEIPT_VIEWED'
     | 'SMS_TEST_SENT'
-    | 'ROLE_SWITCHED';
-  entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user' | 'payment' | 'report' | 'receipt' | 'sms';
+    | 'ROLE_SWITCHED'
+    | 'ANNOUNCEMENT_CREATED'
+    | 'ANNOUNCEMENT_UPDATED'
+    | 'ANNOUNCEMENT_PUBLISHED'
+    | 'ANNOUNCEMENT_ARCHIVED'
+    | 'ANNOUNCEMENT_DELETED';
+  entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user' | 'payment' | 'report' | 'receipt' | 'sms' | 'announcement';
   entity_id?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
@@ -217,6 +255,9 @@ export interface ActivityLog {
 }
 
 export type NavigationTab = 
+  | 'home'
+  | 'public_announcements'
+  | 'announcement_detail'
   | 'dashboard'
   | 'residents'
   | 'payments'

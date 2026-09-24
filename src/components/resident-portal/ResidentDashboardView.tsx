@@ -45,6 +45,7 @@ interface ResidentDashboardViewProps {
   onSwitchResident: () => void;
   onNavigateToVerifyReceipt?: (receiptNumber?: string) => void;
   onNavigateToAdmin?: () => void;
+  onNavigateToHome?: () => void;
   estateSettings?: EstateSettings;
 }
 
@@ -54,6 +55,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   onSwitchResident,
   onNavigateToVerifyReceipt,
   onNavigateToAdmin,
+  onNavigateToHome,
   estateSettings
 }) => {
   const [dashboardData, setDashboardData] = useState<ResidentDashboardData | null>(null);
@@ -189,6 +191,14 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-medium transition-colors cursor-pointer border border-slate-700"
               >
                 Verify Receipt
+              </button>
+            )}
+            {onNavigateToHome && (
+              <button
+                onClick={onNavigateToHome}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer border border-slate-700"
+              >
+                Public Home
               </button>
             )}
             {onNavigateToAdmin && (

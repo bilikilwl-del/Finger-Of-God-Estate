@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   X,
   UserCheck,
-  FileCheck
+  FileCheck,
+  Globe
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -54,7 +55,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'outstanding', label: 'Outstanding Levies', icon: AlertCircle },
     { id: 'payments', label: 'Paystack Transactions', icon: CreditCard, tag: 'Gateway' },
     { id: 'reports', label: 'Financial Reports', icon: FileText, tag: 'Export' },
-    { id: 'sms', label: 'SMS Reminders', icon: MessageSquare, tag: 'Auto SMS' }
+    { id: 'sms', label: 'SMS Reminders', icon: MessageSquare, tag: 'Auto SMS' },
+    { id: 'announcements', label: 'Announcements & Notices', icon: Bell, tag: 'Stage 8' }
   ];
 
   const systemNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -142,11 +144,32 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             );
           })}
 
-          {/* Stage 6: Resident & Public Portals */}
+          {/* Stage 6 & 8: Resident & Public Portals */}
           <div className="pt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
             <span>Resident & Public</span>
-            <span className="text-[10px] text-emerald-400 font-mono px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/60">Stage 6</span>
+            <span className="text-[10px] text-emerald-400 font-mono px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/60">Stage 8</span>
           </div>
+
+          <button
+            onClick={() => {
+              onSelectTab('home');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'home'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <Globe className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>Public Homepage</span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              Stage 8
+            </span>
+          </button>
 
           <button
             onClick={() => {

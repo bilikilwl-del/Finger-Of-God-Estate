@@ -100,12 +100,32 @@ interface ServerResidentRecord {
   registration_date: string;
 }
 
+interface ServerAnnouncementRecord {
+  id: string;
+  title: string;
+  slug: string;
+  body: string;
+  content?: string;
+  category: 'GENERAL' | 'SECURITY' | 'PAYMENT' | 'MAINTENANCE' | 'MEETING' | 'EMERGENCY' | 'OTHER';
+  priority: 'NORMAL' | 'IMPORTANT' | 'URGENT';
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  publish_at: string;
+  expires_at?: string | null;
+  author_id?: string;
+  author_name?: string;
+  attachment_url?: string | null;
+  image_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Initial in-memory data store for server-side verification and fallback
 const residentsStore = new Map<string, ServerResidentRecord>();
 const residentSessionsStore = new Map<string, { resident_number: string; created_at: number }>();
 const paymentsStore = new Map<string, ServerPaymentRecord>(); // key: residentNumber_periodMonth_periodYear
 const transactionsStore = new Map<string, ServerTransactionRecord>(); // key: reference
 const receiptsStore = new Map<string, ServerReceiptRecord>(); // key: reference or receiptNumber
+const announcementsStore = new Map<string, ServerAnnouncementRecord>(); // key: id or slug
 
 // Seed Initial Estate Residents
 const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
@@ -263,6 +283,83 @@ receiptsStore.set(initialReceipt001.id, initialReceipt001);
   };
   paymentsStore.set(`${num}_10_2026`, p);
   paymentsStore.set(`${num}-10-2026`, p);
+});
+
+// Helper for URL slug generation
+function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
+// Seed Initial Estate Announcements
+const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
+  {
+    id: 'ann-001',
+    title: 'Updated Estate Security Protocols & RFID Gate Automation',
+    slug: 'updated-estate-security-protocols-rfid-gate-automation',
+    category: 'SECURITY',
+    priority: 'URGENT',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-15T08:00:00.000Z',
+    expires_at: null,
+    author_name: 'Estate Security EXCO',
+    body: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols. All residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
+    created_at: '2026-09-15T08:00:00.000Z',
+    updated_at: '2026-09-15T08:00:00.000Z'
+  },
+  {
+    id: 'ann-002',
+    title: 'Commencement of Online Security Levy Payments (October 2026)',
+    slug: 'commencement-of-online-security-levy-payments-october-2026',
+    category: 'PAYMENT',
+    priority: 'IMPORTANT',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-20T09:00:00.000Z',
+    expires_at: null,
+    author_name: 'Finance Committee',
+    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    created_at: '2026-09-20T09:00:00.000Z',
+    updated_at: '2026-09-20T09:00:00.000Z'
+  },
+  {
+    id: 'ann-003',
+    title: 'Quarterly Residents Townhall & Security Architecture Briefing',
+    slug: 'quarterly-residents-townhall-security-architecture-briefing',
+    category: 'MEETING',
+    priority: 'NORMAL',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-22T10:00:00.000Z',
+    expires_at: null,
+    author_name: 'Estate Secretariat',
+    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request). Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.',
+    created_at: '2026-09-22T10:00:00.000Z',
+    updated_at: '2026-09-22T10:00:00.000Z'
+  },
+  {
+    id: 'ann-004',
+    title: 'Drainage Infrastructure & Streetlight Upgrade Notice',
+    slug: 'drainage-infrastructure-streetlight-upgrade-notice',
+    category: 'MAINTENANCE',
+    priority: 'NORMAL',
+    status: 'PUBLISHED',
+    publish_at: '2026-09-23T11:00:00.000Z',
+    expires_at: null,
+    author_name: 'Facilities & Works Committee',
+    body: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily. Residents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
+    created_at: '2026-09-23T11:00:00.000Z',
+    updated_at: '2026-09-23T11:00:00.000Z'
+  }
+];
+
+INITIAL_ANNOUNCEMENTS.forEach(ann => {
+  announcementsStore.set(ann.id, ann);
 });
 
 // Paystack config helpers
@@ -2417,6 +2514,357 @@ app.post('/api/admin/audit-log', (req: Request, res: Response) => {
 
 app.get('/api/admin/audit-logs', (_req: Request, res: Response) => {
   res.json({ success: true, count: auditLogsStore.length, logs: auditLogsStore });
+});
+
+// -------------------------------------------------------------
+// STAGE 8: ANNOUNCEMENTS & ESTATE NOTICES APIS
+// -------------------------------------------------------------
+
+// Public: Get currently active published announcements
+app.get('/api/announcements/public', (req: Request, res: Response) => {
+  try {
+    const { category, query } = req.query;
+    const now = new Date();
+
+    const activeList = Array.from(announcementsStore.values()).filter(a => {
+      if (a.status !== 'PUBLISHED') return false;
+      const pubDate = new Date(a.publish_at);
+      if (pubDate > now) return false;
+      if (a.expires_at && new Date(a.expires_at) <= now) return false;
+      if (category && category !== 'ALL' && a.category !== category) return false;
+      if (query && typeof query === 'string') {
+        const q = query.toLowerCase().trim();
+        const matchesTitle = a.title.toLowerCase().includes(q);
+        const matchesBody = a.body.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesBody) return false;
+      }
+      return true;
+    });
+
+    // Priority sorting: URGENT > IMPORTANT > NORMAL
+    const priorityWeight: Record<string, number> = {
+      URGENT: 3,
+      Emergency: 3,
+      High: 3,
+      IMPORTANT: 2,
+      NORMAL: 1,
+      Normal: 1,
+      Low: 0
+    };
+
+    activeList.sort((a, b) => {
+      const weightDiff = (priorityWeight[b.priority] || 1) - (priorityWeight[a.priority] || 1);
+      if (weightDiff !== 0) return weightDiff;
+      return new Date(b.publish_at).getTime() - new Date(a.publish_at).getTime();
+    });
+
+    res.json({
+      success: true,
+      count: activeList.length,
+      announcements: activeList
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve announcements' });
+  }
+});
+
+// Public: Get single active announcement by slug
+app.get('/api/announcements/public/:slug', (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const now = new Date();
+
+    const item = Array.from(announcementsStore.values()).find(a => 
+      (a.slug === slug || a.id === slug) &&
+      a.status === 'PUBLISHED' &&
+      new Date(a.publish_at) <= now &&
+      (!a.expires_at || new Date(a.expires_at) > now)
+    );
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Announcement notice not found or may have expired.'
+      });
+    }
+
+    res.json({ success: true, announcement: item });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Error retrieving notice' });
+  }
+});
+
+// Admin: Get all announcements with management filters
+app.get('/api/admin/announcements', (req: Request, res: Response) => {
+  try {
+    const { status, category, priority, query } = req.query;
+
+    let list = Array.from(announcementsStore.values());
+
+    if (status && status !== 'ALL') {
+      list = list.filter(a => a.status === status);
+    }
+    if (category && category !== 'ALL') {
+      list = list.filter(a => a.category === category);
+    }
+    if (priority && priority !== 'ALL') {
+      list = list.filter(a => a.priority === priority);
+    }
+    if (query && typeof query === 'string') {
+      const q = query.toLowerCase().trim();
+      list = list.filter(a => 
+        a.title.toLowerCase().includes(q) || 
+        a.body.toLowerCase().includes(q) ||
+        (a.author_name && a.author_name.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort by created_at / publish_at desc
+    list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    res.json({
+      success: true,
+      count: list.length,
+      announcements: list
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch admin announcements' });
+  }
+});
+
+// Admin: Create new announcement
+app.post('/api/admin/announcements', (req: Request, res: Response) => {
+  try {
+    const {
+      title,
+      body,
+      category = 'GENERAL',
+      priority = 'NORMAL',
+      status = 'DRAFT',
+      publish_at = new Date().toISOString(),
+      expires_at = null,
+      author_id,
+      author_name = 'Estate Administrator',
+      attachment_url = null,
+      image_url = null,
+      admin_email = 'admin@fingerofgodestate.ng'
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, message: 'Announcement title is required' });
+    }
+    if (!body || !body.trim()) {
+      return res.status(400).json({ success: false, message: 'Announcement body content is required' });
+    }
+
+    const id = `ann-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let baseSlug = slugify(title);
+    if (!baseSlug) baseSlug = `notice-${Date.now()}`;
+    let finalSlug = baseSlug;
+    let counter = 1;
+    while (Array.from(announcementsStore.values()).some(a => a.slug === finalSlug)) {
+      finalSlug = `${baseSlug}-${counter++}`;
+    }
+
+    const record: ServerAnnouncementRecord = {
+      id,
+      title: title.trim(),
+      slug: finalSlug,
+      body: body.trim(),
+      content: body.trim(),
+      category,
+      priority,
+      status,
+      publish_at,
+      expires_at,
+      author_id,
+      author_name,
+      attachment_url,
+      image_url,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    announcementsStore.set(record.id, record);
+
+    // Audit Log
+    const auditRecord: ServerAuditRecord = {
+      id: crypto.randomUUID(),
+      admin_email,
+      action: status === 'PUBLISHED' ? 'ANNOUNCEMENT_PUBLISHED' : 'ANNOUNCEMENT_CREATED',
+      entity_type: 'announcement',
+      entity_id: record.id,
+      description: `Created announcement "${record.title}" (Status: ${status}, Priority: ${priority})`,
+      metadata: { announcement_id: record.id, title: record.title, category: record.category },
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(auditRecord);
+    if (auditLogsStore.length > 500) auditLogsStore.pop();
+
+    res.status(201).json({
+      success: true,
+      message: `Announcement "${record.title}" created successfully.`,
+      announcement: record
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to create announcement' });
+  }
+});
+
+// Admin: Update announcement
+app.put('/api/admin/announcements/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = announcementsStore.get(id);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Announcement not found' });
+    }
+
+    const {
+      title,
+      body,
+      category,
+      priority,
+      status,
+      publish_at,
+      expires_at,
+      attachment_url,
+      image_url,
+      admin_email = 'admin@fingerofgodestate.ng'
+    } = req.body;
+
+    let updatedSlug = existing.slug;
+    if (title && title.trim() !== existing.title) {
+      const baseSlug = slugify(title);
+      updatedSlug = baseSlug;
+      let counter = 1;
+      while (Array.from(announcementsStore.values()).some(a => a.slug === updatedSlug && a.id !== id)) {
+        updatedSlug = `${baseSlug}-${counter++}`;
+      }
+    }
+
+    const updated: ServerAnnouncementRecord = {
+      ...existing,
+      title: title !== undefined ? title.trim() : existing.title,
+      slug: updatedSlug,
+      body: body !== undefined ? body.trim() : existing.body,
+      content: body !== undefined ? body.trim() : existing.body,
+      category: category !== undefined ? category : existing.category,
+      priority: priority !== undefined ? priority : existing.priority,
+      status: status !== undefined ? status : existing.status,
+      publish_at: publish_at !== undefined ? publish_at : existing.publish_at,
+      expires_at: expires_at !== undefined ? expires_at : existing.expires_at,
+      attachment_url: attachment_url !== undefined ? attachment_url : existing.attachment_url,
+      image_url: image_url !== undefined ? image_url : existing.image_url,
+      updated_at: new Date().toISOString()
+    };
+
+    announcementsStore.set(id, updated);
+
+    // Audit Log
+    const auditRecord: ServerAuditRecord = {
+      id: crypto.randomUUID(),
+      admin_email,
+      action: 'ANNOUNCEMENT_UPDATED',
+      entity_type: 'announcement',
+      entity_id: id,
+      description: `Updated announcement "${updated.title}"`,
+      metadata: { announcement_id: id, changes: { status: updated.status, priority: updated.priority } },
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(auditRecord);
+
+    res.json({
+      success: true,
+      message: 'Announcement updated successfully',
+      announcement: updated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to update announcement' });
+  }
+});
+
+// Admin: Update announcement status (Publish, Unpublish/Draft, Archive)
+app.post('/api/admin/announcements/:id/status', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status, admin_email = 'admin@fingerofgodestate.ng' } = req.body;
+    const existing = announcementsStore.get(id);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Announcement not found' });
+    }
+
+    if (!['DRAFT', 'PUBLISHED', 'ARCHIVED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status. Must be DRAFT, PUBLISHED, or ARCHIVED.' });
+    }
+
+    const updated: ServerAnnouncementRecord = {
+      ...existing,
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    announcementsStore.set(id, updated);
+
+    const actionType = status === 'PUBLISHED' ? 'ANNOUNCEMENT_PUBLISHED' : status === 'ARCHIVED' ? 'ANNOUNCEMENT_ARCHIVED' : 'ANNOUNCEMENT_UPDATED';
+
+    const auditRecord: ServerAuditRecord = {
+      id: crypto.randomUUID(),
+      admin_email,
+      action: actionType,
+      entity_type: 'announcement',
+      entity_id: id,
+      description: `Changed status of announcement "${updated.title}" to ${status}`,
+      metadata: { announcement_id: id, new_status: status },
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(auditRecord);
+
+    res.json({
+      success: true,
+      message: `Announcement status changed to ${status}`,
+      announcement: updated
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to update status' });
+  }
+});
+
+// Admin: Delete announcement
+app.delete('/api/admin/announcements/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const admin_email = (req.query.admin_email as string) || 'admin@fingerofgodestate.ng';
+    const existing = announcementsStore.get(id);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Announcement not found' });
+    }
+
+    announcementsStore.delete(id);
+
+    // Audit Log
+    const auditRecord: ServerAuditRecord = {
+      id: crypto.randomUUID(),
+      admin_email,
+      action: 'ANNOUNCEMENT_DELETED',
+      entity_type: 'announcement',
+      entity_id: id,
+      description: `Deleted announcement "${existing.title}"`,
+      metadata: { deleted_id: id, title: existing.title },
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(auditRecord);
+
+    res.json({
+      success: true,
+      message: `Announcement "${existing.title}" deleted permanently.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to delete announcement' });
+  }
 });
 
 // -------------------------------------------------------------
