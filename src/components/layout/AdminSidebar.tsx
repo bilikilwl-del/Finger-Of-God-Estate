@@ -17,7 +17,8 @@ import {
   X,
   UserCheck,
   FileCheck,
-  Globe
+  Globe,
+  DoorOpen
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -50,6 +51,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 }) => {
   const mainNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }>; badge?: string | number; tag?: string }[] = [
     { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+    { id: 'gate_security', label: 'Gate Security & Access', icon: DoorOpen, tag: 'Stage 11' },
     { id: 'security_ops', label: 'Security Operations', icon: ShieldCheck, tag: 'Stage 10' },
     { id: 'residents', label: 'Resident Directory', icon: Users, badge: residentCount },
     { id: 'paid_residents', label: 'Paid Residents', icon: CheckCircle2 },

@@ -3406,6 +3406,130 @@ app.post('/api/security/gate-logs', (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// STAGE 11 REST API ENDPOINTS: ACCESS & GATE MANAGEMENT
+// ==========================================
+const serverVehiclesStore = new Map<string, any>();
+const serverWatchlistStore = new Map<string, any>();
+const serverContractorsStore = new Map<string, any>();
+const serverDeliveriesStore = new Map<string, any>();
+
+// GET /api/vehicles
+app.get('/api/vehicles', (req: Request, res: Response) => {
+  const residentNumber = req.query.resident_number as string;
+  let vehicles = Array.from(serverVehiclesStore.values());
+  if (residentNumber) {
+    vehicles = vehicles.filter(v => v.resident_number === residentNumber);
+  }
+  res.json({ success: true, vehicles });
+});
+
+// POST /api/vehicles
+app.post('/api/vehicles', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const id = `veh-${Date.now()}`;
+    const vehicle = {
+      id,
+      ...data,
+      plate_number: data.plate_number ? data.plate_number.toUpperCase() : 'UNKNOWN',
+      created_at: new Date().toISOString()
+    };
+    serverVehiclesStore.set(id, vehicle);
+    res.json({ success: true, vehicle });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to register vehicle' });
+  }
+});
+
+// DELETE /api/vehicles/:id
+app.delete('/api/vehicles/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  serverVehiclesStore.delete(id);
+  res.json({ success: true });
+});
+
+// GET /api/watchlist
+app.get('/api/watchlist', (_req: Request, res: Response) => {
+  const watchlist = Array.from(serverWatchlistStore.values());
+  res.json({ success: true, watchlist });
+});
+
+// POST /api/watchlist
+app.post('/api/watchlist', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const id = `wl-${Date.now()}`;
+    const entry = {
+      id,
+      ...data,
+      plate_number: data.plate_number ? data.plate_number.toUpperCase() : null,
+      created_at: new Date().toISOString()
+    };
+    serverWatchlistStore.set(id, entry);
+    res.json({ success: true, entry });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to add watchlist record' });
+  }
+});
+
+// DELETE /api/watchlist/:id
+app.delete('/api/watchlist/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  serverWatchlistStore.delete(id);
+  res.json({ success: true });
+});
+
+// GET /api/contractors
+app.get('/api/contractors', (_req: Request, res: Response) => {
+  const contractors = Array.from(serverContractorsStore.values());
+  res.json({ success: true, contractors });
+});
+
+// POST /api/contractors
+app.post('/api/contractors', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const id = `con-${Date.now()}`;
+    const passCode = `FOG-CON-2026-${String(serverContractorsStore.size + 1).padStart(4, '0')}`;
+    const pass = {
+      id,
+      pass_code: passCode,
+      ...data,
+      created_at: new Date().toISOString()
+    };
+    serverContractorsStore.set(id, pass);
+    res.json({ success: true, pass });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to issue contractor pass' });
+  }
+});
+
+// GET /api/deliveries
+app.get('/api/deliveries', (_req: Request, res: Response) => {
+  const deliveries = Array.from(serverDeliveriesStore.values());
+  res.json({ success: true, deliveries });
+});
+
+// POST /api/deliveries
+app.post('/api/deliveries', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const id = `del-${Date.now()}`;
+    const passCode = `FOG-DEL-2026-${String(serverDeliveriesStore.size + 1).padStart(4, '0')}`;
+    const pass = {
+      id,
+      pass_code: passCode,
+      ...data,
+      created_at: new Date().toISOString()
+    };
+    serverDeliveriesStore.set(id, pass);
+    res.json({ success: true, pass });
+  } catch {
+    res.status(500).json({ success: false, message: 'Failed to record delivery' });
+  }
+});
+
 // -------------------------------------------------------------
 // 7. HEALTH CHECK
 // -------------------------------------------------------------

@@ -45,6 +45,7 @@ import { PublicAnnouncementsView } from './components/public/PublicAnnouncements
 import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
 import { AnnouncementsView } from './components/admin/AnnouncementsView';
 import { SecurityOperationsView } from './components/security/SecurityOperationsView';
+import { GateSecurityDashboard } from './components/gate-security/GateSecurityDashboard';
 
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
@@ -52,6 +53,9 @@ function getInitialNav(): { tab: NavigationTab; slug: string } {
   const path = window.location.pathname.toLowerCase();
   if (path === '/login' || path === '/activate' || path === '/resident-login') {
     return { tab: 'login', slug: '' };
+  }
+  if (path === '/gate' || path === '/gate-security' || path === '/access-control') {
+    return { tab: 'gate_security', slug: '' };
   }
   if (path === '/announcements') {
     return { tab: 'public_announcements', slug: '' };
@@ -646,6 +650,20 @@ export default function App() {
                 onAddResident={handleOpenAddResident}
                 onViewResident={handleOpenViewResident}
                 onOpenSqlModal={() => setIsSqlModalOpen(true)}
+              />
+            )}
+
+            {currentTab === 'gate_security' && (
+              <GateSecurityDashboard
+                estateSettings={estateSettings}
+                adminUser={adminUser}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
               />
             )}
 

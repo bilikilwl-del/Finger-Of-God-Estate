@@ -264,7 +264,18 @@ export interface ActivityLog {
     | 'VISITOR_CHECKED_OUT'
     | 'VISITOR_DENIED'
     | 'GATE_LOG_RECORDED'
-    | 'PATROL_LOGGED';
+    | 'PATROL_LOGGED'
+    | 'VEHICLE_REGISTERED'
+    | 'VEHICLE_UPDATED'
+    | 'VEHICLE_STATUS_CHANGED'
+    | 'VEHICLE_DELETED'
+    | 'WATCHLIST_ADDED'
+    | 'WATCHLIST_REMOVED'
+    | 'WALK_IN_REQUESTED'
+    | 'WALK_IN_APPROVED'
+    | 'WALK_IN_DENIED'
+    | 'DELIVERY_LOGGED'
+    | 'CONTRACTOR_LOGGED';
   entity_type: 
     | 'resident' 
     | 'estate_settings' 
@@ -280,7 +291,11 @@ export interface ActivityLog {
     | 'visitor'
     | 'gate_log'
     | 'officer'
-    | 'patrol';
+    | 'patrol'
+    | 'vehicle'
+    | 'watchlist'
+    | 'contractor'
+    | 'delivery';
   entity_id?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
@@ -293,6 +308,7 @@ export type NavigationTab =
   | 'announcement_detail'
   | 'login'
   | 'dashboard'
+  | 'gate_security'
   | 'residents'
   | 'security_ops'
   | 'payments'
@@ -667,5 +683,191 @@ export interface SecurityOperationsSummary {
   officers_on_duty_count: number;
   active_patrols_count: number;
 }
+
+// ==========================================
+// STAGE 11: ESTATE ACCESS CONTROL & GATE MANAGEMENT TYPES
+// ==========================================
+
+export type VehicleType = 
+  | 'Sedan' 
+  | 'SUV' 
+  | 'Motorcycle' 
+  | 'Hatchback' 
+  | 'Pickup Truck' 
+  | 'Van / Bus' 
+  | 'Delivery Bike' 
+  | 'Heavy Duty Truck' 
+  | 'Bicycle' 
+  | 'Other';
+
+export type VehicleStatus = 'Active' | 'Suspended' | 'Reported' | 'Restricted';
+
+export interface ResidentVehicle {
+  id: string;
+  resident_id: string;
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  vehicle_type: VehicleType;
+  make: string; // e.g. "Toyota", "Lexus", "Mercedes-Benz"
+  model: string; // e.g. "Corolla", "RX350"
+  color: string; // e.g. "Metallic Gray"
+  plate_number: string; // normalized uppercase e.g. "ABC-123-XY"
+  photo_url?: string | null;
+  status: VehicleStatus;
+  notes?: string | null;
+  registered_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export type WatchlistCategory = 
+  | 'Defaulting Resident' 
+  | 'Trespasser' 
+  | 'Banned Contractor' 
+  | 'Security Threat' 
+  | 'Court Order / Police Notice' 
+  | 'Unpaid Fines' 
+  | 'Suspicious Vehicle'
+  | 'Other';
+
+export type WatchlistSeverity = 'Warning' | 'Strict Denial' | 'Immediate Apprehension';
+
+export interface RestrictedWatchlistEntry {
+  id: string;
+  entity_name: string; // Full name or entity description
+  phone_number?: string | null;
+  plate_number?: string | null; // Uppercase
+  category: WatchlistCategory;
+  reason: string;
+  severity: WatchlistSeverity;
+  date_added: string;
+  added_by: string;
+  is_active: boolean;
+  notes?: string | null;
+  created_at: string;
+}
+
+export type ContractorServiceType = 
+  | 'Carpentry & Woodwork' 
+  | 'Plumbing & Drainage' 
+  | 'Electrical & Solar' 
+  | 'Masonry & Construction' 
+  | 'Painting & Decorating' 
+  | 'Landscaping & Gardening' 
+  | 'Air Conditioning / HVAC' 
+  | 'Roofing & Aluminum' 
+  | 'Pest Control & Fumigation' 
+  | 'Cleaning & Janitorial' 
+  | 'Interior Decoration' 
+  | 'Other Service';
+
+export type ContractorStatus = 'Expected' | 'Active On-Site' | 'Completed' | 'Denied' | 'Expired';
+
+export interface ContractorAccessPass {
+  id: string;
+  pass_code: string; // e.g. "FOG-CON-2026-0001"
+  company_name: string;
+  lead_contractor_name: string;
+  lead_phone: string;
+  worker_count: number;
+  worker_names?: string | null;
+  service_type: ContractorServiceType;
+  house_number: string;
+  resident_number: string;
+  resident_name: string;
+  permit_id?: string | null;
+  id_type_recorded: 'NIN' | "Driver's License" | "Voter's Card" | 'Company ID' | 'National Passport' | 'Other';
+  id_number: string;
+  valid_date: string; // YYYY-MM-DD
+  entry_time?: string | null;
+  exit_time?: string | null;
+  status: ContractorStatus;
+  security_officer: string;
+  notes?: string | null;
+  created_at: string;
+}
+
+export type CourierCompany = 
+  | 'DHL Express' 
+  | 'FedEx' 
+  | 'Jumia Logistics' 
+  | 'GIG Logistics' 
+  | 'Chowdeck' 
+  | 'Glovo' 
+  | 'UberEats' 
+  | 'Kwik Delivery' 
+  | 'Speedaf Express' 
+  | 'Red Star Express' 
+  | 'Independent Courier' 
+  | 'Other';
+
+export type PackageType = 
+  | 'Food / Beverage Order' 
+  | 'E-Commerce Parcel' 
+  | 'Heavy Goods / Appliances' 
+  | 'Legal / Confidential Document' 
+  | 'Medicine / Pharmacy' 
+  | 'Groceries' 
+  | 'Other';
+
+export type DeliveryStatus = 'Inside Estate' | 'Exited' | 'Denied';
+
+export interface DeliveryAccessPass {
+  id: string;
+  pass_code: string; // e.g. "FOG-DEL-2026-0001"
+  courier_company: CourierCompany;
+  rider_name: string;
+  rider_phone: string;
+  vehicle_type: 'Motorcycle' | 'Bicycle' | 'Van' | 'Car' | 'Truck' | 'On Foot';
+  vehicle_plate?: string | null;
+  package_type: PackageType;
+  house_number: string;
+  resident_number: string;
+  resident_name: string;
+  entry_time: string;
+  exit_time?: string | null;
+  status: DeliveryStatus;
+  security_officer: string;
+  notes?: string | null;
+  created_at: string;
+}
+
+export type GateLane = 
+  | 'Main Gate (Inbound Lane 1)' 
+  | 'Main Gate (Inbound Lane 2)' 
+  | 'Main Gate (Outbound Lane)' 
+  | 'Service Gate (Inbound)' 
+  | 'Service Gate (Outbound)' 
+  | 'Pedestrian Turnstile Gate';
+
+export interface GateSecurityOverviewStats {
+  officer_on_duty: SecurityOfficer | null;
+  current_time: string;
+  visitors_inside_count: number;
+  expected_visitors_today: number;
+  recent_entries_count: number;
+  recent_exits_count: number;
+  pending_walk_in_approvals: number;
+  active_alerts_count: number;
+  restricted_access_attempts: number;
+  emergency_alerts_count: number;
+  active_contractors_count: number;
+  active_deliveries_count: number;
+  total_registered_vehicles: number;
+}
+
+export type ResidentAccessStatus = 'ACTIVE — ACCESS ALLOWED' | 'SUSPENDED — VERIFY WITH ADMIN' | 'NOT FOUND — MANUAL VERIFICATION REQUIRED';
+
+export interface ResidentAccessVerificationResult {
+  status: ResidentAccessStatus;
+  is_allowed: boolean;
+  resident?: Resident;
+  vehicles: ResidentVehicle[];
+  active_visitor_passes: VisitorPass[];
+  message: string;
+  warning?: string | null;
+}
+
 
 

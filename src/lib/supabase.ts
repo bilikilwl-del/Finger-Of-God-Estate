@@ -33,7 +33,24 @@ import {
   GateEntityType,
   PatrolRecord,
   PatrolStatus,
-  SecurityOperationsSummary
+  SecurityOperationsSummary,
+  ResidentVehicle,
+  VehicleType,
+  VehicleStatus,
+  RestrictedWatchlistEntry,
+  WatchlistCategory,
+  WatchlistSeverity,
+  ContractorAccessPass,
+  ContractorServiceType,
+  ContractorStatus,
+  DeliveryAccessPass,
+  CourierCompany,
+  PackageType,
+  DeliveryStatus,
+  GateLane,
+  GateSecurityOverviewStats,
+  ResidentAccessStatus,
+  ResidentAccessVerificationResult
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
@@ -159,7 +176,11 @@ const STORAGE_KEYS = {
   ALERTS: 'estate_security_alerts',
   VISITORS: 'estate_security_visitors',
   GATE_LOGS: 'estate_security_gate_logs',
-  PATROLS: 'estate_security_patrols'
+  PATROLS: 'estate_security_patrols',
+  VEHICLES: 'estate_security_vehicles',
+  WATCHLIST: 'estate_security_watchlist',
+  CONTRACTORS: 'estate_security_contractors',
+  DELIVERIES: 'estate_security_deliveries'
 };
 
 const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
@@ -470,6 +491,237 @@ const INITIAL_PATROLS_SEED: PatrolRecord[] = [
     issues_discovered: ['Overgrown branch near post 4'],
     notes: 'Branch reported to landscaping contractor.',
     created_at: new Date().toISOString()
+  }
+];
+
+const INITIAL_VEHICLES_SEED: ResidentVehicle[] = [
+  {
+    id: 'veh-001',
+    resident_id: 'res-001',
+    resident_number: '001',
+    resident_name: 'Engr. Babatunde Adeleke',
+    house_number: 'Plot 4A',
+    vehicle_type: 'SUV',
+    make: 'Toyota',
+    model: 'Land Cruiser Prado',
+    color: 'Pearl White',
+    plate_number: 'ABC-819-LS',
+    status: 'Active',
+    registered_by: 'Resident Self-Service',
+    notes: 'Primary executive SUV with electronic RFID tag #RF-001A',
+    created_at: '2026-09-02T10:00:00Z'
+  },
+  {
+    id: 'veh-002',
+    resident_id: 'res-001',
+    resident_number: '001',
+    resident_name: 'Engr. Babatunde Adeleke',
+    house_number: 'Plot 4A',
+    vehicle_type: 'Sedan',
+    make: 'Honda',
+    model: 'Accord Touring',
+    color: 'Metallic Gray',
+    plate_number: 'KJA-492-AA',
+    status: 'Active',
+    registered_by: 'Resident Self-Service',
+    notes: 'Secondary city commuter',
+    created_at: '2026-09-05T12:00:00Z'
+  },
+  {
+    id: 'veh-003',
+    resident_id: 'res-002',
+    resident_number: '002',
+    resident_name: 'Dr. Chioma Nwachukwu',
+    house_number: 'House 12',
+    vehicle_type: 'SUV',
+    make: 'Lexus',
+    model: 'RX 350',
+    color: 'Midnight Black',
+    plate_number: 'LSR-210-FK',
+    status: 'Active',
+    registered_by: 'Admin / CSO Desk',
+    notes: 'Medical emergency responder pass attached',
+    created_at: '2026-09-08T09:30:00Z'
+  },
+  {
+    id: 'veh-004',
+    resident_id: 'res-002',
+    resident_number: '002',
+    resident_name: 'Dr. Chioma Nwachukwu',
+    house_number: 'House 12',
+    vehicle_type: 'Sedan',
+    make: 'Mercedes-Benz',
+    model: 'C300 4MATIC',
+    color: 'Iridium Silver',
+    plate_number: 'APP-773-BC',
+    status: 'Active',
+    registered_by: 'Resident Self-Service',
+    notes: 'Registered personal sedan',
+    created_at: '2026-09-10T14:15:00Z'
+  },
+  {
+    id: 'veh-005',
+    resident_id: 'res-003',
+    resident_number: '003',
+    resident_name: 'Alhaji Usman Danladi',
+    house_number: 'Plot 18B',
+    vehicle_type: 'Pickup Truck',
+    make: 'Ford',
+    model: 'F-150 Lariat',
+    color: 'Navy Blue',
+    plate_number: 'ABJ-304-DX',
+    status: 'Active',
+    registered_by: 'Resident Self-Service',
+    notes: 'Estate security cleared',
+    created_at: '2026-09-11T08:00:00Z'
+  },
+  {
+    id: 'veh-006',
+    resident_id: 'res-004',
+    resident_number: '004',
+    resident_name: 'Mrs. Folashade Balogun',
+    house_number: 'Flat 3, Block C',
+    vehicle_type: 'Hatchback',
+    make: 'Hyundai',
+    model: 'Tucson',
+    color: 'Wine Red',
+    plate_number: 'EPE-652-GH',
+    status: 'Suspended',
+    registered_by: 'Admin / CSO Desk',
+    notes: 'Suspended pending tenant verification and security clearance',
+    created_at: '2026-09-12T16:00:00Z'
+  }
+];
+
+const INITIAL_WATCHLIST_SEED: RestrictedWatchlistEntry[] = [
+  {
+    id: 'wl-001',
+    entity_name: 'Emeka Obinna (Former Artisan)',
+    phone_number: '08099881122',
+    plate_number: 'KTU-882-AB',
+    category: 'Banned Contractor',
+    reason: 'Caught attempting to remove electrical copper cabling from unoccupied plot without work order. Banned by Estate Exco.',
+    severity: 'Strict Denial',
+    date_added: '2026-08-14',
+    added_by: 'CSO Sgt. Audu Momoh',
+    is_active: true,
+    notes: 'Immediate gate refusal and summon armed patrol if on premises.',
+    created_at: '2026-08-14T09:00:00Z'
+  },
+  {
+    id: 'wl-002',
+    entity_name: 'Unregistered Black Tinted Corolla',
+    phone_number: null,
+    plate_number: 'KRD-990-ZZ',
+    category: 'Suspicious Vehicle',
+    reason: 'Vehicle observed conducting slow surveillance around Palm View perimeter without destination. Driver refused gate query.',
+    severity: 'Immediate Apprehension',
+    date_added: '2026-09-18',
+    added_by: 'Inspector David Okon',
+    is_active: true,
+    notes: 'Hold at barrier, notify Chief Security Officer and detain driver for questioning.',
+    created_at: '2026-09-18T14:30:00Z'
+  },
+  {
+    id: 'wl-003',
+    entity_name: 'Alhaji Gbadamosi (Defaulting Occupant - Plot 22)',
+    phone_number: '08022114455',
+    plate_number: 'MUS-419-EF',
+    category: 'Court Order / Police Notice',
+    reason: 'Pending eviction notice and security dispute over non-payment and aggressive conduct at estate barriers.',
+    severity: 'Warning',
+    date_added: '2026-09-01',
+    added_by: 'Estate Secretariat',
+    is_active: true,
+    notes: 'Escort to facility manager office. Do not allow unauthorized commercial trucks.',
+    created_at: '2026-09-01T10:00:00Z'
+  }
+];
+
+const INITIAL_CONTRACTORS_SEED: ContractorAccessPass[] = [
+  {
+    id: 'con-001',
+    pass_code: 'FOG-CON-2026-0001',
+    company_name: 'CoolAir HVAC Engineering Ltd',
+    lead_contractor_name: 'Engr. Samuel Bassey',
+    lead_phone: '08123344556',
+    worker_count: 3,
+    worker_names: 'Samuel Bassey, Sunday Paul, Peter Obi',
+    service_type: 'Air Conditioning / HVAC',
+    house_number: 'House 12',
+    resident_number: '002',
+    resident_name: 'Dr. Chioma Nwachukwu',
+    permit_id: 'PRM-2026-09-41',
+    id_type_recorded: 'NIN',
+    id_number: 'NIN-78901234567',
+    valid_date: new Date().toISOString().split('T')[0],
+    entry_time: new Date(Date.now() - 3600000).toISOString(),
+    status: 'Active On-Site',
+    security_officer: 'Guard Sunday Eze',
+    notes: 'Servicing central AC outdoor units. Work permitted between 08:00 and 17:00.',
+    created_at: new Date(Date.now() - 7200000).toISOString()
+  },
+  {
+    id: 'con-002',
+    pass_code: 'FOG-CON-2026-0002',
+    company_name: 'Apex Green Landscaping',
+    lead_contractor_name: 'Musa Garba',
+    lead_phone: '08055667788',
+    worker_count: 4,
+    worker_names: 'Musa Garba, Ibrahim Sani, Victor Eze, Tunde Alabi',
+    service_type: 'Landscaping & Gardening',
+    house_number: 'Plot 4A',
+    resident_number: '001',
+    resident_name: 'Engr. Babatunde Adeleke',
+    permit_id: 'PRM-2026-09-42',
+    id_type_recorded: "Driver's License",
+    id_number: 'DL-LA-9021-AA',
+    valid_date: new Date().toISOString().split('T')[0],
+    entry_time: null,
+    status: 'Expected',
+    security_officer: 'Sgt. Audu Momoh',
+    notes: 'Tree trimming and lawn maintenance equipment pre-inspected.',
+    created_at: new Date().toISOString()
+  }
+];
+
+const INITIAL_DELIVERIES_SEED: DeliveryAccessPass[] = [
+  {
+    id: 'del-001',
+    pass_code: 'FOG-DEL-2026-0001',
+    courier_company: 'GIG Logistics',
+    rider_name: 'Ifeanyi Okoro',
+    rider_phone: '07081122334',
+    vehicle_type: 'Motorcycle',
+    vehicle_plate: 'KJA-881-XY',
+    package_type: 'E-Commerce Parcel',
+    house_number: 'Plot 4A',
+    resident_number: '001',
+    resident_name: 'Engr. Babatunde Adeleke',
+    entry_time: new Date(Date.now() - 1800000).toISOString(),
+    status: 'Inside Estate',
+    security_officer: 'Guard Sunday Eze',
+    notes: 'Delivery pass issued. Maximum allowed turnaround time 25 minutes.',
+    created_at: new Date(Date.now() - 1800000).toISOString()
+  },
+  {
+    id: 'del-002',
+    pass_code: 'FOG-DEL-2026-0002',
+    courier_company: 'Chowdeck',
+    rider_name: 'Kehinde Adewale',
+    rider_phone: '08144556677',
+    vehicle_type: 'Motorcycle',
+    vehicle_plate: 'APP-301-ZZ',
+    package_type: 'Food / Beverage Order',
+    house_number: 'House 12',
+    resident_number: '002',
+    resident_name: 'Dr. Chioma Nwachukwu',
+    entry_time: new Date(Date.now() - 5400000).toISOString(),
+    exit_time: new Date(Date.now() - 4200000).toISOString(),
+    status: 'Exited',
+    security_officer: 'Guard Sunday Eze',
+    notes: 'Completed meal drop-off in 20 minutes.',
+    created_at: new Date(Date.now() - 5400000).toISOString()
   }
 ];
 
@@ -3782,6 +4034,688 @@ export const dbService = {
       emergency_reports_count: incidents.filter(i => i.is_emergency).length,
       officers_on_duty_count: dutyOff,
       active_patrols_count: activePatrols
+    };
+  },
+
+  // ==========================================
+  // STAGE 11: RESIDENT VEHICLES
+  // ==========================================
+  async getResidentVehicles(residentNumber?: string): Promise<ResidentVehicle[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.VEHICLES);
+      let list: ResidentVehicle[] = raw ? JSON.parse(raw) : [];
+      if (!list || list.length === 0) {
+        list = INITIAL_VEHICLES_SEED;
+        localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
+      }
+      if (residentNumber) {
+        return list.filter(v => v.resident_number === residentNumber);
+      }
+      return list;
+    } catch {
+      return INITIAL_VEHICLES_SEED;
+    }
+  },
+
+  async getVehicleByPlate(plateNumber: string): Promise<ResidentVehicle | null> {
+    const list = await this.getResidentVehicles();
+    const cleanPlate = plateNumber.trim().toUpperCase().replace(/[\s-]/g, '');
+    return list.find(v => v.plate_number.replace(/[\s-]/g, '').toUpperCase() === cleanPlate) || null;
+  },
+
+  async registerResidentVehicle(data: Omit<ResidentVehicle, 'id' | 'created_at'>): Promise<{ success: boolean; vehicle?: ResidentVehicle; message?: string }> {
+    const list = await this.getResidentVehicles();
+    const normalizedPlate = data.plate_number.trim().toUpperCase();
+
+    // Check duplicate plate
+    const exists = list.some(v => v.plate_number.replace(/[\s-]/g, '').toUpperCase() === normalizedPlate.replace(/[\s-]/g, ''));
+    if (exists) {
+      return { success: false, message: `Vehicle with plate number ${normalizedPlate} is already registered.` };
+    }
+
+    const newVehicle: ResidentVehicle = {
+      id: 'veh-' + Date.now(),
+      resident_id: data.resident_id,
+      resident_number: data.resident_number,
+      resident_name: data.resident_name,
+      house_number: data.house_number,
+      vehicle_type: data.vehicle_type,
+      make: data.make.trim(),
+      model: data.model.trim(),
+      color: data.color.trim(),
+      plate_number: normalizedPlate,
+      photo_url: data.photo_url || null,
+      status: data.status || 'Active',
+      notes: data.notes || null,
+      registered_by: data.registered_by || 'Resident Self-Service',
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newVehicle);
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: data.resident_name,
+      action: 'VEHICLE_REGISTERED',
+      entity_type: 'vehicle',
+      entity_id: newVehicle.id,
+      description: `Registered vehicle ${newVehicle.make} ${newVehicle.model} (${newVehicle.plate_number}) for House ${newVehicle.house_number}`
+    });
+
+    return { success: true, vehicle: newVehicle };
+  },
+
+  async updateResidentVehicle(id: string, data: Partial<ResidentVehicle>): Promise<{ success: boolean; vehicle?: ResidentVehicle; message?: string }> {
+    const list = await this.getResidentVehicles();
+    const index = list.findIndex(v => v.id === id);
+    if (index === -1) return { success: false, message: 'Vehicle record not found.' };
+
+    const updated: ResidentVehicle = {
+      ...list[index],
+      ...data,
+      plate_number: data.plate_number ? data.plate_number.trim().toUpperCase() : list[index].plate_number,
+      updated_at: new Date().toISOString()
+    };
+
+    list[index] = updated;
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: 'Security Gate Desk',
+      action: 'VEHICLE_UPDATED',
+      entity_type: 'vehicle',
+      entity_id: id,
+      description: `Updated details for vehicle ${updated.plate_number} (${updated.make} ${updated.model})`
+    });
+
+    return { success: true, vehicle: updated };
+  },
+
+  async deleteResidentVehicle(id: string): Promise<{ success: boolean; message?: string }> {
+    const list = await this.getResidentVehicles();
+    const target = list.find(v => v.id === id);
+    if (!target) return { success: false, message: 'Vehicle not found' };
+
+    const remaining = list.filter(v => v.id !== id);
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(remaining));
+
+    await this.logActivity({
+      admin_email: 'Resident Portal',
+      action: 'VEHICLE_DELETED',
+      entity_type: 'vehicle',
+      entity_id: id,
+      description: `Removed registered vehicle ${target.plate_number} (${target.make} ${target.model})`
+    });
+
+    return { success: true };
+  },
+
+  // ==========================================
+  // STAGE 11: RESTRICTED WATCHLIST & BLACKLIST
+  // ==========================================
+  async getWatchlist(): Promise<RestrictedWatchlistEntry[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.WATCHLIST);
+      let list: RestrictedWatchlistEntry[] = raw ? JSON.parse(raw) : [];
+      if (!list || list.length === 0) {
+        list = INITIAL_WATCHLIST_SEED;
+        localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(list));
+      }
+      return list;
+    } catch {
+      return INITIAL_WATCHLIST_SEED;
+    }
+  },
+
+  async addToWatchlist(data: Omit<RestrictedWatchlistEntry, 'id' | 'created_at'>): Promise<{ success: boolean; entry?: RestrictedWatchlistEntry; message?: string }> {
+    const list = await this.getWatchlist();
+    const newEntry: RestrictedWatchlistEntry = {
+      id: 'wl-' + Date.now(),
+      entity_name: data.entity_name.trim(),
+      phone_number: data.phone_number ? data.phone_number.trim() : null,
+      plate_number: data.plate_number ? data.plate_number.trim().toUpperCase() : null,
+      category: data.category,
+      reason: data.reason.trim(),
+      severity: data.severity,
+      date_added: data.date_added || new Date().toISOString().split('T')[0],
+      added_by: data.added_by || 'Chief Security Officer',
+      is_active: data.is_active !== undefined ? data.is_active : true,
+      notes: data.notes || null,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newEntry);
+    localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: newEntry.added_by,
+      action: 'WATCHLIST_ADDED',
+      entity_type: 'watchlist',
+      entity_id: newEntry.id,
+      description: `Added "${newEntry.entity_name}" (${newEntry.category}) to security restricted watchlist with severity "${newEntry.severity}"`
+    });
+
+    return { success: true, entry: newEntry };
+  },
+
+  async updateWatchlistEntry(id: string, data: Partial<RestrictedWatchlistEntry>): Promise<{ success: boolean; entry?: RestrictedWatchlistEntry; message?: string }> {
+    const list = await this.getWatchlist();
+    const index = list.findIndex(e => e.id === id);
+    if (index === -1) return { success: false, message: 'Watchlist entry not found' };
+
+    list[index] = {
+      ...list[index],
+      ...data,
+      plate_number: data.plate_number ? data.plate_number.trim().toUpperCase() : list[index].plate_number
+    };
+
+    localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(list));
+    return { success: true, entry: list[index] };
+  },
+
+  async deleteWatchlistEntry(id: string): Promise<{ success: boolean; message?: string }> {
+    const list = await this.getWatchlist();
+    const target = list.find(w => w.id === id);
+    const filtered = list.filter(w => w.id !== id);
+    localStorage.setItem(STORAGE_KEYS.WATCHLIST, JSON.stringify(filtered));
+
+    if (target) {
+      await this.logActivity({
+        admin_email: 'Security Admin',
+        action: 'WATCHLIST_REMOVED',
+        entity_type: 'watchlist',
+        entity_id: id,
+        description: `Removed "${target.entity_name}" from security watchlist`
+      });
+    }
+
+    return { success: true };
+  },
+
+  async checkWatchlistMatch(query: string): Promise<RestrictedWatchlistEntry | null> {
+    if (!query || query.trim().length < 2) return null;
+    const list = await this.getWatchlist();
+    const cleanQ = query.trim().toUpperCase().replace(/[\s-]/g, '');
+
+    return list.find(entry => {
+      if (!entry.is_active) return false;
+      const cleanPlate = entry.plate_number ? entry.plate_number.toUpperCase().replace(/[\s-]/g, '') : '';
+      const cleanPhone = entry.phone_number ? entry.phone_number.replace(/[\s-]/g, '') : '';
+      const cleanName = entry.entity_name.toUpperCase();
+
+      return (cleanPlate && (cleanPlate === cleanQ || cleanQ.includes(cleanPlate) || cleanPlate.includes(cleanQ))) ||
+             (cleanPhone && (cleanPhone === cleanQ || cleanQ.includes(cleanPhone))) ||
+             (cleanName.includes(query.trim().toUpperCase()));
+    }) || null;
+  },
+
+  // ==========================================
+  // STAGE 11: CONTRACTOR & ARTISAN PASSES
+  // ==========================================
+  async getContractorPasses(): Promise<ContractorAccessPass[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.CONTRACTORS);
+      let list: ContractorAccessPass[] = raw ? JSON.parse(raw) : [];
+      if (!list || list.length === 0) {
+        list = INITIAL_CONTRACTORS_SEED;
+        localStorage.setItem(STORAGE_KEYS.CONTRACTORS, JSON.stringify(list));
+      }
+      return list;
+    } catch {
+      return INITIAL_CONTRACTORS_SEED;
+    }
+  },
+
+  async createContractorPass(data: Omit<ContractorAccessPass, 'id' | 'pass_code' | 'created_at'>): Promise<{ success: boolean; pass?: ContractorAccessPass; message?: string }> {
+    const list = await this.getContractorPasses();
+    const dateStr = new Date().getFullYear();
+    const seq = String(list.length + 1).padStart(4, '0');
+    const passCode = `FOG-CON-${dateStr}-${seq}`;
+
+    const newPass: ContractorAccessPass = {
+      id: 'con-' + Date.now(),
+      pass_code: passCode,
+      company_name: data.company_name.trim(),
+      lead_contractor_name: data.lead_contractor_name.trim(),
+      lead_phone: data.lead_phone.trim(),
+      worker_count: data.worker_count || 1,
+      worker_names: data.worker_names || null,
+      service_type: data.service_type,
+      house_number: data.house_number.trim(),
+      resident_number: data.resident_number,
+      resident_name: data.resident_name,
+      permit_id: data.permit_id || `PRM-${dateStr}-${seq}`,
+      id_type_recorded: data.id_type_recorded,
+      id_number: data.id_number.trim(),
+      valid_date: data.valid_date || new Date().toISOString().split('T')[0],
+      entry_time: data.entry_time || new Date().toISOString(),
+      exit_time: null,
+      status: data.status || 'Active On-Site',
+      security_officer: data.security_officer || 'Gate Control',
+      notes: data.notes || null,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newPass);
+    localStorage.setItem(STORAGE_KEYS.CONTRACTORS, JSON.stringify(list));
+
+    // Log to gate movements
+    await this.createGateLog({
+      movement_type: 'Entry',
+      entity_type: 'Contractor',
+      name: `${newPass.company_name} (${newPass.lead_contractor_name})`,
+      phone_number: newPass.lead_phone,
+      house_number: newPass.house_number,
+      destination: `House ${newPass.house_number} (${newPass.resident_name})`,
+      pass_code: newPass.pass_code,
+      officer_badge: 'FOG-SEC-01',
+      officer_name: newPass.security_officer,
+      notes: `${newPass.service_type} work permit (${newPass.worker_count} workers on-site)`
+    });
+
+    await this.logActivity({
+      admin_email: newPass.security_officer,
+      action: 'CONTRACTOR_LOGGED',
+      entity_type: 'contractor',
+      entity_id: newPass.id,
+      description: `Logged contractor pass ${newPass.pass_code} for ${newPass.company_name} at House ${newPass.house_number}`
+    });
+
+    return { success: true, pass: newPass };
+  },
+
+  async updateContractorStatus(id: string, status: ContractorStatus, officerName: string): Promise<{ success: boolean; pass?: ContractorAccessPass; message?: string }> {
+    const list = await this.getContractorPasses();
+    const index = list.findIndex(c => c.id === id);
+    if (index === -1) return { success: false, message: 'Contractor pass not found' };
+
+    list[index].status = status;
+    if (status === 'Active On-Site' && !list[index].entry_time) {
+      list[index].entry_time = new Date().toISOString();
+    }
+    if (status === 'Completed') {
+      list[index].exit_time = new Date().toISOString();
+      await this.createGateLog({
+        movement_type: 'Exit',
+        entity_type: 'Contractor',
+        name: `${list[index].company_name} (${list[index].lead_contractor_name})`,
+        phone_number: list[index].lead_phone,
+        house_number: list[index].house_number,
+        destination: 'Exit Barrier',
+        pass_code: list[index].pass_code,
+        officer_badge: 'FOG-SEC-01',
+        officer_name: officerName,
+        notes: `Contractor completed work and exited estate`
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.CONTRACTORS, JSON.stringify(list));
+    return { success: true, pass: list[index] };
+  },
+
+  // ==========================================
+  // STAGE 11: DELIVERY & COURIER DISPATCH
+  // ==========================================
+  async getDeliveryPasses(): Promise<DeliveryAccessPass[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.DELIVERIES);
+      let list: DeliveryAccessPass[] = raw ? JSON.parse(raw) : [];
+      if (!list || list.length === 0) {
+        list = INITIAL_DELIVERIES_SEED;
+        localStorage.setItem(STORAGE_KEYS.DELIVERIES, JSON.stringify(list));
+      }
+      return list;
+    } catch {
+      return INITIAL_DELIVERIES_SEED;
+    }
+  },
+
+  async createDeliveryPass(data: Omit<DeliveryAccessPass, 'id' | 'pass_code' | 'created_at'>): Promise<{ success: boolean; pass?: DeliveryAccessPass; message?: string }> {
+    const list = await this.getDeliveryPasses();
+    const dateStr = new Date().getFullYear();
+    const seq = String(list.length + 1).padStart(4, '0');
+    const passCode = `FOG-DEL-${dateStr}-${seq}`;
+
+    const newPass: DeliveryAccessPass = {
+      id: 'del-' + Date.now(),
+      pass_code: passCode,
+      courier_company: data.courier_company,
+      rider_name: data.rider_name.trim(),
+      rider_phone: data.rider_phone.trim(),
+      vehicle_type: data.vehicle_type,
+      vehicle_plate: data.vehicle_plate ? data.vehicle_plate.trim().toUpperCase() : null,
+      package_type: data.package_type,
+      house_number: data.house_number.trim(),
+      resident_number: data.resident_number,
+      resident_name: data.resident_name,
+      entry_time: data.entry_time || new Date().toISOString(),
+      exit_time: null,
+      status: 'Inside Estate',
+      security_officer: data.security_officer || 'Gate Controller',
+      notes: data.notes || null,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newPass);
+    localStorage.setItem(STORAGE_KEYS.DELIVERIES, JSON.stringify(list));
+
+    await this.createGateLog({
+      movement_type: 'Entry',
+      entity_type: 'Delivery',
+      name: `${newPass.courier_company} (${newPass.rider_name})`,
+      phone_number: newPass.rider_phone,
+      vehicle_number: newPass.vehicle_plate || `${newPass.vehicle_type}`,
+      house_number: newPass.house_number,
+      destination: `House ${newPass.house_number} (${newPass.resident_name})`,
+      pass_code: newPass.pass_code,
+      officer_badge: 'FOG-SEC-01',
+      officer_name: newPass.security_officer,
+      notes: `${newPass.package_type} dispatch`
+    });
+
+    await this.logActivity({
+      admin_email: newPass.security_officer,
+      action: 'DELIVERY_LOGGED',
+      entity_type: 'delivery',
+      entity_id: newPass.id,
+      description: `Issued delivery clearance ${newPass.pass_code} for ${newPass.courier_company} rider ${newPass.rider_name} to House ${newPass.house_number}`
+    });
+
+    return { success: true, pass: newPass };
+  },
+
+  async updateDeliveryStatus(id: string, status: DeliveryStatus, officerName: string): Promise<{ success: boolean; pass?: DeliveryAccessPass; message?: string }> {
+    const list = await this.getDeliveryPasses();
+    const index = list.findIndex(d => d.id === id);
+    if (index === -1) return { success: false, message: 'Delivery pass not found' };
+
+    list[index].status = status;
+    if (status === 'Exited') {
+      list[index].exit_time = new Date().toISOString();
+      await this.createGateLog({
+        movement_type: 'Exit',
+        entity_type: 'Delivery',
+        name: `${list[index].courier_company} (${list[index].rider_name})`,
+        phone_number: list[index].rider_phone,
+        vehicle_number: list[index].vehicle_plate || undefined,
+        house_number: list[index].house_number,
+        destination: 'Exit Barrier',
+        pass_code: list[index].pass_code,
+        officer_badge: 'FOG-SEC-01',
+        officer_name: officerName,
+        notes: `Delivery completed, rider exited`
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.DELIVERIES, JSON.stringify(list));
+    return { success: true, pass: list[index] };
+  },
+
+  // ==========================================
+  // STAGE 11: RESIDENT ACCESS VERIFICATION
+  // ==========================================
+  async verifyResidentAccess(query: string): Promise<ResidentAccessVerificationResult> {
+    if (!query || query.trim().length === 0) {
+      return {
+        status: 'NOT FOUND — MANUAL VERIFICATION REQUIRED',
+        is_allowed: false,
+        vehicles: [],
+        active_visitor_passes: [],
+        message: 'Please enter a resident name, house number, phone number, or vehicle plate number.'
+      };
+    }
+
+    const cleanQ = query.trim().toUpperCase();
+    const [residents, vehicles, visitorPasses, watchlist] = await Promise.all([
+      this.getResidents(),
+      this.getResidentVehicles(),
+      this.getVisitorPasses(),
+      this.getWatchlist()
+    ]);
+
+    // First check watchlist
+    const watchlistHit = watchlist.find(w => {
+      if (!w.is_active) return false;
+      const cleanPlate = w.plate_number?.toUpperCase().replace(/[\s-]/g, '') || '';
+      const cleanPhone = w.phone_number?.replace(/[\s-]/g, '') || '';
+      const cleanName = w.entity_name.toUpperCase();
+      const qPlate = cleanQ.replace(/[\s-]/g, '');
+
+      return (cleanPlate && (cleanPlate === qPlate || qPlate.includes(cleanPlate))) ||
+             (cleanPhone && cleanPhone === cleanQ.replace(/[\s-]/g, '')) ||
+             cleanName.includes(cleanQ);
+    });
+
+    if (watchlistHit) {
+      return {
+        status: 'SUSPENDED — VERIFY WITH ADMIN',
+        is_allowed: false,
+        vehicles: [],
+        active_visitor_passes: [],
+        message: `RESTRICTION ALERT: Subject is on Estate Security Watchlist (${watchlistHit.category}). Reason: ${watchlistHit.reason}`,
+        warning: `SEVERITY: ${watchlistHit.severity.toUpperCase()} — DO NOT GRANT GATE BARRIER ACCESS WITHOUT CSO OVERRIDE.`
+      };
+    }
+
+    // Check if query matches a registered vehicle plate
+    const vehicleHit = vehicles.find(v => v.plate_number.replace(/[\s-]/g, '').toUpperCase() === cleanQ.replace(/[\s-]/g, ''));
+    let matchedResident: Resident | undefined;
+
+    if (vehicleHit) {
+      matchedResident = residents.find(r => r.resident_number === vehicleHit.resident_number || r.id === vehicleHit.resident_id);
+    }
+
+    if (!matchedResident) {
+      // Try searching resident directly by house, name, phone, or resident_number
+      matchedResident = residents.find(r => {
+        const rName = r.full_name.toUpperCase();
+        const rHouse = r.house_number.toUpperCase();
+        const rNum = r.resident_number.toUpperCase();
+        const rPhone = r.phone_number.replace(/[\s-]/g, '');
+        const rAddPhone = r.additional_phone ? r.additional_phone.replace(/[\s-]/g, '') : '';
+        const qClean = cleanQ.replace(/[\s-]/g, '');
+
+        return rName.includes(cleanQ) ||
+               rHouse === cleanQ ||
+               rHouse.includes(cleanQ) ||
+               rNum === cleanQ ||
+               `FOG-RES-${rNum}` === cleanQ ||
+               rPhone.includes(qClean) ||
+               (rAddPhone && rAddPhone.includes(qClean));
+      });
+    }
+
+    if (!matchedResident) {
+      return {
+        status: 'NOT FOUND — MANUAL VERIFICATION REQUIRED',
+        is_allowed: false,
+        vehicles: [],
+        active_visitor_passes: [],
+        message: `No active resident record found matching "${query}". Request physical identification or contact estate management office.`
+      };
+    }
+
+    const residentVehicles = vehicles.filter(v => v.resident_number === matchedResident?.resident_number);
+    const residentVisitors = visitorPasses.filter(v => v.resident_number === matchedResident?.resident_number && (v.status === 'Expected' || v.status === 'Arrived'));
+
+    if (matchedResident.status === 'Active') {
+      return {
+        status: 'ACTIVE — ACCESS ALLOWED',
+        is_allowed: true,
+        resident: matchedResident,
+        vehicles: residentVehicles,
+        active_visitor_passes: residentVisitors,
+        message: `Verified Resident: ${matchedResident.full_name} (${matchedResident.house_number}). Access granted.`
+      };
+    } else {
+      return {
+        status: 'SUSPENDED — VERIFY WITH ADMIN',
+        is_allowed: false,
+        resident: matchedResident,
+        vehicles: residentVehicles,
+        active_visitor_passes: residentVisitors,
+        message: `Resident status is ${matchedResident.status.toUpperCase()}. Account requires security and admin clearance before standard gate barrier clearance.`
+      };
+    }
+  },
+
+  // ==========================================
+  // STAGE 11: WALK-IN APPROVAL WORKFLOW
+  // ==========================================
+  async requestWalkInApproval(data: {
+    visitor_name: string;
+    visitor_phone: string;
+    house_number: string;
+    resident_name: string;
+    resident_phone: string;
+    purpose_of_visit: string;
+    vehicle_number?: string;
+    officer_name: string;
+    notes?: string;
+  }): Promise<{ success: boolean; pass?: VisitorPass; message?: string }> {
+    const list = await this.getVisitorPasses();
+    const residents = await this.getResidents();
+    const hostResident = residents.find(r => 
+      r.house_number.toUpperCase() === data.house_number.trim().toUpperCase() ||
+      r.full_name.toUpperCase().includes(data.resident_name.trim().toUpperCase())
+    ) || {
+      id: 'res-unknown',
+      resident_number: '999',
+      full_name: data.resident_name,
+      house_number: data.house_number,
+      phone_number: data.resident_phone
+    };
+
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const passCode = `FOG-VIS-WLK-${randomSuffix}`;
+
+    const newPass: VisitorPass = {
+      id: 'vis-wlk-' + Date.now(),
+      pass_code: passCode,
+      visitor_name: data.visitor_name.trim(),
+      visitor_phone: data.visitor_phone.trim(),
+      vehicle_number: data.vehicle_number ? data.vehicle_number.trim().toUpperCase() : null,
+      vehicle_description: data.vehicle_number ? 'Walk-In Vehicle' : 'Pedestrian Walk-In',
+      purpose_of_visit: data.purpose_of_visit.trim(),
+      resident_id: hostResident.id,
+      resident_number: hostResident.resident_number,
+      resident_name: hostResident.full_name,
+      house_number: hostResident.house_number,
+      resident_phone: hostResident.phone_number,
+      expected_arrival: new Date().toISOString(),
+      status: 'Expected', // Marked as awaiting resident confirmation
+      qr_code_data: `${passCode}-WLK-${hostResident.resident_number}`,
+      notes: `WALK-IN GUEST: Registered by Gate Officer ${data.officer_name}. Awaiting host verification. ${data.notes || ''}`,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newPass);
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: data.officer_name,
+      action: 'WALK_IN_REQUESTED',
+      entity_type: 'visitor',
+      entity_id: newPass.id,
+      description: `Gate Officer ${data.officer_name} registered walk-in visitor ${data.visitor_name} requesting access to House ${data.house_number}`
+    });
+
+    return { success: true, pass: newPass, message: 'Walk-in access request recorded. Host resident notified.' };
+  },
+
+  async respondWalkInApproval(passId: string, approved: boolean, reason?: string, approverName?: string): Promise<{ success: boolean; pass?: VisitorPass; message?: string }> {
+    const list = await this.getVisitorPasses();
+    const target = list.find(v => v.id === passId);
+    if (!target) return { success: false, message: 'Pass not found' };
+
+    if (approved) {
+      target.status = 'Arrived';
+      target.entry_time = new Date().toISOString();
+      target.checked_in_by = approverName || 'Resident Authorization';
+      target.notes = `${target.notes || ''} [APPROVED by ${approverName || 'Host Resident'} at ${new Date().toLocaleTimeString()}]`;
+
+      await this.createGateLog({
+        movement_type: 'Entry',
+        entity_type: 'Visitor',
+        name: target.visitor_name,
+        phone_number: target.visitor_phone,
+        vehicle_number: target.vehicle_number || undefined,
+        house_number: target.house_number,
+        destination: `House ${target.house_number} (${target.resident_name})`,
+        pass_code: target.pass_code,
+        officer_badge: 'FOG-SEC-01',
+        officer_name: approverName || 'Gate Control',
+        notes: `Walk-in visitor approved by host resident`
+      });
+
+      await this.logActivity({
+        admin_email: approverName || target.resident_phone,
+        action: 'WALK_IN_APPROVED',
+        entity_type: 'visitor',
+        entity_id: target.id,
+        description: `Walk-in guest ${target.visitor_name} (${target.pass_code}) approved for entry to House ${target.house_number}`
+      });
+    } else {
+      target.status = 'Denied';
+      target.denial_reason = reason || 'Host resident declined entry';
+      target.notes = `${target.notes || ''} [DENIED by ${approverName || 'Host Resident'}: ${target.denial_reason}]`;
+
+      await this.logActivity({
+        admin_email: approverName || target.resident_phone,
+        action: 'WALK_IN_DENIED',
+        entity_type: 'visitor',
+        entity_id: target.id,
+        description: `Walk-in guest ${target.visitor_name} denied entry by resident (${target.denial_reason})`
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(list));
+    return { success: true, pass: target };
+  },
+
+  // ==========================================
+  // STAGE 11: GATE SECURITY OVERVIEW STATS
+  // ==========================================
+  async getGateSecurityOverviewStats(): Promise<GateSecurityOverviewStats> {
+    const [officers, visitors, gateLogs, alerts, watchlist, contractors, deliveries, vehicles] = await Promise.all([
+      this.getSecurityOfficers(),
+      this.getVisitorPasses(),
+      this.getGateLogs(),
+      this.getSecurityAlerts(),
+      this.getWatchlist(),
+      this.getContractorPasses(),
+      this.getDeliveryPasses(),
+      this.getResidentVehicles()
+    ]);
+
+    const activeOfficer = officers.find(o => o.status === 'On Duty' || o.status === 'On Patrol') || officers[0] || null;
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    const visitorsInside = visitors.filter(v => v.status === 'Arrived').length;
+    const expectedVisitors = visitors.filter(v => v.status === 'Expected').length;
+    const recentEntries = gateLogs.filter(g => g.movement_type === 'Entry').length;
+    const recentExits = gateLogs.filter(g => g.movement_type === 'Exit').length;
+    const activeAlerts = alerts.filter(a => a.is_active).length;
+    const activeContractors = contractors.filter(c => c.status === 'Active On-Site').length;
+    const activeDeliveries = deliveries.filter(d => d.status === 'Inside Estate').length;
+    const restrictedAttempts = watchlist.filter(w => w.is_active).length;
+    const pendingWalkIns = visitors.filter(v => v.notes?.includes('WALK-IN') && v.status === 'Expected').length;
+
+    return {
+      officer_on_duty: activeOfficer,
+      current_time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      visitors_inside_count: visitorsInside,
+      expected_visitors_today: expectedVisitors,
+      recent_entries_count: recentEntries,
+      recent_exits_count: recentExits,
+      pending_walk_in_approvals: pendingWalkIns,
+      active_alerts_count: activeAlerts,
+      restricted_access_attempts: restrictedAttempts,
+      emergency_alerts_count: alerts.filter(a => a.priority === 'Critical' && a.is_active).length,
+      active_contractors_count: activeContractors,
+      active_deliveries_count: activeDeliveries,
+      total_registered_vehicles: vehicles.length
     };
   }
 };

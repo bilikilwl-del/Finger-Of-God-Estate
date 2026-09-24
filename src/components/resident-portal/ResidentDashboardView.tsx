@@ -33,7 +33,14 @@ import {
   Plus,
   Radio,
   Eye,
-  Bell
+  Bell,
+  Car,
+  Trash2,
+  Share2,
+  MessageSquare,
+  Send,
+  DoorOpen,
+  UserPlus
 } from 'lucide-react';
 import { 
   Resident, 
@@ -45,7 +52,9 @@ import {
   Incident,
   VisitorPass,
   SecurityAlert,
-  SecurityOfficer
+  SecurityOfficer,
+  ResidentVehicle,
+  VehicleType
 } from '../../types/database';
 import { dbService, residentSessionService } from '../../lib/supabase';
 import { formatNaira } from '../../lib/paystack';
@@ -56,6 +65,7 @@ import { EmergencyReportModal } from '../security/EmergencyReportModal';
 import { IncidentFormModal } from '../security/IncidentFormModal';
 import { VisitorPassModal } from '../security/VisitorPassModal';
 import { IncidentDetailModal } from '../security/IncidentDetailModal';
+import { QRCodeDisplay } from '../common/QRCodeDisplay';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
@@ -99,6 +109,21 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const [selectedIncidentDetail, setSelectedIncidentDetail] = useState<Incident | null>(null);
   const [isIncidentDetailOpen, setIsIncidentDetailOpen] = useState(false);
   const [copiedPassCode, setCopiedPassCode] = useState<string | null>(null);
+
+  // Stage 11 Resident Vehicle & Access State
+  const [myVehicles, setMyVehicles] = useState<ResidentVehicle[]>([]);
+  const [isAddVehicleOpen, setIsAddVehicleOpen] = useState(false);
+  const [newVehMake, setNewVehMake] = useState('');
+  const [newVehModel, setNewVehModel] = useState('');
+  const [newVehColor, setNewVehColor] = useState('');
+  const [newVehPlate, setNewVehPlate] = useState('');
+  const [newVehType, setNewVehType] = useState<VehicleType>('Sedan');
+  const [newVehNotes, setNewVehNotes] = useState('');
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [vehicleMsg, setVehicleMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const [selectedPassForQR, setSelectedPassForQR] = useState<VisitorPass | null>(null);
+  const [pendingWalkIns, setPendingWalkIns] = useState<VisitorPass[]>([]);
 
   // Stage 9 Profile & Password Management State
   const [isEditingContact, setIsEditingContact] = useState(false);
@@ -181,12 +206,13 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [data, incidents, passes, alerts, officers] = await Promise.all([
+      const [data, incidents, passes, alerts, officers, loadedVehicles] = await Promise.all([
         dbService.getResidentDashboard(currentResident.resident_number),
         dbService.getResidentIncidents(currentResident.resident_number),
         dbService.getResidentVisitorPasses(currentResident.resident_number),
         dbService.getSecurityAlerts(),
-        dbService.getSecurityOfficers()
+        dbService.getSecurityOfficers(),
+        dbService.getResidentVehicles(currentResident.resident_number)
       ]);
       if (data) {
         setDashboardData(data);
@@ -195,11 +221,113 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       setMyVisitorPasses(passes);
       setEstateAlerts(alerts.filter(a => a.is_active));
       setOfficersList(officers);
+      setMyVehicles(loadedVehicles);
+
+      // Check walk-ins awaiting this resident's approval
+      const allPasses = await dbService.getVisitorPasses();
+      const waiting = allPasses.filter(p => 
+        (p.resident_number === currentResident.resident_number || p.house_number.toUpperCase() === currentResident.house_number.toUpperCase()) &&
+        p.status === 'Expected' &&
+        p.notes?.includes('WALK-IN')
+      );
+      setPendingWalkIns(waiting);
     } catch (err) {
       console.error('Failed to load resident dashboard:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRegisterVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVehMake.trim() || !newVehModel.trim() || !newVehPlate.trim() || !newVehColor.trim()) {
+      setVehicleMsg({ type: 'error', text: 'Please fill in make, model, color, and license plate number.' });
+      return;
+    }
+
+    setIsSavingVehicle(true);
+    setVehicleMsg(null);
+
+    try {
+      const res = await dbService.registerResidentVehicle({
+        resident_id: currentResident.id,
+        resident_number: currentResident.resident_number,
+        resident_name: currentResident.full_name,
+        house_number: currentResident.house_number,
+        vehicle_type: newVehType,
+        make: newVehMake.trim(),
+        model: newVehModel.trim(),
+        color: newVehColor.trim(),
+        plate_number: newVehPlate.trim().toUpperCase(),
+        status: 'Active',
+        notes: newVehNotes.trim() || null,
+        registered_by: 'Resident Self-Service'
+      });
+
+      if (res.success && res.vehicle) {
+        setVehicleMsg({ type: 'success', text: `Vehicle ${res.vehicle.plate_number} successfully registered and linked to Plot ${currentResident.house_number}.` });
+        setNewVehMake('');
+        setNewVehModel('');
+        setNewVehColor('');
+        setNewVehPlate('');
+        setNewVehNotes('');
+        setIsAddVehicleOpen(false);
+        await loadData();
+      } else {
+        setVehicleMsg({ type: 'error', text: res.message || 'Failed to register vehicle.' });
+      }
+    } catch {
+      setVehicleMsg({ type: 'error', text: 'Network error registering vehicle.' });
+    } finally {
+      setIsSavingVehicle(false);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehId: string) => {
+    if (!confirm('Are you sure you want to remove this registered vehicle from your resident profile?')) return;
+    try {
+      await dbService.deleteResidentVehicle(vehId);
+      await loadData();
+    } catch (e) {
+      console.error('Error deleting vehicle:', e);
+    }
+  };
+
+  const handleApproveWalkIn = async (passId: string) => {
+    try {
+      const res = await dbService.respondWalkInApproval(passId, true, 'Resident approved via portal', currentResident.full_name);
+      if (res.success) {
+        await loadData();
+      }
+    } catch (e) {
+      console.error('Error approving walk-in:', e);
+    }
+  };
+
+  const handleDenyWalkIn = async (passId: string) => {
+    try {
+      const res = await dbService.respondWalkInApproval(passId, false, 'Resident declined via portal', currentResident.full_name);
+      if (res.success) {
+        await loadData();
+      }
+    } catch (e) {
+      console.error('Error denying walk-in:', e);
+    }
+  };
+
+  const handleShareWhatsApp = (pass: VisitorPass) => {
+    const text = encodeURIComponent(
+      `*FINGER OF GOD ESTATE GATE PASS*\n` +
+      `--------------------------------\n` +
+      `Guest Name: ${pass.visitor_name}\n` +
+      `Pass Code: ${pass.pass_code}\n` +
+      `Host Resident: ${pass.resident_name}\n` +
+      `Destination: ${pass.house_number}\n` +
+      `Valid Date: ${new Date(pass.expected_arrival).toLocaleDateString('en-NG')}\n` +
+      `--------------------------------\n` +
+      `Present this Pass Code to the security controller at the Main Gate for express entry.`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   useEffect(() => {
@@ -413,6 +541,62 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
             </div>
 
           </div>
+
+          {/* STAGE 11: WALK-IN GUEST APPROVAL NOTIFICATION BANNER */}
+          {pendingWalkIns.length > 0 && (
+            <div className="mt-6 p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/60 text-amber-950 space-y-3 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-bold animate-pulse">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-black text-amber-900 text-sm uppercase tracking-tight">
+                    Walk-In Guest at Estate Main Gate Requesting Clearance
+                  </h4>
+                  <p className="text-xs text-amber-800">
+                    A security officer has registered a visitor at the gate for your plot ({currentResident.house_number}). Please approve or decline entry.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                {pendingWalkIns.map((guest) => (
+                  <div
+                    key={guest.id}
+                    className="p-3.5 rounded-xl bg-white border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">{guest.visitor_name}</div>
+                      <div className="text-slate-600">
+                        Phone: <span className="font-mono font-bold text-slate-800">{guest.visitor_phone}</span> • Purpose: <span className="font-medium text-slate-800">{guest.purpose_of_visit}</span>
+                      </div>
+                      {guest.vehicle_number && (
+                        <div className="font-mono text-[11px] text-slate-500">
+                          Vehicle: {guest.vehicle_number}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleDenyWalkIn(guest.id)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 font-bold text-xs uppercase cursor-pointer"
+                      >
+                        Decline Entry
+                      </button>
+                      <button
+                        onClick={() => handleApproveWalkIn(guest.id)}
+                        className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider cursor-pointer shadow-sm flex items-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Authorize Access</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Navigation Sub-Tabs */}
           <div className="flex items-center gap-2 pt-6 mt-6 border-t border-slate-100 overflow-x-auto">
@@ -1006,7 +1190,80 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               </div>
             )}
 
-            {/* Section 1: Pre-Registered Visitor Passes */}
+            {/* Section 1: Registered Household Vehicles (Stage 11) */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 font-display uppercase tracking-tight flex items-center gap-2">
+                    <Car className="w-4 h-4 text-emerald-700" />
+                    <span>My Registered Household Vehicles ({myVehicles.length})</span>
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Vehicles authorized for automatic barrier recognition and express gate clearance
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsAddVehicleOpen(true)}
+                  className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Register Vehicle</span>
+                </button>
+              </div>
+
+              {vehicleMsg && (
+                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  vehicleMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'
+                }`}>
+                  {vehicleMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                  <span>{vehicleMsg.text}</span>
+                </div>
+              )}
+
+              {myVehicles.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500 space-y-2">
+                  <Car className="w-8 h-8 text-slate-400 mx-auto" />
+                  <p className="font-bold text-slate-800">No Vehicles Registered Yet</p>
+                  <p className="text-slate-500">Register your family cars and motorcycles to prevent gate delays.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {myVehicles.map((veh) => (
+                    <div key={veh.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-sm font-black text-emerald-800 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 tracking-wide">
+                          {veh.plate_number}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          veh.status === 'Active' ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
+                        }`}>
+                          {veh.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs">
+                        <span className="font-bold text-slate-900 block text-sm">{veh.make} {veh.model}</span>
+                        <span className="text-slate-500 block">{veh.color} • {veh.vehicle_type}</span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-mono text-[10px]">Plot {veh.house_number}</span>
+                        <button
+                          onClick={() => handleDeleteVehicle(veh.id)}
+                          className="text-slate-400 hover:text-rose-600 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Pre-Registered Visitor Passes */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1048,7 +1305,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                             ? 'bg-rose-100 text-rose-900'
                             : 'bg-blue-100 text-blue-900'
                         }`}>
-                          {pass.status}
+                          {pass.status === 'Arrived' ? 'INSIDE ESTATE' : pass.status === 'Departed' ? 'EXITED' : pass.status}
                         </span>
                       </div>
 
@@ -1062,26 +1319,47 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between pt-2 border-t border-slate-200/80 text-[11px] gap-2">
                         <span className="text-slate-500">
                           Expected: {new Date(pass.expected_arrival).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        <button
-                          onClick={() => handleCopyPass(pass.pass_code, pass.visitor_name)}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          {copiedPassCode === pass.pass_code ? (
-                            <>
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              <span className="text-emerald-700">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3 text-slate-500" />
-                              <span>Copy Pass</span>
-                            </>
-                          )}
-                        </button>
+                        
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedPassForQR(pass)}
+                            className="p-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="View QR Code Pass"
+                          >
+                            <QrCode className="w-3.5 h-3.5 text-blue-600" />
+                            <span>QR</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleShareWhatsApp(pass)}
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-800 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Share Pass via WhatsApp"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Share</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleCopyPass(pass.pass_code, pass.visitor_name)}
+                            className="p-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            {copiedPassCode === pass.pass_code ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span className="text-emerald-700">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3 text-slate-500" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1089,7 +1367,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               )}
             </div>
 
-            {/* Section 2: My Reported Incidents */}
+            {/* Section 3: My Reported Incidents */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1575,6 +1853,175 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           onAddInvestigationNote={async () => {}}
           isStaff={false}
         />
+      )}
+
+      {/* Stage 11: Add Resident Vehicle Modal */}
+      {isAddVehicleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 space-y-5 border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                  <Car className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 font-display">Register Household Vehicle</h3>
+                  <p className="text-xs text-slate-500">Link personal vehicle to Plot {currentResident.house_number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddVehicleOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRegisterVehicle} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Make *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newVehMake}
+                    onChange={(e) => setNewVehMake(e.target.value)}
+                    placeholder="e.g. Toyota, Lexus"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Model *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newVehModel}
+                    onChange={(e) => setNewVehModel(e.target.value)}
+                    placeholder="e.g. Camry, RX350"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Color *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newVehColor}
+                    onChange={(e) => setNewVehColor(e.target.value)}
+                    placeholder="e.g. Silver, Black"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">License Plate *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newVehPlate}
+                    onChange={(e) => setNewVehPlate(e.target.value)}
+                    placeholder="e.g. ABC-123-XY"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono uppercase font-bold text-emerald-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Vehicle Type</label>
+                <select
+                  value={newVehType}
+                  onChange={(e) => setNewVehType(e.target.value as VehicleType)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium"
+                >
+                  <option value="Sedan">Sedan (Saloon)</option>
+                  <option value="SUV">SUV (Jeep)</option>
+                  <option value="Hatchback">Hatchback</option>
+                  <option value="Pickup Truck">Pickup Truck</option>
+                  <option value="Van / Bus">Van / Bus</option>
+                  <option value="Motorcycle">Motorcycle</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold uppercase tracking-wider text-slate-700 mb-1">Additional Notes</label>
+                <input
+                  type="text"
+                  value={newVehNotes}
+                  onChange={(e) => setNewVehNotes(e.target.value)}
+                  placeholder="e.g. Resident personal commute car"
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddVehicleOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingVehicle}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-md cursor-pointer"
+                >
+                  {isSavingVehicle ? 'Registering...' : 'Register Vehicle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stage 11: Visitor Pass QR Code Modal */}
+      {selectedPassForQR && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4 border border-slate-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <span className="text-xs font-mono font-bold text-slate-500">DIGITAL GATE PASS</span>
+              <button
+                onClick={() => setSelectedPassForQR(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-black text-slate-900">{selectedPassForQR.visitor_name}</h4>
+              <p className="text-xs text-slate-500">{selectedPassForQR.purpose_of_visit}</p>
+            </div>
+
+            <div className="flex justify-center py-2">
+              <QRCodeDisplay value={selectedPassForQR.qr_code_data} size={160} subtitle={selectedPassForQR.pass_code} />
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1">
+              <div><strong>Host:</strong> {selectedPassForQR.resident_name} (House {selectedPassForQR.house_number})</div>
+              <div><strong>Status:</strong> <span className="uppercase font-bold text-emerald-700">{selectedPassForQR.status}</span></div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleShareWhatsApp(selectedPassForQR)}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase flex items-center justify-center gap-1.5"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share WhatsApp</span>
+              </button>
+              <button
+                onClick={() => setSelectedPassForQR(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
