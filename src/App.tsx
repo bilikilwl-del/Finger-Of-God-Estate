@@ -20,6 +20,7 @@ import { AdminSidebar } from './components/layout/AdminSidebar';
 import { AdminHeader } from './components/layout/AdminHeader';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
 import { ResidentList } from './components/residents/ResidentList';
+import { ResidentProfileView } from './components/residents/ResidentProfileView';
 import { ResidentFormModal } from './components/residents/ResidentFormModal';
 import { ResidentDetailModal } from './components/residents/ResidentDetailModal';
 import { EstateSettingsView } from './components/settings/EstateSettingsView';
@@ -34,21 +35,22 @@ export default function App() {
   // Navigation State
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [viewingResidentProfile, setViewingResidentProfile] = useState<Resident | null>(null);
 
   // Core Data State
   const [residents, setResidents] = useState<Resident[]>([]);
   const [estateSettings, setEstateSettings] = useState<EstateSettings>({
     id: 'default',
-    estate_name: 'Palm Grove Residential Estate',
-    estate_address: 'Plot 10-14, Security Gate Avenue, Phase 2',
+    estate_name: 'Finger of God Estate Security Management',
+    estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate',
     estate_state: 'Lagos',
     estate_lga: 'Eti-Osa',
     monthly_security_levy: 5000,
     payment_due_day: 1,
     currency: 'NGN',
     contact_phone: '08023456789',
-    contact_email: 'security-admin@palmgroveestate.ng',
-    sms_sender_name: 'PALMGROVE',
+    contact_email: 'admin@fingerofgodestate.ng',
+    sms_sender_name: 'FINGEROFGOD',
     first_payment_month: 'October 2026'
   });
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -116,8 +118,13 @@ export default function App() {
   };
 
   const handleOpenViewResident = (resident: Resident) => {
-    setResidentToView(resident);
-    setIsDetailModalOpen(true);
+    setViewingResidentProfile(resident);
+    setCurrentTab('residents');
+  };
+
+  const handleSelectTab = (tab: NavigationTab) => {
+    setViewingResidentProfile(null);
+    setCurrentTab(tab);
   };
 
   const handleResidentSaved = async (savedResident: Resident) => {
@@ -129,7 +136,10 @@ export default function App() {
     setResidents(updatedList);
     setActivityLogs(updatedLogs);
 
-    // If detail modal is open for this resident, update view
+    // If profile view is open for this resident, update view
+    if (viewingResidentProfile?.id === savedResident.id) {
+      setViewingResidentProfile(savedResident);
+    }
     if (residentToView?.id === savedResident.id) {
       setResidentToView(savedResident);
     }
@@ -157,6 +167,9 @@ export default function App() {
       setResidents(updatedList);
       setActivityLogs(updatedLogs);
 
+      if (viewingResidentProfile?.id === resident.id) {
+        setViewingResidentProfile(updated);
+      }
       if (residentToView?.id === resident.id) {
         setResidentToView(updated);
       }
@@ -217,7 +230,7 @@ export default function App() {
         {/* Sidebar */}
         <AdminSidebar
           currentTab={currentTab}
-          onSelectTab={setCurrentTab}
+          onSelectTab={handleSelectTab}
           estateSettings={estateSettings}
           adminUser={adminUser}
           onOpenAuth={() => setIsAuthModalOpen(true)}
@@ -246,7 +259,7 @@ export default function App() {
                 residents={residents}
                 estateSettings={estateSettings}
                 activityLogs={activityLogs}
-                onNavigate={setCurrentTab}
+                onNavigate={handleSelectTab}
                 onAddResident={handleOpenAddResident}
                 onViewResident={handleOpenViewResident}
                 onOpenSqlModal={() => setIsSqlModalOpen(true)}
@@ -254,15 +267,25 @@ export default function App() {
             )}
 
             {currentTab === 'residents' && (
-              <ResidentList
-                residents={residents}
-                estateSettings={estateSettings}
-                onAddResident={handleOpenAddResident}
-                onEditResident={handleOpenEditResident}
-                onViewResident={handleOpenViewResident}
-                onToggleStatus={handleToggleStatus}
-                loading={loading}
-              />
+              viewingResidentProfile ? (
+                <ResidentProfileView
+                  resident={viewingResidentProfile}
+                  estateSettings={estateSettings}
+                  onBack={() => setViewingResidentProfile(null)}
+                  onEdit={handleOpenEditResident}
+                  onToggleStatus={handleToggleStatus}
+                />
+              ) : (
+                <ResidentList
+                  residents={residents}
+                  estateSettings={estateSettings}
+                  onAddResident={handleOpenAddResident}
+                  onEditResident={handleOpenEditResident}
+                  onViewResident={handleOpenViewResident}
+                  onToggleStatus={handleToggleStatus}
+                  loading={loading}
+                />
+              )
             )}
 
             {currentTab === 'settings' && (

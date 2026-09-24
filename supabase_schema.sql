@@ -1,6 +1,6 @@
 -- =========================================================================
--- ESTATE SECURITY LEVY MANAGEMENT SYSTEM - SUPABASE DATABASE ARCHITECTURE
--- STAGE 1 & FUTURE STAGES RELATIONAL SCHEMA
+-- FINGER OF GOD ESTATE SECURITY MANAGEMENT - SUPABASE DATABASE ARCHITECTURE
+-- STAGE 1 & STAGE 2 COMPREHENSIVE RELATIONAL SCHEMA
 -- =========================================================================
 
 -- Enable UUID extension
@@ -11,43 +11,50 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.estate_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    estate_name TEXT NOT NULL DEFAULT 'Palm Grove Residential Estate',
-    estate_address TEXT NOT NULL DEFAULT 'Plot 10-14, Security Gate Avenue',
+    estate_name TEXT NOT NULL DEFAULT 'Finger of God Estate Security Management',
+    estate_address TEXT NOT NULL DEFAULT 'Main Gate Boulevard, Phase 1, Finger of God Estate',
     estate_state TEXT NOT NULL DEFAULT 'Lagos',
     estate_lga TEXT NOT NULL DEFAULT 'Eti-Osa',
     monthly_security_levy NUMERIC(12, 2) NOT NULL DEFAULT 5000.00,
     payment_due_day INTEGER NOT NULL DEFAULT 1 CHECK (payment_due_day >= 1 AND payment_due_day <= 28),
     currency TEXT NOT NULL DEFAULT 'NGN',
-    contact_phone TEXT NOT NULL DEFAULT '08012345678',
-    contact_email TEXT NOT NULL DEFAULT 'admin@palmgroveestate.ng',
-    sms_sender_name TEXT NOT NULL DEFAULT 'PALMGROVE',
+    contact_phone TEXT NOT NULL DEFAULT '08023456789',
+    contact_email TEXT NOT NULL DEFAULT 'admin@fingerofgodestate.ng',
+    sms_sender_name TEXT NOT NULL DEFAULT 'FINGEROFGOD',
     first_payment_month TEXT NOT NULL DEFAULT 'October 2026',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- -------------------------------------------------------------------------
--- 2. RESIDENTS TABLE
+-- 2. RESIDENTS TABLE (STAGE 2 ENHANCED)
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.residents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     resident_number VARCHAR(20) NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
     phone_number VARCHAR(30) NOT NULL,
+    additional_phone VARCHAR(30),
     email TEXT,
     house_number TEXT NOT NULL,
     address TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'Lagos',
     lga TEXT NOT NULL DEFAULT 'Eti-Osa',
+    notes TEXT,
     registration_date DATE NOT NULL DEFAULT CURRENT_DATE,
     status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- In case table was already created in Stage 1, apply backward-compatible alterations:
+ALTER TABLE public.residents ADD COLUMN IF NOT EXISTS additional_phone VARCHAR(30);
+ALTER TABLE public.residents ADD COLUMN IF NOT EXISTS notes TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_residents_number ON public.residents(resident_number);
 CREATE INDEX IF NOT EXISTS idx_residents_status ON public.residents(status);
 CREATE INDEX IF NOT EXISTS idx_residents_phone ON public.residents(phone_number);
+CREATE INDEX IF NOT EXISTS idx_residents_house ON public.residents(house_number);
 
 -- -------------------------------------------------------------------------
 -- 3. ADMIN USERS & ROLES TABLE

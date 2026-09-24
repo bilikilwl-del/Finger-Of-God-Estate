@@ -125,13 +125,30 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
               <Phone className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
               <div>
-                <span className="text-slate-500 block font-medium">Phone Number</span>
+                <span className="text-slate-500 block font-medium">Primary Phone</span>
                 <a 
                   href={`tel:${resident.phone_number}`}
                   className="font-mono text-sm font-semibold text-slate-900 hover:text-emerald-600 transition-colors"
                 >
                   {resident.phone_number}
                 </a>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+              <Phone className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+              <div>
+                <span className="text-slate-500 block font-medium">Alt Phone</span>
+                {resident.additional_phone ? (
+                  <a 
+                    href={`tel:${resident.additional_phone}`}
+                    className="font-mono text-sm font-semibold text-slate-800 hover:text-emerald-600 transition-colors"
+                  >
+                    {resident.additional_phone}
+                  </a>
+                ) : (
+                  <span className="text-slate-400 italic">None provided</span>
+                )}
               </div>
             </div>
 
@@ -160,13 +177,20 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               </div>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-3 sm:col-span-2">
               <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
               <div>
-                <span className="text-slate-500 block font-medium">Location</span>
-                <span className="font-semibold text-slate-900">{resident.lga}, {resident.state}</span>
+                <span className="text-slate-500 block font-medium">Street / Location</span>
+                <span className="font-semibold text-slate-900">{resident.address} ({resident.lga}, {resident.state})</span>
               </div>
             </div>
+
+            {resident.notes && (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 sm:col-span-2">
+                <span className="text-amber-800 block font-bold text-[11px] uppercase tracking-wider mb-0.5">Notes</span>
+                <p>{resident.notes}</p>
+              </div>
+            )}
           </div>
 
           {/* Security Levy Obligation Notice */}

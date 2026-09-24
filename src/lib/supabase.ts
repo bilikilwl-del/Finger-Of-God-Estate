@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { Resident, EstateSettings, ActivityLog, AdminUser } from '../types/database';
+import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -20,16 +21,16 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 // ==========================================
 const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   id: '00000000-0000-0000-0000-000000000001',
-  estate_name: 'Palm Grove Residential Estate',
-  estate_address: 'Plot 10-14, Security Gate Avenue, Phase 2',
+  estate_name: 'Finger of God Estate Security Management',
+  estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate',
   estate_state: 'Lagos',
   estate_lga: 'Eti-Osa',
   monthly_security_levy: 5000,
   payment_due_day: 1,
   currency: 'NGN',
   contact_phone: '08023456789',
-  contact_email: 'security-admin@palmgroveestate.ng',
-  sms_sender_name: 'PALMGROVE',
+  contact_email: 'admin@fingerofgodestate.ng',
+  sms_sender_name: 'FINGEROFGOD',
   first_payment_month: 'October 2026'
 };
 
@@ -39,11 +40,13 @@ const INITIAL_RESIDENTS_SEED: Resident[] = [
     resident_number: '001',
     full_name: 'Engr. Babatunde Adeleke',
     phone_number: '08034567890',
+    additional_phone: '08023334444',
     email: 'babatunde.adeleke@gmail.com',
     house_number: 'Plot 4A',
-    address: 'Hibiscus Crescent, Palm Grove Estate',
+    address: 'Hibiscus Crescent, Finger of God Estate',
     state: 'Lagos',
     lga: 'Eti-Osa',
+    notes: 'Resident Executive Committee Member (Zonal Rep)',
     registration_date: '2026-09-01',
     status: 'Active',
     created_at: new Date('2026-09-01T08:00:00Z').toISOString(),
@@ -54,11 +57,13 @@ const INITIAL_RESIDENTS_SEED: Resident[] = [
     resident_number: '002',
     full_name: 'Dr. Chioma Nwachukwu',
     phone_number: '08098765432',
+    additional_phone: null,
     email: 'dr.chioma.nw@yahoo.com',
     house_number: 'House 12',
-    address: 'Palm View Boulevard, Palm Grove Estate',
+    address: 'Palm View Boulevard, Finger of God Estate',
     state: 'Lagos',
     lga: 'Eti-Osa',
+    notes: 'Primary household contact',
     registration_date: '2026-09-05',
     status: 'Active',
     created_at: new Date('2026-09-05T09:30:00Z').toISOString(),
@@ -69,11 +74,13 @@ const INITIAL_RESIDENTS_SEED: Resident[] = [
     resident_number: '003',
     full_name: 'Alhaji Usman Danladi',
     phone_number: '08123459876',
+    additional_phone: '09011223344',
     email: null,
     house_number: 'Plot 18B',
-    address: 'Acacia Close, Palm Grove Estate',
+    address: 'Acacia Close, Finger of God Estate',
     state: 'Lagos',
     lga: 'Eti-Osa',
+    notes: null,
     registration_date: '2026-09-10',
     status: 'Active',
     created_at: new Date('2026-09-10T11:15:00Z').toISOString(),
@@ -84,11 +91,13 @@ const INITIAL_RESIDENTS_SEED: Resident[] = [
     resident_number: '004',
     full_name: 'Mrs. Folashade Balogun',
     phone_number: '07033445566',
+    additional_phone: null,
     email: 'f.balogun@outlook.com',
     house_number: 'Flat 3, Block C',
-    address: 'Oak Street, Palm Grove Estate',
+    address: 'Oak Street, Finger of God Estate',
     state: 'Lagos',
     lga: 'Eti-Osa',
+    notes: 'Property leased out temporarily',
     registration_date: '2026-09-12',
     status: 'Inactive',
     created_at: new Date('2026-09-12T14:20:00Z').toISOString(),
@@ -352,11 +361,13 @@ export const dbService = {
             resident_number: d.resident_number,
             full_name: d.full_name,
             phone_number: d.phone_number,
+            additional_phone: d.additional_phone || null,
             email: d.email || null,
             house_number: d.house_number,
             address: d.address,
             state: d.state,
             lga: d.lga,
+            notes: d.notes || null,
             registration_date: d.registration_date,
             status: d.status as 'Active' | 'Inactive',
             created_at: d.created_at,
@@ -409,9 +420,10 @@ export const dbService = {
   },
 
   async isResidentNumberTaken(residentNumber: string, excludeId?: string): Promise<boolean> {
+    const formatted = residentNumber.trim();
     if (isSupabaseConfigured && supabase) {
       try {
-        let req = supabase.from('residents').select('id').eq('resident_number', residentNumber);
+        let req = supabase.from('residents').select('id').eq('resident_number', formatted);
         if (excludeId) {
           req = req.neq('id', excludeId);
         }
@@ -424,22 +436,53 @@ export const dbService = {
       }
     }
     const residents = getLocalResidents();
-    return residents.some(r => r.resident_number === residentNumber && r.id !== excludeId);
+    return residents.some(r => r.resident_number.trim() === formatted && r.id !== excludeId);
+  },
+
+  async isPhoneNumberTaken(phoneNumber: string, excludeId?: string): Promise<boolean> {
+    const normalized = normalizeNigerianPhone(phoneNumber);
+    if (!normalized) return false;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('residents').select('id, phone_number');
+        if (!error && data) {
+          const match = data.some((r: { id: string; phone_number: string }) => 
+            r.id !== excludeId && normalizeNigerianPhone(r.phone_number) === normalized
+          );
+          if (match) return true;
+        }
+      } catch (err) {
+        console.warn('Supabase check phone number failed:', err);
+      }
+    }
+
+    const residents = getLocalResidents();
+    return residents.some(r => r.id !== excludeId && normalizeNigerianPhone(r.phone_number) === normalized);
   },
 
   async createResident(
     residentData: Omit<Resident, 'id' | 'created_at' | 'updated_at'>,
     adminEmail: string = 'admin'
   ): Promise<Resident> {
-    // Check uniqueness
+    // Check resident number uniqueness
     const isTaken = await this.isResidentNumberTaken(residentData.resident_number);
     if (isTaken) {
-      throw new Error(`Resident Number "${residentData.resident_number}" is already assigned to another resident. Numbers must be unique.`);
+      throw new Error(`Resident Number "${residentData.resident_number}" is already assigned to another resident. Resident numbers must be unique.`);
+    }
+
+    // Check phone number duplicate (normalized)
+    const phoneTaken = await this.isPhoneNumberTaken(residentData.phone_number);
+    if (phoneTaken) {
+      throw new Error(`Phone number "${residentData.phone_number}" is already registered to an existing resident. Duplicate phone registrations are not allowed.`);
     }
 
     const now = new Date().toISOString();
     const newResident: Resident = {
       ...residentData,
+      phone_number: normalizeNigerianPhone(residentData.phone_number),
+      additional_phone: residentData.additional_phone ? normalizeNigerianPhone(residentData.additional_phone) : null,
+      notes: residentData.notes ? residentData.notes.trim() : null,
       id: 'res-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       created_at: now,
       updated_at: now
@@ -453,11 +496,13 @@ export const dbService = {
             resident_number: newResident.resident_number,
             full_name: newResident.full_name,
             phone_number: newResident.phone_number,
+            additional_phone: newResident.additional_phone || null,
             email: newResident.email || null,
             house_number: newResident.house_number,
             address: newResident.address,
             state: newResident.state,
             lga: newResident.lga,
+            notes: newResident.notes || null,
             registration_date: newResident.registration_date,
             status: newResident.status
           })
@@ -472,7 +517,6 @@ export const dbService = {
         }
       } catch (err: any) {
         console.error('Supabase create resident error:', err);
-        // If Supabase table is not yet set up, fallback locally
       }
     }
 
@@ -486,7 +530,7 @@ export const dbService = {
       action: 'CREATED_RESIDENT',
       entity_type: 'resident',
       entity_id: newResident.resident_number,
-      description: `Registered new resident ${newResident.resident_number} (${newResident.full_name}, Plot: ${newResident.house_number})`
+      description: `Registered resident ${newResident.resident_number} - ${newResident.full_name} (${newResident.house_number})`
     });
 
     return newResident;
@@ -502,6 +546,18 @@ export const dbService = {
       if (isTaken) {
         throw new Error(`Resident Number "${updates.resident_number}" is already assigned to another resident.`);
       }
+    }
+
+    if (updates.phone_number) {
+      const phoneTaken = await this.isPhoneNumberTaken(updates.phone_number, id);
+      if (phoneTaken) {
+        throw new Error(`Phone number "${updates.phone_number}" is already registered to another resident.`);
+      }
+      updates.phone_number = normalizeNigerianPhone(updates.phone_number);
+    }
+
+    if (updates.additional_phone) {
+      updates.additional_phone = normalizeNigerianPhone(updates.additional_phone);
     }
 
     let updatedResident: Resident | null = null;
@@ -556,7 +612,16 @@ export const dbService = {
   },
 
   async toggleResidentStatus(id: string, newStatus: 'Active' | 'Inactive', adminEmail: string = 'admin'): Promise<Resident> {
-    return this.updateResident(id, { status: newStatus }, adminEmail);
+    const updated = await this.updateResident(id, { status: newStatus }, adminEmail);
+    const action = newStatus === 'Active' ? 'ACTIVATED_RESIDENT' : 'DEACTIVATED_RESIDENT';
+    await this.logActivity({
+      admin_email: adminEmail,
+      action,
+      entity_type: 'resident',
+      entity_id: updated.resident_number,
+      description: `${newStatus === 'Active' ? 'Activated' : 'Deactivated'} resident ${updated.resident_number} - ${updated.full_name}`
+    });
+    return updated;
   },
 
   // 3. ACTIVITY LOGGING
@@ -621,7 +686,7 @@ export const authService = {
     // Default initial admin session for fast prototyping
     return {
       id: 'admin-001',
-      email: 'admin@palmgroveestate.ng',
+      email: 'admin@fingerofgodestate.ng',
       full_name: 'Chief Security Administrator',
       role: 'Super Admin'
     };

@@ -7,14 +7,16 @@ export type ResidentStatus = 'Active' | 'Inactive';
 
 export interface Resident {
   id: string;
-  resident_number: string; // e.g. "001", "002", "010", "100"
+  resident_number: string; // e.g. "001", "002", "010", "100", "300", "500", etc.
   full_name: string;
   phone_number: string;
+  additional_phone?: string | null; // Optional secondary emergency contact
   email: string | null;
   house_number: string; // Plot or House No
   address: string; // Street address inside or around estate
   state: string;
   lga: string;
+  notes?: string | null; // Optional resident notes/remarks
   registration_date: string; // YYYY-MM-DD
   status: ResidentStatus;
   created_at: string;
@@ -125,7 +127,7 @@ export interface Announcement {
 export interface ActivityLog {
   id: string;
   admin_email: string;
-  action: 'CREATED_RESIDENT' | 'UPDATED_RESIDENT' | 'STATUS_CHANGED' | 'DELETED_RESIDENT' | 'UPDATED_SETTINGS' | 'ADMIN_LOGIN' | 'ADMIN_LOGOUT' | 'PASSWORD_RESET';
+  action: 'CREATED_RESIDENT' | 'UPDATED_RESIDENT' | 'STATUS_CHANGED' | 'ACTIVATED_RESIDENT' | 'DEACTIVATED_RESIDENT' | 'DELETED_RESIDENT' | 'UPDATED_SETTINGS' | 'ADMIN_LOGIN' | 'ADMIN_LOGOUT' | 'PASSWORD_RESET';
   entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user';
   entity_id?: string | null;
   description: string;

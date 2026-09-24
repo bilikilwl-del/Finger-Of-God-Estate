@@ -78,13 +78,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <Building2 className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-display font-bold text-base leading-tight text-white truncate tracking-tight">
-                {estateSettings.estate_name || 'Estate Security'}
+              <h1 className="font-display font-bold text-sm leading-tight text-white truncate tracking-tight">
+                {estateSettings.estate_name || 'Finger of God Estate'}
               </h1>
-              <p className="text-xs text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
-                <span>Levy Management</span>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
+                <span>Security Levy</span>
                 <span className="text-slate-600">·</span>
-                <span className="text-emerald-400 font-medium">Stage 1</span>
+                <span className="text-emerald-400 font-medium">Stage 2 Active</span>
               </p>
             </div>
           </div>

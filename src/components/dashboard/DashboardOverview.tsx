@@ -38,6 +38,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const totalResidents = residents.length;
   const activeResidents = residents.filter(r => r.status === 'Active').length;
   const inactiveResidents = residents.filter(r => r.status === 'Inactive').length;
+  const registeredHousesPlots = new Set(residents.map(r => r.house_number.trim().toLowerCase())).size;
 
   const monthlyLevy = estateSettings.monthly_security_levy || 5000;
   const projectedMonthlyRevenue = activeResidents * monthlyLevy;
@@ -55,13 +56,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold mb-3">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Security Operations · Stage 1 Foundation</span>
+            <span>FINGER OF GOD ESTATE SECURITY MANAGEMENT</span>
           </div>
-          <h2 className="font-display font-bold text-2xl sm:text-3xl text-white tracking-tight">
-            {estateSettings.estate_name}
-          </h2>
+          <h1 className="font-display font-bold text-2xl sm:text-3xl text-white tracking-tight">
+            Resident Administration Console
+          </h1>
           <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-            Centralized resident registry and security levy administration console. Billing tracking commences in <strong>{estateSettings.first_payment_month}</strong> at <strong>₦{monthlyLevy.toLocaleString()}</strong> per active household.
+            Centralized resident registry and monthly security levy platform. All figures are live and synchronized from the database. Billing tracking commences in <strong>{estateSettings.first_payment_month}</strong> at <strong>₦{monthlyLevy.toLocaleString()}</strong> per active household.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mt-6">
@@ -70,13 +71,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors inline-flex items-center gap-2 shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Register Resident</span>
+              <span>Add Resident</span>
             </button>
             <button
               onClick={() => onNavigate('residents')}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors inline-flex items-center gap-2"
             >
-              <span>View All Directory</span>
+              <span>View Resident Directory</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -88,9 +89,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
-      {/* Key Metric Grid */}
+      {/* 4 Required Summary Cards from User Specification */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Residents */}
+        {/* Card 1: Total Residents */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Residents</span>
@@ -102,19 +103,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             <span className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
               {totalResidents}
             </span>
-            <span className="text-xs text-slate-500">units</span>
+            <span className="text-xs text-slate-500">registered</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1.5">
-            <span className="text-emerald-700 font-semibold">{activeResidents} Active</span>
-            <span className="text-slate-400">·</span>
-            <span className="text-slate-600 font-semibold">{inactiveResidents} Inactive</span>
+            <span className="text-slate-600 font-medium">Permanent sequential IDs</span>
           </p>
         </div>
 
-        {/* Active Ratio */}
+        {/* Card 2: Active Residents */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Billed Units</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Residents</span>
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <UserCheck className="w-4 h-4" />
             </div>
@@ -128,47 +127,75 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             </span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            Subject to monthly security levy
+            Billed for monthly security levy
           </p>
         </div>
 
-        {/* Monthly Levy Rate */}
+        {/* Card 3: Inactive Residents */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Levy Rate</span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Calendar className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Inactive Residents</span>
+            <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+              <UserX className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-xs font-semibold text-slate-500">₦</span>
-            <span className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
-              {monthlyLevy.toLocaleString()}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-bold font-mono text-slate-700 tabular-nums">
+              {inactiveResidents}
             </span>
-            <span className="text-xs text-slate-500">/mo</span>
+            <span className="text-xs text-slate-500">units</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            Due on Day {estateSettings.payment_due_day} each month
+            Historical records preserved
           </p>
         </div>
 
-        {/* Projected Monthly Inflow */}
+        {/* Card 4: Registered Houses/Plots */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Projected Collection</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Houses / Plots</span>
             <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
+              <ShieldCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-1">
-            <span className="text-xs font-semibold text-purple-600">₦</span>
-            <span className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
-              {projectedMonthlyRevenue.toLocaleString()}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-bold font-mono text-slate-900 tabular-nums">
+              {registeredHousesPlots}
             </span>
+            <span className="text-xs text-slate-500">properties</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            Starts in {estateSettings.first_payment_month}
+            Distinct property locations
           </p>
+        </div>
+      </div>
+
+      {/* Security Levy Schedule & Revenue Target Bar */}
+      <div className="bg-emerald-950 text-emerald-100 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-emerald-900 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
+            <Clock className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+              Security Levy Cycle Details
+            </div>
+            <p className="text-xs text-emerald-200 mt-0.5">
+              Rate: <strong className="text-white">₦{monthlyLevy.toLocaleString()} / month</strong> per active household · Due on Day <strong className="text-white">{estateSettings.payment_due_day}</strong> · Commences <strong className="text-emerald-300">{estateSettings.first_payment_month}</strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 self-start sm:self-auto bg-emerald-900/60 px-4 py-2.5 rounded-xl border border-emerald-800/80">
+          <div>
+            <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-semibold block">Projected Monthly Pool</span>
+            <div className="font-mono text-lg font-bold text-white tabular-nums">
+              ₦{projectedMonthlyRevenue.toLocaleString()}
+            </div>
+          </div>
+          <div className="text-[11px] text-emerald-300 border-l border-emerald-800 pl-3">
+            {activeResidents} active billed units
+          </div>
         </div>
       </div>
 

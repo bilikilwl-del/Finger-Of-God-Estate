@@ -20,9 +20,9 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const getBreadcrumbTitle = (tab: NavigationTab) => {
     switch (tab) {
       case 'dashboard': return 'Dashboard Overview';
-      case 'residents': return 'Resident Directory & Security Registry';
-      case 'payments': return 'Levy Payments Management (Stage 2)';
-      case 'outstanding': return 'Outstanding Balances (Stage 2)';
+      case 'residents': return 'Resident Management Directory';
+      case 'payments': return 'Levy Payments Management (Stage 3)';
+      case 'outstanding': return 'Outstanding Balances & Arrears (Stage 3)';
       case 'sms': return 'SMS Reminders & Broadcasts (Stage 3)';
       case 'reports': return 'Financial & Security Reports (Stage 3)';
       case 'announcements': return 'Estate Announcements (Stage 3)';
