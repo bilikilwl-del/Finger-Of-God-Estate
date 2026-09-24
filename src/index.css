@@ -2,15 +2,68 @@
 
 @layer base {
   :root {
+    /* Brand & Typography */
     --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     --font-display: 'Syne', sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Spacing Scale (4px base) */
+    --space-3xs: 0.125rem; /* 2px */
+    --space-2xs: 0.25rem;  /* 4px */
+    --space-xs: 0.5rem;    /* 8px */
+    --space-sm: 0.75rem;   /* 12px */
+    --space-md: 1rem;      /* 16px */
+    --space-lg: 1.5rem;    /* 24px */
+    --space-xl: 2rem;      /* 32px */
+    --space-2xl: 2.5rem;   /* 40px */
+    --space-3xl: 3rem;     /* 48px */
+    --space-4xl: 4rem;     /* 64px */
+    --space-5xl: 5rem;     /* 80px */
+
+    /* Layout Containers & Viewport Limits */
+    --layout-max-width: 80rem; /* 1280px */
+    --layout-max-width-narrow: 56rem; /* 896px */
+    --layout-max-width-wide: 90rem; /* 1440px */
+    --container-px: clamp(1rem, 3.5vw, 2rem);
+    --container-py: clamp(1.25rem, 3vw, 2rem);
+
+    /* Section Vertical Rhythm */
+    --section-py-sm: clamp(2rem, 4vw, 3rem);
+    --section-py-md: clamp(3rem, 5vw, 4.5rem);
+    --section-py-lg: clamp(4rem, 7vw, 6rem);
+    --section-gap: clamp(2rem, 4vw, 3.5rem);
+
+    /* Card Layout & Content Padding */
+    --card-padding-sm: 1rem;
+    --card-padding-md: 1.5rem;
+    --card-padding-lg: 2rem;
+    --card-gap-sm: 0.75rem;
+    --card-gap-md: 1.25rem;
+    --card-gap-lg: 1.75rem;
+    --card-radius: 1rem;
+    --card-radius-sm: 0.75rem;
+    --card-radius-lg: 1.25rem;
+
+    /* Form Rhythm & Component Spacing */
+    --form-gap-section: 1.75rem;
+    --form-gap-row: 1.25rem;
+    --form-gap-col: 1rem;
+    --form-gap-field: 0.375rem;
+    --input-px: 0.875rem;
+    --input-py: 0.625rem;
+    --input-radius: 0.75rem;
+
+    /* Navigation & Header Heights */
+    --header-height: 4.25rem;
+    --sidebar-width: 18rem;
   }
 
   body {
     font-family: var(--font-sans);
     color: #0f172a;
     background-color: #f8fafc;
+    margin: 0;
+    padding: 0;
   }
 
   h1, h2, h3, .font-display {
@@ -21,6 +74,134 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* ==========================================================================
+   Unified Layout & Spacing Utilities
+   ========================================================================== */
+
+/* Standard responsive page container */
+.app-container {
+  width: 100%;
+  max-width: var(--layout-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--container-px);
+  padding-right: var(--container-px);
+}
+
+.app-container-narrow {
+  width: 100%;
+  max-width: var(--layout-max-width-narrow);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--container-px);
+  padding-right: var(--container-px);
+}
+
+.app-container-wide {
+  width: 100%;
+  max-width: var(--layout-max-width-wide);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--container-px);
+  padding-right: var(--container-px);
+}
+
+/* Section vertical rhythm */
+.app-section-sm {
+  padding-top: var(--section-py-sm);
+  padding-bottom: var(--section-py-sm);
+}
+
+.app-section-md {
+  padding-top: var(--section-py-md);
+  padding-bottom: var(--section-py-md);
+}
+
+.app-section-lg {
+  padding-top: var(--section-py-lg);
+  padding-bottom: var(--section-py-lg);
+}
+
+/* Standardized cards with systematic padding and radius */
+.app-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding-md);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.app-card-sm {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--card-radius-sm);
+  padding: var(--card-padding-sm);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+}
+
+.app-card-lg {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--card-radius-lg);
+  padding: var(--card-padding-lg);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Grids with systematic card gaps */
+.app-card-grid {
+  display: grid;
+  gap: var(--card-gap-md);
+}
+
+.app-card-grid-sm {
+  display: grid;
+  gap: var(--card-gap-sm);
+}
+
+.app-card-grid-lg {
+  display: grid;
+  gap: var(--card-gap-lg);
+}
+
+/* Standardized Form Layout & Vertical Rhythm */
+.app-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-gap-section);
+}
+
+.app-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-gap-row);
+}
+
+.app-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-gap-field);
+}
+
+.app-input {
+  width: 100%;
+  padding-left: var(--input-px);
+  padding-right: var(--input-px);
+  padding-top: var(--input-py);
+  padding-bottom: var(--input-py);
+  border-radius: var(--input-radius);
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  font-size: 0.875rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-input:focus {
+  border-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
 }
 
 /* Custom scrollbar */
