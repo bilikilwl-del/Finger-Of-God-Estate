@@ -218,7 +218,7 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      console.error('Failed to save resident:', err);
+      console.warn('Failed to save resident:', err);
       setErrorMsg(err.message || 'An error occurred while saving the resident.');
     } finally {
       setLoading(false);

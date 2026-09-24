@@ -11,22 +11,26 @@ import {
   Save, 
   Check, 
   AlertCircle,
-  Database
+  Database,
+  Terminal,
+  ExternalLink
 } from 'lucide-react';
 import { EstateSettings } from '../../types/database';
 import { NIGERIAN_STATES_LGAS } from '../../data/nigerianStates';
-import { dbService } from '../../lib/supabase';
+import { dbService, isSupabaseConfigured, isTableMarkedMissing } from '../../lib/supabase';
 
 interface EstateSettingsViewProps {
   settings: EstateSettings;
   onSettingsUpdated: (updated: EstateSettings) => void;
   adminEmail: string;
+  onOpenSqlModal?: () => void;
 }
 
 export const EstateSettingsView: React.FC<EstateSettingsViewProps> = ({
   settings,
   onSettingsUpdated,
-  adminEmail
+  adminEmail,
+  onOpenSqlModal
 }) => {
   const [estateName, setEstateName] = useState(settings.estate_name);
   const [estateAddress, setEstateAddress] = useState(settings.estate_address);
@@ -107,15 +111,44 @@ export const EstateSettingsView: React.FC<EstateSettingsViewProps> = ({
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      console.error('Failed to update settings:', err);
+      console.warn('Notice while updating settings:', err);
       setErrorMessage(err.message || 'Failed to update estate settings.');
     } finally {
       setSaving(false);
     }
   };
 
+  const isPendingCloudTable = isSupabaseConfigured && isTableMarkedMissing('estate_settings');
+
   return (
     <div className="max-w-4xl space-y-6">
+      {/* Supabase Schema Notice Banner if table is not created yet */}
+      {isPendingCloudTable && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+              <Database className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-900 text-sm">Supabase Database: Table Setup Pending</h4>
+              <p className="text-amber-800 mt-0.5 leading-relaxed">
+                Supabase credentials are active, but the <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-amber-950 font-semibold">estate_settings</code> table hasn't been created in your Supabase SQL editor yet. All settings are currently saved safely in your browser storage.
+              </p>
+            </div>
+          </div>
+          {onOpenSqlModal && (
+            <button
+              type="button"
+              onClick={onOpenSqlModal}
+              className="shrink-0 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <Terminal className="w-3.5 h-3.5" />
+              <span>Copy SQL Script</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Intro Header */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs">
         <div className="flex items-center gap-3 mb-2">

@@ -84,7 +84,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
                 <span>Security Levy</span>
                 <span className="text-slate-600">·</span>
-                <span className="text-emerald-400 font-medium">Stage 2 Active</span>
+                <span className="text-emerald-400 font-medium">Stage 5 Active</span>
               </p>
             </div>
           </div>
@@ -103,7 +103,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             Core Modules
           </div>
 
-          {navItems.slice(0, 2).map((item) => {
+          {navItems.slice(0, 5).map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
@@ -114,7 +114,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   onCloseMobile();
                 }}
                 className={`
-                  w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
                   ${isActive 
                     ? 'bg-emerald-600 text-white shadow-sm' 
                     : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'}
@@ -124,21 +124,29 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
-                {item.badge !== undefined && (
+                {item.id === 'payments' ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Paystack
+                  </span>
+                ) : item.id === 'sms' ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    Auto SMS
+                  </span>
+                ) : item.badge !== undefined ? (
                   <span className={`text-xs font-mono font-medium px-2 py-0.5 rounded-md ${isActive ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300'}`}>
                     {item.badge}
                   </span>
-                )}
+                ) : null}
               </button>
             );
           })}
 
           <div className="pt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
             <span>Upcoming Stages</span>
-            <span className="text-[10px] text-slate-400 font-normal">Next</span>
+            <span className="text-[10px] text-slate-400 font-normal">Future</span>
           </div>
 
-          {navItems.slice(2, 8).map((item) => {
+          {navItems.slice(5, 8).map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
@@ -149,7 +157,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   onCloseMobile();
                 }}
                 className={`
-                  w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                  w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer
                   ${isActive 
                     ? 'bg-slate-800 text-white border border-slate-700' 
                     : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'}
@@ -160,7 +168,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 font-mono border border-slate-700/50">
-                  Stage {item.stage}
+                  Stage {item.stage || 5}
                 </span>
               </button>
             );

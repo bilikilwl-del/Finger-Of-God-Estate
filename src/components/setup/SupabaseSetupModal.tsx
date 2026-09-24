@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Database, Copy, Check, X, Shield, Server, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import React, { useState, useEffect } from 'react';
+import { Database, Copy, Check, X, Shield, Server, CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { isSupabaseConfigured, verifySupabaseTables, isAnyTableMissing, getMissingTables } from '../../lib/supabase';
 
 interface SupabaseSetupModalProps {
   isOpen: boolean;
@@ -10,6 +10,30 @@ interface SupabaseSetupModalProps {
 export const SupabaseSetupModal: React.FC<SupabaseSetupModalProps> = ({ isOpen, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'tables' | 'sql' | 'env'>('tables');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyReport, setVerifyReport] = useState<{
+    allReady: boolean;
+    checkedTables: Record<string, boolean>;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (isOpen && isSupabaseConfigured) {
+      handleVerifyTables();
+    }
+  }, [isOpen]);
+
+  const handleVerifyTables = async () => {
+    setIsVerifying(true);
+    try {
+      const res = await verifySupabaseTables();
+      setVerifyReport(res);
+    } catch {
+      // safe fallback
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -220,7 +244,7 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
         </div>
 
         {/* Status Bar */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-500 font-medium">Engine Status:</span>
             {isSupabaseConfigured ? (
@@ -235,9 +259,23 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 text-slate-500">
-            <Server className="w-3.5 h-3.5" />
-            <span>PostgreSQL 15+ Compatible</span>
+          
+          <div className="flex items-center gap-2">
+            {isSupabaseConfigured && (
+              <button
+                type="button"
+                onClick={handleVerifyTables}
+                disabled={isVerifying}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 text-slate-500 ${isVerifying ? 'animate-spin' : ''}`} />
+                <span>{isVerifying ? 'Checking Tables...' : 'Verify Tables'}</span>
+              </button>
+            )}
+            <div className="flex items-center gap-1 text-slate-500">
+              <Server className="w-3.5 h-3.5" />
+              <span>PostgreSQL 15+ Compatible</span>
+            </div>
           </div>
         </div>
 
@@ -266,28 +304,69 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
         {/* Tab Contents */}
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'tables' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900">
-                <p className="font-semibold mb-1">Architecture Note:</p>
-                The schema includes all core tables for <strong>Stage 1</strong> (Residents, Estate Settings, Activity Logs) plus relational structures prepared for <strong>Stage 2</strong> (Monthly Payments & Transactions) and <strong>Stage 3</strong> (SMS Reminders & Broadcasts) without breaking forward compatibility.
+            <div className="space-y-4">
+              {/* PGRST205 / Table Missing Diagnostic Banner */}
+              {isSupabaseConfigured && verifyReport && !verifyReport.allReady && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-amber-950">Supabase Schema Initialization Required</h4>
+                      <p className="mt-1 leading-relaxed text-amber-800">
+                        One or more tables (such as <code className="font-mono font-semibold bg-amber-100 px-1 py-0.2 rounded">public.estate_settings</code>) have not yet been created in your Supabase project. The application is running seamlessly with persistent local storage.
+                      </p>
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('sql')}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                        >
+                          View & Copy SQL Script →
+                        </button>
+                        <span className="text-[11px] text-amber-700">Paste into Supabase Dashboard → SQL Editor</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isSupabaseConfigured && verifyReport && verifyReport.allReady && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span><strong>Tables Active:</strong> Core tables verified in Supabase schema cache. Data syncing to cloud.</span>
+                </div>
+              )}
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700">
+                <p className="font-semibold text-slate-900 mb-1">Architecture Note:</p>
+                The schema includes all core tables for <strong>Stage 1 & 2</strong> (Residents, Estate Settings, Activity Logs) plus relational structures prepared for payments, receipts, and announcements without breaking forward compatibility.
               </div>
 
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
-                {tables.map((tbl) => (
-                  <div key={tbl.name} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <code className="font-mono text-xs font-semibold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                          {tbl.name}
-                        </code>
-                        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                          {tbl.stage}
-                        </span>
+                {tables.map((tbl) => {
+                  const isChecked = verifyReport?.checkedTables[tbl.name] !== undefined;
+                  const isReady = verifyReport?.checkedTables[tbl.name];
+                  return (
+                    <div key={tbl.name} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <code className="font-mono text-xs font-semibold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                            {tbl.name}
+                          </code>
+                          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                            {tbl.stage}
+                          </span>
+                          {isChecked && (
+                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {isReady ? 'Cloud Detected' : 'Pending SQL Setup'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">{tbl.desc}</p>
                       </div>
-                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">{tbl.desc}</p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

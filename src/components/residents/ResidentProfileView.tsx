@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Shield, 
@@ -19,9 +19,20 @@ import {
   FileText,
   AlertCircle,
   Building,
-  PhoneCall
+  PhoneCall,
+  Loader2,
+  RefreshCw,
+  ExternalLink,
+  MessageSquare,
+  Send,
+  AlertTriangle
 } from 'lucide-react';
-import { Resident, EstateSettings } from '../../types/database';
+import { Resident, EstateSettings, MonthlyPayment, PaymentTransaction, Receipt, SMSLog } from '../../types/database';
+import { dbService } from '../../lib/supabase';
+import { formatNaira } from '../../lib/paystack';
+import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
+import { ReceiptModal } from '../payments/ReceiptModal';
+import { SendTestSMSModal } from '../sms/SendTestSMSModal';
 
 interface ResidentProfileViewProps {
   resident: Resident;
@@ -40,9 +51,51 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
 }) => {
   const isSuspended = resident.status === 'Inactive';
 
+  // Payment states for Stage 4
+  const [currentPayment, setCurrentPayment] = useState<MonthlyPayment | null>(null);
+  const [residentTransactions, setResidentTransactions] = useState<PaymentTransaction[]>([]);
+  const [residentSmsLogs, setResidentSmsLogs] = useState<SMSLog[]>([]);
+  const [loadingPayment, setLoadingPayment] = useState(true);
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isTestSmsModalOpen, setIsTestSmsModalOpen] = useState(false);
+
+  const fetchResidentPaymentData = async () => {
+    setLoadingPayment(true);
+    try {
+      const [payment, txs, smsLogs] = await Promise.all([
+        dbService.getMonthlyPaymentForResident(resident.resident_number, 10, 2026),
+        dbService.getPaymentTransactions({ residentNumber: resident.resident_number }),
+        dbService.getSmsLogs({ query: resident.resident_number })
+      ]);
+      setCurrentPayment(payment);
+      setResidentTransactions(txs);
+      setResidentSmsLogs(smsLogs);
+    } catch (err) {
+      console.error('Error fetching resident payment data:', err);
+    } finally {
+      setLoadingPayment(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchResidentPaymentData();
+  }, [resident.resident_number]);
+
   const handlePrintBadge = () => {
     window.print();
   };
+
+  const handleViewReceiptByRef = async (ref: string) => {
+    const rcp = await dbService.getReceiptByReference(ref);
+    if (rcp) {
+      setSelectedReceipt(rcp);
+      setIsReceiptModalOpen(true);
+    }
+  };
+
+  const isPaid = currentPayment?.status === 'PAID';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -76,6 +129,15 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
                 <span>Activate Resident</span>
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => setIsTestSmsModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            title="Dispatch a test SMS to this resident"
+          >
+            <Send className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Send Test SMS</span>
           </button>
 
           <button
@@ -247,46 +309,241 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Payment Status & Stage 2 Ledger Module */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+          {/* Payment Status & Stage 4 Paystack Ledger Module */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-emerald-600" />
                 <h3 className="font-display font-bold text-base text-slate-900">Security Levy Payment Ledger</h3>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold">
-                Starts {estateSettings.first_payment_month}
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200/60">
+                Cycle: {estateSettings.first_payment_month}
               </span>
             </div>
 
             {/* Current Month Status Box */}
-            <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
-                  Current Billing Status
-                </span>
-                <p className="text-xs font-semibold text-emerald-950 mt-0.5">
-                  Account in Good Standing · Scheduled for {estateSettings.first_payment_month}
-                </p>
-                <p className="text-[11px] text-emerald-800 mt-1">
-                  Monthly levy obligation: ₦{estateSettings.monthly_security_levy.toLocaleString()} per household due on day {estateSettings.payment_due_day}.
-                </p>
+            {loadingPayment ? (
+              <div className="p-6 text-center text-slate-400">
+                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-emerald-600" />
+                <span className="text-xs">Checking Paystack levy status...</span>
+              </div>
+            ) : currentPayment && currentPayment.status.toUpperCase() === 'PAID' ? (
+              <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
+                      Current Billing Status
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white uppercase tracking-wider">
+                      PAID
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-emerald-950">
+                    October 2026 Security Levy Paid ({formatNaira(currentPayment.amount_paid || 5000)})
+                  </p>
+                  <p className="text-[11px] text-emerald-700 font-mono">
+                    Ref: {currentPayment.paystack_reference} • Paid: {currentPayment.paid_at ? new Date(currentPayment.paid_at).toLocaleDateString('en-NG') : 'Confirmed'}
+                  </p>
+                </div>
+
+                {currentPayment.paystack_reference && (
+                  <button
+                    onClick={() => handleViewReceiptByRef(currentPayment.paystack_reference!)}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>View Receipt</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="p-5 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block">
+                      Current Billing Status
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-600 text-white uppercase tracking-wider">
+                      UNPAID
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-amber-950">
+                    Security Levy of {formatNaira(estateSettings.monthly_security_levy || 5000)} is due for {estateSettings.first_payment_month}
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    Estate security levy covers 24/7 gate security, patrol guards, and perimeter maintenance.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsPayModalOpen(true)}
+                  disabled={resident.status !== 'Active'}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0 shadow-sm"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Pay with Paystack</span>
+                </button>
+              </div>
+            )}
+
+            {/* Historical Payment Transactions */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-800">Paystack Transaction Records</h4>
+                <button
+                  onClick={fetchResidentPaymentData}
+                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Sync</span>
+                </button>
               </div>
 
-              <div className="px-3 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-800 font-mono font-bold text-xs shrink-0 self-start sm:self-auto">
-                NOT YET DUE
-              </div>
+              {residentTransactions.length === 0 ? (
+                <div className="p-6 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                    <CreditCard className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700">No Online Transactions Yet</p>
+                  <p className="text-[11px] text-slate-500 max-w-md mx-auto mt-0.5">
+                    When this resident pays via Paystack, verified transactions and printable receipts will appear here automatically.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">Reference</th>
+                        <th className="py-2.5 px-3">Period</th>
+                        <th className="py-2.5 px-3">Amount</th>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3 text-right">Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {residentTransactions.map((tx) => {
+                        const isSuccess = tx.status.toUpperCase() === 'PAID' || tx.status.toLowerCase() === 'success';
+                        return (
+                          <tr key={tx.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-3 font-mono font-bold text-[11px] text-slate-800">
+                              {tx.paystack_reference || tx.transaction_reference}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 font-medium">
+                              {tx.period_label}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-slate-900">
+                              {formatNaira(tx.amount_paid || tx.amount_due)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                isSuccess ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {isSuccess ? 'PAID' : tx.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                              {new Date(tx.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {isSuccess && (
+                                <button
+                                  onClick={() => handleViewReceiptByRef(tx.paystack_reference || tx.transaction_reference)}
+                                  className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  <span>Receipt</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
-            {/* Historical Payment Placeholder (Stage 2) */}
-            <div className="p-6 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 text-center">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
-                <CreditCard className="w-5 h-5" />
+            {/* SMS Reminders & Notifications Section */}
+            <div className="pt-6 border-t border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-600" />
+                  <h4 className="text-xs font-bold text-slate-800">SMS Reminders & Notifications</h4>
+                </div>
+                <button
+                  onClick={() => setIsTestSmsModalOpen(true)}
+                  className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>Send Test SMS</span>
+                </button>
               </div>
-              <h4 className="text-xs font-bold text-slate-700">Payment Transactions Ledger</h4>
-              <p className="text-[11px] text-slate-500 max-w-md mx-auto mt-1">
-                Verified payment receipts, Paystack online settlements, and bank transfer confirmations will automatically synchronize here once billing tracking commences in October 2026.
-              </p>
+
+              {/* Status Notice */}
+              {isPaid ? (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-start gap-2.5 text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">ALL REMINDERS HALTED:</span> This resident has confirmed payment for {estateSettings.first_payment_month}. By critical estate rule, all automated SMS reminders have been permanently stopped for this cycle.
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-start gap-2.5 text-amber-900">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">SCHEDULED REMINDERS ACTIVE:</span> Payment for {estateSettings.first_payment_month} is unpaid. Reminder 1 triggers 5 days after due date (6th), and Reminder 2 triggers 5 days later (11th).
+                  </div>
+                </div>
+              )}
+
+              {/* SMS Logs Table for this resident */}
+              {residentSmsLogs.length === 0 ? (
+                <p className="text-xs text-slate-400 italic py-1">
+                  No SMS notifications recorded for this resident yet.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase">
+                      <tr>
+                        <th className="py-2 px-3">Date</th>
+                        <th className="py-2 px-3">Type</th>
+                        <th className="py-2 px-3">Message</th>
+                        <th className="py-2 px-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {residentSmsLogs.map((s) => (
+                        <tr key={s.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 whitespace-nowrap text-slate-500 text-[11px]">
+                            {new Date(s.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap font-semibold">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-mono">
+                              {s.reminder_type}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 max-w-xs truncate text-slate-600" title={s.message}>
+                            {s.message}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              s.delivery_status === 'SENT' ? 'bg-emerald-100 text-emerald-800' :
+                              s.delivery_status === 'NOT_CONFIGURED' ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              {s.delivery_status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -375,6 +632,35 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Paystack Payment Checkout Modal */}
+      <PaystackPaymentModal
+        isOpen={isPayModalOpen}
+        onClose={() => setIsPayModalOpen(false)}
+        preselectedResident={resident}
+        estateSettings={estateSettings}
+        targetMonth={10}
+        targetYear={2026}
+        onPaymentSuccess={() => {
+          fetchResidentPaymentData();
+        }}
+      />
+
+      {/* Official Receipt Modal */}
+      <ReceiptModal
+        receipt={selectedReceipt}
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        estateSettings={estateSettings}
+      />
+
+      {/* Test SMS Modal */}
+      <SendTestSMSModal
+        isOpen={isTestSmsModalOpen}
+        onClose={() => setIsTestSmsModalOpen(false)}
+        residents={[resident]}
+        onSuccess={fetchResidentPaymentData}
+      />
     </div>
   );
 };

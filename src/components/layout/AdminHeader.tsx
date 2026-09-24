@@ -1,6 +1,7 @@
-import React from 'react';
-import { Menu, Plus, Database, Shield, Calendar } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, Plus, Database, Shield, Calendar, AlertCircle } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
+import { isSupabaseConfigured, isAnyTableMissing } from '../../lib/supabase';
 
 interface AdminHeaderProps {
   currentTab: NavigationTab;
@@ -17,6 +18,15 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onAddResident,
   onOpenSqlModal
 }) => {
+  const [hasMissing, setHasMissing] = useState(isAnyTableMissing());
+
+  useEffect(() => {
+    const handleStatusChange = () => {
+      setHasMissing(isAnyTableMissing());
+    };
+    window.addEventListener('supabase-schema-status', handleStatusChange);
+    return () => window.removeEventListener('supabase-schema-status', handleStatusChange);
+  }, []);
   const getBreadcrumbTitle = (tab: NavigationTab) => {
     switch (tab) {
       case 'dashboard': return 'Dashboard Overview';
@@ -71,11 +81,19 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         {/* SQL Schema Button */}
         <button
           onClick={onOpenSqlModal}
-          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+          className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+            isSupabaseConfigured && hasMissing
+              ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+              : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+          }`}
           title="Supabase Database Relational Schema"
         >
-          <Database className="w-3.5 h-3.5 text-slate-500" />
-          <span>Database Schema</span>
+          {isSupabaseConfigured && hasMissing ? (
+            <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          ) : (
+            <Database className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          )}
+          <span>{isSupabaseConfigured && hasMissing ? 'Tables Setup Needed' : 'Database Schema'}</span>
         </button>
 
         {/* Primary CTA */}

@@ -25,6 +25,9 @@ import { ResidentFormModal } from './components/residents/ResidentFormModal';
 import { ResidentDetailModal } from './components/residents/ResidentDetailModal';
 import { EstateSettingsView } from './components/settings/EstateSettingsView';
 import { ActivityLogsView } from './components/activity/ActivityLogsView';
+import { PaymentsView } from './components/payments/PaymentsView';
+import { OutstandingView } from './components/payments/OutstandingView';
+import { SMSDashboardView } from './components/sms/SMSDashboardView';
 import { StagePlaceholderView } from './components/placeholders/StagePlaceholderView';
 import { SupabaseSetupModal } from './components/setup/SupabaseSetupModal';
 import { AuthModal } from './components/auth/AuthModal';
@@ -97,7 +100,7 @@ export default function App() {
         setResidents(loadedResidents);
         setActivityLogs(loadedLogs);
       } catch (err) {
-        console.error('Failed to initialize app data:', err);
+        console.warn('Notice initializing app data, falling back to local storage:', err);
       } finally {
         setLoading(false);
       }
@@ -293,6 +296,43 @@ export default function App() {
                 settings={estateSettings}
                 onSettingsUpdated={handleSettingsUpdated}
                 adminEmail={adminUser?.email || 'admin'}
+                onOpenSqlModal={() => setIsSqlModalOpen(true)}
+              />
+            )}
+
+            {currentTab === 'payments' && (
+              <PaymentsView
+                estateSettings={estateSettings}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
+              />
+            )}
+
+            {currentTab === 'outstanding' && (
+              <OutstandingView
+                estateSettings={estateSettings}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
+              />
+            )}
+
+            {currentTab === 'sms' && (
+              <SMSDashboardView
+                residents={residents}
+                onSelectResident={(res) => {
+                  setViewingResidentProfile(res);
+                  setCurrentTab('residents');
+                }}
               />
             )}
 
@@ -300,7 +340,7 @@ export default function App() {
               <ActivityLogsView logs={activityLogs} />
             )}
 
-            {['payments', 'outstanding', 'sms', 'reports', 'announcements', 'admins'].includes(currentTab) && (
+            {['reports', 'announcements', 'admins'].includes(currentTab) && (
               <StagePlaceholderView
                 tab={currentTab}
                 estateSettings={estateSettings}

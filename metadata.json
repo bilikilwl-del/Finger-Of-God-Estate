@@ -1,6 +1,6 @@
 {
-  "name": "Estate Security Levy Management System",
-  "description": "A comprehensive estate security levy management platform for managing residents and their monthly security levy payments.",
+  "name": "Finger of God Estate Security Management",
+  "description": "Professional estate security levy management system for Finger of God Estate with resident database, Paystack online payments, and verified receipts.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

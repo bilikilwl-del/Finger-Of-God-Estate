@@ -12,7 +12,10 @@ import {
   TrendingUp,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import { Resident, EstateSettings, ActivityLog, NavigationTab } from '../../types/database';
 
@@ -171,31 +174,79 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       </div>
 
       {/* Security Levy Schedule & Revenue Target Bar */}
-      <div className="bg-emerald-950 text-emerald-100 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-emerald-900 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
-            <Clock className="w-5 h-5 text-emerald-400" />
+      <div className="bg-emerald-950 text-emerald-100 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 border border-emerald-900 shadow-md">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30 shadow-xs">
+            <CreditCard className="w-6 h-6 text-emerald-400" />
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-              Security Levy Cycle Details
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-950 uppercase tracking-widest">
+                Stage 4 Paystack Ready
+              </span>
+              <span className="text-xs font-semibold text-emerald-300 font-mono">
+                Levy Cycle: {estateSettings.first_payment_month}
+              </span>
             </div>
-            <p className="text-xs text-emerald-200 mt-0.5">
-              Rate: <strong className="text-white">₦{monthlyLevy.toLocaleString()} / month</strong> per active household · Due on Day <strong className="text-white">{estateSettings.payment_due_day}</strong> · Commences <strong className="text-emerald-300">{estateSettings.first_payment_month}</strong>
+            <h3 className="font-display font-bold text-base text-white mt-1">
+              Monthly Security Levy (₦{monthlyLevy.toLocaleString()} / Resident)
+            </h3>
+            <p className="text-xs text-emerald-200/90 mt-0.5">
+              Secure online payments, server-side Paystack verification, digital receipts, and arrears tracking.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 self-start sm:self-auto bg-emerald-900/60 px-4 py-2.5 rounded-xl border border-emerald-800/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => onNavigate('outstanding')}
+            className="px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-emerald-700/60 cursor-pointer"
+          >
+            <span>View Defaulters</span>
+          </button>
+          <button
+            onClick={() => onNavigate('payments')}
+            className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>Paystack Portal</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Stage 5: Automated SMS Reminders & Notification Banner */}
+      <div className="bg-slate-900 text-white rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 border border-slate-800 shadow-md">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center shrink-0 border border-cyan-500/30 shadow-xs">
+            <MessageSquare className="w-6 h-6 text-cyan-400" />
+          </div>
           <div>
-            <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-semibold block">Projected Monthly Pool</span>
-            <div className="font-mono text-lg font-bold text-white tabular-nums">
-              ₦{projectedMonthlyRevenue.toLocaleString()}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-400 text-cyan-950 uppercase tracking-widest">
+                Stage 5 Active
+              </span>
+              <span className="text-xs font-semibold text-cyan-300 font-mono">
+                Africa/Lagos Engine
+              </span>
             </div>
+            <h3 className="font-display font-bold text-base text-white mt-1">
+              Automated SMS Levy Reminders (Day 6 & Day 11)
+            </h3>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Automated reminders dispatch on 6th & 11th for unpaid levies. Once payment is confirmed, all further reminders immediately STOP.
+            </p>
           </div>
-          <div className="text-[11px] text-emerald-300 border-l border-emerald-800 pl-3">
-            {activeResidents} active billed units
-          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => onNavigate('sms')}
+            className="px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Manage SMS Reminders</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
