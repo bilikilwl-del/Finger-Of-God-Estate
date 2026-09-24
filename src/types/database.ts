@@ -182,27 +182,64 @@ export interface Receipt {
 }
 
 export type AnnouncementCategory = 
+  | 'General'
+  | 'Security'
+  | 'Finance'
+  | 'Maintenance'
+  | 'Electricity'
+  | 'Meeting'
+  | 'Emergency'
   | 'GENERAL' 
   | 'SECURITY' 
   | 'PAYMENT' 
   | 'MAINTENANCE' 
   | 'MEETING' 
   | 'EMERGENCY' 
+  | 'FINANCE'
+  | 'ELECTRICITY'
   | 'OTHER';
 
 export type AnnouncementPriority = 
+  | 'Normal' 
+  | 'Important' 
+  | 'Urgent'
+  | 'Emergency'
+  | 'Low' 
+  | 'Medium'
+  | 'High' 
   | 'NORMAL' 
   | 'IMPORTANT' 
-  | 'URGENT'
-  | 'Low' 
-  | 'Normal' 
-  | 'High' 
-  | 'Emergency';
+  | 'URGENT';
 
 export type AnnouncementStatus = 
+  | 'Draft'
+  | 'Scheduled'
+  | 'Published'
+  | 'Expired'
+  | 'Archived'
   | 'DRAFT' 
   | 'PUBLISHED' 
-  | 'ARCHIVED';
+  | 'ARCHIVED'
+  | 'SCHEDULED'
+  | 'EXPIRED';
+
+export type TargetAudience =
+  | 'All Residents'
+  | 'Phase I Residents'
+  | 'Phase II Residents'
+  | 'Specific street/area'
+  | 'Specific house/plate numbers'
+  | 'Security Personnel'
+  | 'Security Supervisors'
+  | 'Administrators/Management'
+  | 'Selected Residents';
+
+export interface AnnouncementAcknowledgment {
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  timestamp: string;
+}
 
 export interface Announcement {
   id: string;
@@ -213,16 +250,59 @@ export interface Announcement {
   category: AnnouncementCategory;
   priority: AnnouncementPriority;
   status: AnnouncementStatus;
+  target_audience?: TargetAudience;
+  target_filter_value?: string | null;
+  is_pinned?: boolean;
+  is_important?: boolean;
+  is_emergency?: boolean;
   publish_at: string;
   expires_at?: string | null;
   author_id?: string;
   author_name?: string;
   published_by?: string;
+  created_by?: string;
   is_published?: boolean;
+  attachment_name?: string | null;
   attachment_url?: string | null;
   image_url?: string | null;
+  read_by_residents?: string[];
+  view_count?: number;
+  acknowledgments?: AnnouncementAcknowledgment[];
   created_at: string;
   updated_at?: string;
+}
+
+export type ResidentNotificationCategory =
+  | 'General'
+  | 'Security'
+  | 'Announcement'
+  | 'Finance'
+  | 'Maintenance'
+  | 'Electricity'
+  | 'Meeting'
+  | 'Emergency'
+  | 'Visitor';
+
+export interface ResidentNotification {
+  id: string;
+  resident_id?: string;
+  resident_number: string; // 'ALL' or specific resident number e.g. '001'
+  target_phase?: string;
+  title: string;
+  message: string;
+  category: ResidentNotificationCategory;
+  priority: 'Normal' | 'Important' | 'Urgent' | 'Emergency';
+  is_read: boolean;
+  read_at?: string | null;
+  link_tab?: NavigationTab;
+  link_target?: string;
+  announcement_id?: string;
+  announcement_slug?: string;
+  incident_id?: string;
+  visitor_id?: string;
+  is_pinned?: boolean;
+  created_at: string;
+  expires_at?: string | null;
 }
 
 export interface ActivityLog {
@@ -249,6 +329,10 @@ export interface ActivityLog {
     | 'ANNOUNCEMENT_PUBLISHED'
     | 'ANNOUNCEMENT_ARCHIVED'
     | 'ANNOUNCEMENT_DELETED'
+    | 'ANNOUNCEMENT_PINNED'
+    | 'ANNOUNCEMENT_UNPINNED'
+    | 'EMERGENCY_BROADCAST_SENT'
+    | 'NOTIFICATION_SENT'
     | 'INCIDENT_CREATED'
     | 'INCIDENT_UPDATED'
     | 'INCIDENT_ASSIGNED'

@@ -40,7 +40,9 @@ import {
   MessageSquare,
   Send,
   DoorOpen,
-  UserPlus
+  UserPlus,
+  Pin,
+  Paperclip
 } from 'lucide-react';
 import { 
   Resident, 
@@ -54,7 +56,8 @@ import {
   SecurityAlert,
   SecurityOfficer,
   ResidentVehicle,
-  VehicleType
+  VehicleType,
+  Announcement
 } from '../../types/database';
 import { dbService, residentSessionService } from '../../lib/supabase';
 import { formatNaira } from '../../lib/paystack';
@@ -66,6 +69,7 @@ import { IncidentFormModal } from '../security/IncidentFormModal';
 import { VisitorPassModal } from '../security/VisitorPassModal';
 import { IncidentDetailModal } from '../security/IncidentDetailModal';
 import { QRCodeDisplay } from '../common/QRCodeDisplay';
+import { ResidentNotificationCenter } from './ResidentNotificationCenter';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
@@ -96,7 +100,12 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   // History Filters
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'security' | 'profile'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'security' | 'communications' | 'profile'>('overview');
+
+  // Stage 13 Communications & Announcements State
+  const [residentAnnouncements, setResidentAnnouncements] = useState<Announcement[]>([]);
+  const [selectedAnnouncementReader, setSelectedAnnouncementReader] = useState<Announcement | null>(null);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
 
   // Stage 10 Security & Visitor Portal State
   const [myIncidents, setMyIncidents] = useState<Incident[]>([]);
@@ -206,13 +215,15 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [data, incidents, passes, alerts, officers, loadedVehicles] = await Promise.all([
+      const [data, incidents, passes, alerts, officers, loadedVehicles, announcements, notifs] = await Promise.all([
         dbService.getResidentDashboard(currentResident.resident_number),
         dbService.getResidentIncidents(currentResident.resident_number),
         dbService.getResidentVisitorPasses(currentResident.resident_number),
         dbService.getSecurityAlerts(),
         dbService.getSecurityOfficers(),
-        dbService.getResidentVehicles(currentResident.resident_number)
+        dbService.getResidentVehicles(currentResident.resident_number),
+        dbService.getResidentAnnouncements(currentResident),
+        dbService.getResidentNotifications(currentResident.resident_number, 'UNREAD')
       ]);
       if (data) {
         setDashboardData(data);
@@ -222,6 +233,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       setEstateAlerts(alerts.filter(a => a.is_active));
       setOfficersList(officers);
       setMyVehicles(loadedVehicles);
+      setResidentAnnouncements(announcements);
+      setUnreadNotifCount(notifs.length);
 
       // Check walk-ins awaiting this resident's approval
       const allPasses = await dbService.getVisitorPasses();
@@ -630,6 +643,17 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
             >
               <ShieldAlert className="w-3.5 h-3.5" />
               <span>SECURITY & VISITORS ({myVisitorPasses.length + myIncidents.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('communications')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'communications'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>COMMUNICATIONS & NOTICES {unreadNotifCount > 0 ? `(${unreadNotifCount})` : ''}</span>
             </button>
             <button
               onClick={() => setActiveTab('profile')}
@@ -1459,6 +1483,106 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           </div>
         )}
 
+        {/* Tab: Communications & Notices */}
+        {activeTab === 'communications' && (
+          <div className="space-y-6">
+            <ResidentNotificationCenter
+              currentResident={currentResident}
+              onNavigateTab={(tab) => {
+                if (tab === 'resident_portal') setActiveTab('overview');
+              }}
+              onOpenAnnouncementModal={(idOrSlug) => {
+                const found = residentAnnouncements.find(a => a.id === idOrSlug || a.slug === idOrSlug);
+                if (found) setSelectedAnnouncementReader(found);
+              }}
+              onOpenPayLevy={() => setActiveTab('overview')}
+              onOpenSecurityOps={() => setActiveTab('security')}
+              onRefreshNotifications={loadData}
+            />
+
+            {/* Official Estate Announcements Section */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">
+                    Official Estate Bulletins & Notices
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Targeted announcements and official advisories for {currentResident.house_number}
+                  </p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">
+                  {residentAnnouncements.length} Notices
+                </span>
+              </div>
+
+              {residentAnnouncements.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500">
+                  No active announcements found for your residential zone at this time.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {residentAnnouncements.map((notice) => {
+                    const isEmergency = notice.category === 'Emergency' || notice.priority === 'Emergency' || notice.is_emergency;
+                    const isRead = notice.read_by_residents?.includes(currentResident.resident_number);
+
+                    return (
+                      <div
+                        key={notice.id}
+                        onClick={() => {
+                          setSelectedAnnouncementReader(notice);
+                          dbService.markAnnouncementAsRead(notice.id, currentResident.resident_number, currentResident.full_name, currentResident.house_number);
+                        }}
+                        className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 hover:shadow-md ${
+                          isEmergency
+                            ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-400/20'
+                            : notice.is_pinned
+                            ? 'bg-amber-50/40 border-amber-300'
+                            : 'bg-white border-slate-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-800">
+                              {notice.category}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {notice.is_pinned && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  <Pin className="w-3 h-3" /> Pinned
+                                </span>
+                              )}
+                              {!isRead && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-600" title="Unread Notice" />
+                              )}
+                            </div>
+                          </div>
+
+                          <h4 className="text-sm font-black text-slate-900 font-display leading-snug">
+                            {notice.title}
+                          </h4>
+
+                          <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                            {notice.body}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                          <span>{notice.author_name || 'Administration'}</span>
+                          <span className="font-bold text-emerald-700 flex items-center gap-1">
+                            <span>Read Full Notice</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab 4: Resident Profile & Estate Info */}
         {activeTab === 'profile' && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
@@ -2018,6 +2142,74 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                 className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stage 13: Announcement Reader Modal */}
+      {selectedAnnouncementReader && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold uppercase bg-slate-900 text-white">
+                  {selectedAnnouncementReader.category}
+                </span>
+                <span className="text-xs text-slate-500">Official Estate Notice</span>
+              </div>
+              <button
+                onClick={() => setSelectedAnnouncementReader(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4">
+              <h2 className="text-xl font-black text-slate-900 font-display leading-snug">
+                {selectedAnnouncementReader.title}
+              </h2>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pb-3 border-b border-slate-100">
+                <span>Issued by {selectedAnnouncementReader.author_name || 'Estate Administration'}</span>
+                <span>•</span>
+                <span>{new Date(selectedAnnouncementReader.publish_at).toLocaleDateString('en-GB')}</span>
+              </div>
+
+              <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
+                {selectedAnnouncementReader.body}
+              </div>
+
+              {selectedAnnouncementReader.attachment_url && (
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs mt-4">
+                  <div className="flex items-center gap-2.5 font-bold text-slate-900">
+                    <Paperclip className="w-4 h-4 text-slate-500" />
+                    <span>{selectedAnnouncementReader.attachment_name || 'Official Announcement Document'}</span>
+                  </div>
+                  <a
+                    href={selectedAnnouncementReader.attachment_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800"
+                  >
+                    Download PDF
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
+              <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Marked as Read & Acknowledged</span>
+              </span>
+              <button
+                onClick={() => setSelectedAnnouncementReader(null)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Close Notice
               </button>
             </div>
           </div>

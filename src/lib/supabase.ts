@@ -50,7 +50,11 @@ import {
   GateLane,
   GateSecurityOverviewStats,
   ResidentAccessStatus,
-  ResidentAccessVerificationResult
+  ResidentAccessVerificationResult,
+  ResidentNotification,
+  ResidentNotificationCategory,
+  TargetAudience,
+  AnnouncementAcknowledgment
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
@@ -180,7 +184,8 @@ const STORAGE_KEYS = {
   VEHICLES: 'estate_security_vehicles',
   WATCHLIST: 'estate_security_watchlist',
   CONTRACTORS: 'estate_security_contractors',
-  DELIVERIES: 'estate_security_deliveries'
+  DELIVERIES: 'estate_security_deliveries',
+  NOTIFICATIONS: 'estate_security_resident_notifications'
 };
 
 const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
@@ -1024,13 +1029,22 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     id: 'ann-001',
     title: 'Updated Estate Security Protocols & RFID Gate Automation',
     slug: 'updated-estate-security-protocols-rfid-gate-automation',
-    category: 'SECURITY',
-    priority: 'URGENT',
-    status: 'PUBLISHED',
+    category: 'Security',
+    priority: 'Urgent',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: true,
+    is_important: true,
     publish_at: '2026-09-15T08:00:00.000Z',
     expires_at: null,
     author_name: 'Estate Security EXCO',
-    body: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols. All residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
+    created_by: 'admin@fingerofgodestate.ng',
+    attachment_name: 'Security_Policy_Gate_Manual_2026.pdf',
+    attachment_url: 'https://example.com/docs/security-protocols.pdf',
+    read_by_residents: ['001'],
+    view_count: 142,
+    body: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols.\n\nAll residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
+    content: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols.\n\nAll residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
     created_at: '2026-09-15T08:00:00.000Z',
     updated_at: '2026-09-15T08:00:00.000Z'
   },
@@ -1038,13 +1052,22 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     id: 'ann-002',
     title: 'Commencement of Online Security Levy Payments (October 2026)',
     slug: 'commencement-of-online-security-levy-payments-october-2026',
-    category: 'PAYMENT',
-    priority: 'IMPORTANT',
-    status: 'PUBLISHED',
+    category: 'Finance',
+    priority: 'Important',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: true,
+    is_important: true,
     publish_at: '2026-09-20T09:00:00.000Z',
     expires_at: null,
     author_name: 'Finance Committee',
-    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    created_by: 'finance@fingerofgodestate.ng',
+    attachment_name: 'Levy_Payment_Guidelines_Oct2026.pdf',
+    attachment_url: 'https://example.com/docs/levy-guidelines.pdf',
+    read_by_residents: ['001', '002'],
+    view_count: 218,
+    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    content: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
     created_at: '2026-09-20T09:00:00.000Z',
     updated_at: '2026-09-20T09:00:00.000Z'
   },
@@ -1052,13 +1075,20 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     id: 'ann-003',
     title: 'Quarterly Residents Townhall & Security Architecture Briefing',
     slug: 'quarterly-residents-townhall-security-architecture-briefing',
-    category: 'MEETING',
-    priority: 'NORMAL',
-    status: 'PUBLISHED',
+    category: 'Meeting',
+    priority: 'Normal',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: false,
+    is_important: false,
     publish_at: '2026-09-22T10:00:00.000Z',
-    expires_at: null,
+    expires_at: '2026-10-25T23:59:59.000Z',
     author_name: 'Estate Secretariat',
-    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request). Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.',
+    created_by: 'admin@fingerofgodestate.ng',
+    read_by_residents: ['001'],
+    view_count: 95,
+    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request).\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.',
+    content: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request).\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.',
     created_at: '2026-09-22T10:00:00.000Z',
     updated_at: '2026-09-22T10:00:00.000Z'
   },
@@ -1066,15 +1096,139 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     id: 'ann-004',
     title: 'Drainage Infrastructure & Streetlight Upgrade Notice',
     slug: 'drainage-infrastructure-streetlight-upgrade-notice',
-    category: 'MAINTENANCE',
-    priority: 'NORMAL',
-    status: 'PUBLISHED',
+    category: 'Maintenance',
+    priority: 'Normal',
+    status: 'Published',
+    target_audience: 'Phase I Residents',
+    is_pinned: false,
+    is_important: false,
     publish_at: '2026-09-23T11:00:00.000Z',
-    expires_at: null,
+    expires_at: '2026-10-10T23:59:59.000Z',
     author_name: 'Facilities & Works Committee',
-    body: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily. Residents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
+    created_by: 'facilities@fingerofgodestate.ng',
+    read_by_residents: ['001'],
+    view_count: 67,
+    body: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily.\n\nResidents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
+    content: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily.\n\nResidents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
     created_at: '2026-09-23T11:00:00.000Z',
     updated_at: '2026-09-23T11:00:00.000Z'
+  },
+  {
+    id: 'ann-005',
+    title: 'Dedicated Feeder Transformer Scheduled Maintenance & Power Interruption',
+    slug: 'dedicated-feeder-transformer-scheduled-maintenance',
+    category: 'Electricity',
+    priority: 'Important',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: false,
+    is_important: true,
+    publish_at: '2026-09-24T06:00:00.000Z',
+    expires_at: '2026-09-27T18:00:00.000Z',
+    author_name: 'Power & Utility Committee',
+    created_by: 'power@fingerofgodestate.ng',
+    read_by_residents: ['001'],
+    view_count: 112,
+    body: 'Please be informed that the regional electricity distribution company (DisCo) in collaboration with the Estate Electrical Engineering team will perform preventive transformer maintenance on Sunday, September 27, 2026, from 11:00 AM to 3:00 PM.\n\nPower supply to both Phase 1 and Phase 2 will be temporarily shut down during this interval for safety. Essential estate security gates and perimeter CCTV will remain powered on backup solar inverter infrastructure.',
+    content: 'Please be informed that the regional electricity distribution company (DisCo) in collaboration with the Estate Electrical Engineering team will perform preventive transformer maintenance on Sunday, September 27, 2026, from 11:00 AM to 3:00 PM.\n\nPower supply to both Phase 1 and Phase 2 will be temporarily shut down during this interval for safety. Essential estate security gates and perimeter CCTV will remain powered on backup solar inverter infrastructure.',
+    created_at: '2026-09-24T06:00:00.000Z',
+    updated_at: '2026-09-24T06:00:00.000Z'
+  },
+  {
+    id: 'ann-006',
+    title: 'Emergency Flood Alert & High-Intensity Rain Advisory',
+    slug: 'emergency-flood-alert-high-intensity-rain-advisory',
+    category: 'Emergency',
+    priority: 'Emergency',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: true,
+    is_important: true,
+    is_emergency: true,
+    publish_at: '2026-09-24T08:00:00.000Z',
+    expires_at: '2026-09-26T23:59:59.000Z',
+    author_name: 'Estate Disaster & Emergency Response Team',
+    created_by: 'admin@fingerofgodestate.ng',
+    read_by_residents: ['001'],
+    view_count: 230,
+    body: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 08023456789.',
+    content: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 08023456789.',
+    created_at: '2026-09-24T08:00:00.000Z',
+    updated_at: '2026-09-24T08:00:00.000Z'
+  }
+];
+
+const INITIAL_NOTIFICATIONS_SEED: ResidentNotification[] = [
+  {
+    id: 'notif-001',
+    resident_number: 'ALL',
+    title: 'Emergency Flood Alert & High-Intensity Rain Advisory',
+    message: 'Red weather alert in effect. Keep storm drains clear and report blockages to security hotline 08023456789.',
+    category: 'Emergency',
+    priority: 'Emergency',
+    is_read: false,
+    link_tab: 'resident_portal',
+    link_target: 'announcements',
+    announcement_id: 'ann-006',
+    announcement_slug: 'emergency-flood-alert-high-intensity-rain-advisory',
+    is_pinned: true,
+    created_at: '2026-09-24T08:00:00.000Z',
+    expires_at: '2026-09-26T23:59:59.000Z'
+  },
+  {
+    id: 'notif-002',
+    resident_number: 'ALL',
+    title: 'October 2026 Security Levy Billing Activated',
+    message: 'Your monthly security levy of ₦5,000 for October 2026 is ready for payment. Instant verified digital receipt issued upon completion.',
+    category: 'Finance',
+    priority: 'Important',
+    is_read: false,
+    link_tab: 'resident_portal',
+    link_target: 'levy',
+    announcement_id: 'ann-002',
+    announcement_slug: 'commencement-of-online-security-levy-payments-october-2026',
+    created_at: '2026-09-20T09:00:00.000Z'
+  },
+  {
+    id: 'notif-003',
+    resident_number: 'ALL',
+    title: 'Heightened Night Gate Verification (22:00 - 05:00)',
+    message: 'All unannounced nighttime visitors must be confirmed via phone call with resident host prior to barrier opening.',
+    category: 'Security',
+    priority: 'Important',
+    is_read: true,
+    read_at: '2026-09-21T10:15:00.000Z',
+    link_tab: 'resident_portal',
+    link_target: 'security',
+    announcement_id: 'ann-001',
+    created_at: '2026-09-20T08:00:00.000Z'
+  },
+  {
+    id: 'notif-004',
+    resident_number: 'ALL',
+    title: 'Transformer Maintenance & Power Interruption Notice',
+    message: 'Scheduled power shutdown on Sunday, Sept 27 (11 AM - 3 PM) for DisCo transformer inspection.',
+    category: 'Electricity',
+    priority: 'Normal',
+    is_read: false,
+    link_tab: 'resident_portal',
+    link_target: 'announcements',
+    announcement_id: 'ann-005',
+    created_at: '2026-09-24T06:00:00.000Z'
+  },
+  {
+    id: 'notif-005',
+    resident_number: '001',
+    title: 'Visitor Pass Generated: Pastor Emmanuel Eze',
+    message: 'Visitor pass FOG-VIS-9812 created for vehicle KJA-542-AA. Valid for today.',
+    category: 'Visitor',
+    priority: 'Normal',
+    is_read: true,
+    read_at: '2026-09-24T09:10:00.000Z',
+    link_tab: 'resident_portal',
+    link_target: 'security',
+    visitor_id: 'vis-001',
+    created_at: '2026-09-24T08:30:00.000Z'
   }
 ];
 
@@ -1096,6 +1250,27 @@ function saveLocalAnnouncements(announcements: Announcement[]) {
     localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
   } catch (err) {
     console.error('Failed to save announcements to local storage', err);
+  }
+}
+
+function getLocalNotifications(): ResidentNotification[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS_SEED));
+      return INITIAL_NOTIFICATIONS_SEED;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_NOTIFICATIONS_SEED;
+  }
+}
+
+function saveLocalNotifications(notifications: ResidentNotification[]) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
+  } catch (err) {
+    console.error('Failed to save notifications to local storage', err);
   }
 }
 
@@ -3291,7 +3466,7 @@ export const dbService = {
   },
 
   // ==========================================
-  // STAGE 8: ANNOUNCEMENTS & ESTATE NOTICES
+  // STAGE 8 & 13: ESTATE COMMUNICATIONS, ANNOUNCEMENTS & NOTIFICATIONS
   // ==========================================
 
   async getPublicAnnouncements(category?: string, query?: string): Promise<Announcement[]> {
@@ -3314,12 +3489,21 @@ export const dbService = {
     const list = getLocalAnnouncements();
     const now = new Date();
     return list.filter(a => {
-      if (a.status !== 'PUBLISHED') return false;
+      const isPub = a.status === 'PUBLISHED' || a.status === 'Published';
+      if (!isPub) return false;
       if (new Date(a.publish_at) > now) return false;
       if (a.expires_at && new Date(a.expires_at) <= now) return false;
-      if (category && category !== 'ALL' && a.category !== category) return false;
+      if (category && category !== 'ALL') {
+        const catClean = category.toLowerCase();
+        const itemCat = a.category.toLowerCase();
+        if (catClean !== itemCat && !itemCat.includes(catClean)) return false;
+      }
       if (query && !a.title.toLowerCase().includes(query.toLowerCase()) && !a.body.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
+    }).sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      return new Date(b.publish_at).getTime() - new Date(a.publish_at).getTime();
     });
   },
 
@@ -3338,13 +3522,115 @@ export const dbService = {
     const now = new Date();
     return list.find(a => 
       (a.slug === slug || a.id === slug) &&
-      a.status === 'PUBLISHED' &&
+      (a.status === 'PUBLISHED' || a.status === 'Published') &&
       new Date(a.publish_at) <= now &&
       (!a.expires_at || new Date(a.expires_at) > now)
     ) || null;
   },
 
-  async getAdminAnnouncements(filters?: { status?: string; category?: string; priority?: string; query?: string }): Promise<Announcement[]> {
+  async getResidentAnnouncements(resident: Resident): Promise<Announcement[]> {
+    const list = getLocalAnnouncements();
+    const now = new Date();
+
+    return list.filter(a => {
+      // 1. Must be published
+      const isPub = a.status === 'PUBLISHED' || a.status === 'Published';
+      if (!isPub) return false;
+
+      // 2. Must have reached publish_at (handle scheduled)
+      if (new Date(a.publish_at) > now) return false;
+
+      // 3. Must not be expired
+      if (a.expires_at && new Date(a.expires_at) <= now) return false;
+
+      // 4. Targeted audience filtering
+      const audience = a.target_audience || 'All Residents';
+      if (audience === 'All Residents') return true;
+
+      const resPhase = resident.address?.toLowerCase().includes('phase 2') || resident.house_number?.toLowerCase().includes('phase 2') ? 'Phase II' : 'Phase I';
+      if ((audience as string) === 'Phase I Residents' || (audience as string) === 'Phase 1') {
+        return resPhase === 'Phase I' || !resident.address?.toLowerCase().includes('phase 2');
+      }
+      if ((audience as string) === 'Phase II Residents' || (audience as string) === 'Phase 2') {
+        return resPhase === 'Phase II' || resident.address?.toLowerCase().includes('phase 2');
+      }
+
+      if (audience === 'Specific street/area' && a.target_filter_value) {
+        const street = a.target_filter_value.toLowerCase();
+        return (resident.address?.toLowerCase().includes(street) || resident.house_number?.toLowerCase().includes(street));
+      }
+
+      if ((audience === 'Specific house/plate numbers' || audience === 'Selected Residents') && a.target_filter_value) {
+        const targets = a.target_filter_value.toLowerCase().split(',').map(s => s.trim());
+        const resNum = resident.resident_number.toLowerCase();
+        const houseNum = resident.house_number.toLowerCase();
+        return targets.some(t => t === resNum || t === houseNum || houseNum.includes(t));
+      }
+
+      // Security or Admin only announcements not intended for normal residents
+      if (audience === 'Security Personnel' || audience === 'Security Supervisors' || audience === 'Administrators/Management') {
+        return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      return new Date(b.publish_at).getTime() - new Date(a.publish_at).getTime();
+    });
+  },
+
+  async markAnnouncementAsRead(
+    announcementId: string, 
+    residentNumber: string, 
+    residentName?: string, 
+    houseNumber?: string
+  ): Promise<Announcement | null> {
+    const list = getLocalAnnouncements();
+    const item = list.find(a => a.id === announcementId || a.slug === announcementId);
+    if (!item) return null;
+
+    if (!item.read_by_residents) item.read_by_residents = [];
+    if (!item.read_by_residents.includes(residentNumber)) {
+      item.read_by_residents.push(residentNumber);
+      item.view_count = (item.view_count || 0) + 1;
+
+      if (residentName) {
+        if (!item.acknowledgments) item.acknowledgments = [];
+        item.acknowledgments.push({
+          resident_number: residentNumber,
+          resident_name: residentName,
+          house_number: houseNumber || '',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      saveLocalAnnouncements(list);
+    }
+    return item;
+  },
+
+  async togglePinAnnouncement(id: string, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+    const list = getLocalAnnouncements();
+    const item = list.find(a => a.id === id);
+    if (!item) throw new Error('Announcement not found');
+
+    item.is_pinned = !item.is_pinned;
+    item.updated_at = new Date().toISOString();
+    saveLocalAnnouncements(list);
+
+    await this.logActivity({
+      admin_email: adminEmail,
+      action: item.is_pinned ? 'ANNOUNCEMENT_PINNED' : 'ANNOUNCEMENT_UNPINNED',
+      entity_type: 'announcement',
+      entity_id: item.id,
+      description: `${item.is_pinned ? 'Pinned' : 'Unpinned'} announcement: "${item.title}"`
+    });
+
+    return item;
+  },
+
+  async getAdminAnnouncements(filters?: { status?: string; category?: string; priority?: string; audience?: string; query?: string }): Promise<Announcement[]> {
     try {
       const params = new URLSearchParams();
       if (filters?.status && filters.status !== 'ALL') params.append('status', filters.status);
@@ -3364,20 +3650,52 @@ export const dbService = {
     }
 
     let list = getLocalAnnouncements();
+    const now = new Date();
+
     if (filters?.status && filters.status !== 'ALL') {
-      list = list.filter(a => a.status === filters.status);
+      const sf = filters.status.toUpperCase();
+      list = list.filter(a => {
+        const aStatus = a.status.toUpperCase();
+        if (sf === 'EXPIRED') {
+          return (aStatus === 'EXPIRED' || (a.expires_at && new Date(a.expires_at) <= now));
+        }
+        if (sf === 'SCHEDULED') {
+          return (aStatus === 'SCHEDULED' || new Date(a.publish_at) > now);
+        }
+        if (sf === 'PUBLISHED') {
+          return (aStatus === 'PUBLISHED' && new Date(a.publish_at) <= now && (!a.expires_at || new Date(a.expires_at) > now));
+        }
+        return aStatus === sf;
+      });
     }
+
     if (filters?.category && filters.category !== 'ALL') {
-      list = list.filter(a => a.category === filters.category);
+      const catClean = filters.category.toUpperCase();
+      list = list.filter(a => {
+        const aCat = a.category.toUpperCase();
+        return aCat === catClean || aCat.includes(catClean) || catClean.includes(aCat);
+      });
     }
+
     if (filters?.priority && filters.priority !== 'ALL') {
-      list = list.filter(a => a.priority === filters.priority);
+      const pClean = filters.priority.toUpperCase();
+      list = list.filter(a => a.priority.toUpperCase() === pClean);
     }
+
+    if (filters?.audience && filters.audience !== 'ALL') {
+      list = list.filter(a => (a.target_audience || 'All Residents') === filters.audience);
+    }
+
     if (filters?.query) {
       const q = filters.query.toLowerCase();
-      list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q));
+      list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q) || a.author_name?.toLowerCase().includes(q));
     }
-    return list;
+
+    return list.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
   },
 
   async createAnnouncement(data: Partial<Announcement>, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
@@ -3399,26 +3717,122 @@ export const dbService = {
     } catch {}
 
     const id = `ann-${Date.now()}`;
-    const slug = (data.title || 'notice').toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '');
+    const slug = (data.title || 'notice').toLowerCase().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '') + '-' + Math.floor(100 + Math.random() * 900);
     const item: Announcement = {
       id,
       title: data.title || 'Untitled Notice',
       slug,
       body: data.body || '',
       content: data.body || '',
-      category: data.category || 'GENERAL',
-      priority: data.priority || 'NORMAL',
-      status: data.status || 'DRAFT',
+      category: data.category || 'General',
+      priority: data.priority || 'Normal',
+      status: data.status || 'Published',
+      target_audience: data.target_audience || 'All Residents',
+      target_filter_value: data.target_filter_value || null,
+      is_pinned: Boolean(data.is_pinned),
+      is_important: Boolean(data.is_important),
+      is_emergency: Boolean(data.is_emergency),
       publish_at: data.publish_at || new Date().toISOString(),
       expires_at: data.expires_at || null,
       author_name: data.author_name || 'Estate Administrator',
+      created_by: adminEmail,
+      attachment_name: data.attachment_name || null,
+      attachment_url: data.attachment_url || null,
+      image_url: data.image_url || null,
+      read_by_residents: [],
+      view_count: 0,
+      acknowledgments: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
     const locals = getLocalAnnouncements();
     locals.unshift(item);
     saveLocalAnnouncements(locals);
+
+    // If published, generate resident notifications
+    if (item.status === 'Published' || item.status === 'PUBLISHED') {
+      const notifCategory: ResidentNotificationCategory = 
+        item.category === 'Security' ? 'Security' :
+        item.category === 'Finance' ? 'Finance' :
+        item.category === 'Maintenance' ? 'Maintenance' :
+        item.category === 'Electricity' ? 'Electricity' :
+        item.category === 'Meeting' ? 'Meeting' :
+        item.category === 'Emergency' ? 'Emergency' : 'Announcement';
+
+      await this.createResidentNotification({
+        resident_number: item.target_audience === 'All Residents' ? 'ALL' : (item.target_filter_value || 'ALL'),
+        title: item.title,
+        message: item.body.length > 140 ? item.body.slice(0, 137) + '...' : item.body,
+        category: notifCategory,
+        priority: (item.priority as any) || 'Normal',
+        is_pinned: item.is_pinned,
+        announcement_id: item.id,
+        announcement_slug: item.slug,
+        link_tab: 'resident_portal',
+        link_target: 'announcements',
+        expires_at: item.expires_at
+      });
+    }
+
+    await this.logActivity({
+      admin_email: adminEmail,
+      action: 'ANNOUNCEMENT_CREATED',
+      entity_type: 'announcement',
+      entity_id: item.id,
+      description: `Created official announcement: "${item.title}" (${item.category} • ${item.target_audience})`
+    });
+
     return item;
+  },
+
+  async createEmergencyBroadcast(data: {
+    title: string;
+    message: string;
+    target_audience?: TargetAudience;
+    target_filter_value?: string;
+    expires_at?: string;
+    author_name?: string;
+    created_by?: string;
+  }, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+    const ann = await this.createAnnouncement({
+      title: data.title.trim(),
+      body: data.message.trim(),
+      category: 'Emergency',
+      priority: 'Emergency',
+      status: 'Published',
+      target_audience: data.target_audience || 'All Residents',
+      target_filter_value: data.target_filter_value || null,
+      is_pinned: true,
+      is_important: true,
+      is_emergency: true,
+      publish_at: new Date().toISOString(),
+      expires_at: data.expires_at || new Date(Date.now() + 86400000 * 2).toISOString(),
+      author_name: data.author_name || 'Estate Emergency Response Team',
+      created_by: adminEmail
+    }, adminEmail);
+
+    // Also register a critical security alert
+    await this.createSecurityAlert({
+      title: `[EMERGENCY BROADCAST] ${data.title}`,
+      message: data.message,
+      category: 'Emergency announcement',
+      priority: 'Critical',
+      start_time: new Date().toISOString(),
+      expiry_time: data.expires_at || new Date(Date.now() + 86400000 * 2).toISOString(),
+      target_audience: data.target_audience === 'Phase II Residents' ? 'Phase 2' : data.target_audience === 'Phase I Residents' ? 'Phase 1' : 'All Residents',
+      created_by: adminEmail
+    });
+
+    await this.logActivity({
+      admin_email: adminEmail,
+      action: 'EMERGENCY_BROADCAST_SENT',
+      entity_type: 'announcement',
+      entity_id: ann.id,
+      description: `Dispatched ESTATE-WIDE EMERGENCY BROADCAST: "${data.title}"`
+    });
+
+    return ann;
   },
 
   async updateAnnouncement(id: string, data: Partial<Announcement>, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
@@ -3447,12 +3861,21 @@ export const dbService = {
     if (idx !== -1) {
       locals[idx] = { ...locals[idx], ...data, updated_at: new Date().toISOString() };
       saveLocalAnnouncements(locals);
+
+      await this.logActivity({
+        admin_email: adminEmail,
+        action: 'ANNOUNCEMENT_UPDATED',
+        entity_type: 'announcement',
+        entity_id: id,
+        description: `Updated announcement details for "${locals[idx].title}"`
+      });
+
       return locals[idx];
     }
     throw new Error('Announcement not found');
   },
 
-  async updateAnnouncementStatus(id: string, status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED', adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
+  async updateAnnouncementStatus(id: string, status: AnnouncementStatus, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<Announcement> {
     try {
       const res = await fetch(`/api/admin/announcements/${id}/status`, {
         method: 'POST',
@@ -3490,7 +3913,121 @@ export const dbService = {
 
     const locals = getLocalAnnouncements().filter(a => a.id !== id);
     saveLocalAnnouncements(locals);
+
+    await this.logActivity({
+      admin_email: adminEmail,
+      action: 'ANNOUNCEMENT_DELETED',
+      entity_type: 'announcement',
+      entity_id: id,
+      description: `Permanently removed announcement id ${id}`
+    });
+
     return true;
+  },
+
+  // ==========================================
+  // RESIDENT NOTIFICATION CENTER SERVICES (STAGE 13)
+  // ==========================================
+
+  async getResidentNotifications(
+    residentNumber: string, 
+    filter?: 'ALL' | 'UNREAD' | 'READ' | 'IMPORTANT' | ResidentNotificationCategory
+  ): Promise<ResidentNotification[]> {
+    const list = getLocalNotifications();
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+    const now = new Date();
+
+    let filtered = list.filter(n => {
+      // 1. Check expiration
+      if (n.expires_at && new Date(n.expires_at) <= now) return false;
+
+      // 2. Audience match: 'ALL' or matching resident number
+      const isTarget = n.resident_number === 'ALL' || n.resident_number === cleanNum || n.resident_number === residentNumber;
+      return isTarget;
+    });
+
+    if (filter && filter !== 'ALL') {
+      if (filter === 'UNREAD') {
+        filtered = filtered.filter(n => !n.is_read);
+      } else if (filter === 'READ') {
+        filtered = filtered.filter(n => n.is_read);
+      } else if (filter === 'IMPORTANT') {
+        filtered = filtered.filter(n => n.priority === 'Important' || n.priority === 'Urgent' || n.priority === 'Emergency' || n.is_pinned);
+      } else {
+        filtered = filtered.filter(n => n.category === filter);
+      }
+    }
+
+    return filtered.sort((a, b) => {
+      if (a.is_pinned && !b.is_pinned) return -1;
+      if (!a.is_pinned && b.is_pinned) return 1;
+      if (!a.is_read && b.is_read) return -1;
+      if (a.is_read && !b.is_read) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  },
+
+  async markNotificationAsRead(id: string, residentNumber: string): Promise<boolean> {
+    const list = getLocalNotifications();
+    const item = list.find(n => n.id === id);
+    if (item) {
+      item.is_read = true;
+      item.read_at = new Date().toISOString();
+      saveLocalNotifications(list);
+      return true;
+    }
+    return false;
+  },
+
+  async markAllNotificationsAsRead(residentNumber: string): Promise<number> {
+    const list = getLocalNotifications();
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+    let count = 0;
+    list.forEach(n => {
+      if ((n.resident_number === 'ALL' || n.resident_number === cleanNum || n.resident_number === residentNumber) && !n.is_read) {
+        n.is_read = true;
+        n.read_at = new Date().toISOString();
+        count++;
+      }
+    });
+    if (count > 0) {
+      saveLocalNotifications(list);
+    }
+    return count;
+  },
+
+  async deleteResidentNotification(id: string, residentNumber: string): Promise<boolean> {
+    const list = getLocalNotifications();
+    const updated = list.filter(n => n.id !== id);
+    saveLocalNotifications(updated);
+    return true;
+  },
+
+  async createResidentNotification(data: Omit<ResidentNotification, 'id' | 'created_at' | 'is_read'> & { is_read?: boolean }): Promise<ResidentNotification> {
+    const list = getLocalNotifications();
+    const newNotif: ResidentNotification = {
+      id: 'notif-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      resident_number: data.resident_number || 'ALL',
+      resident_id: data.resident_id,
+      title: data.title,
+      message: data.message,
+      category: data.category || 'General',
+      priority: data.priority || 'Normal',
+      is_read: Boolean(data.is_read),
+      link_tab: data.link_tab || 'resident_portal',
+      link_target: data.link_target,
+      announcement_id: data.announcement_id,
+      announcement_slug: data.announcement_slug,
+      incident_id: data.incident_id,
+      visitor_id: data.visitor_id,
+      is_pinned: Boolean(data.is_pinned),
+      created_at: new Date().toISOString(),
+      expires_at: data.expires_at || null
+    };
+
+    list.unshift(newNotif);
+    saveLocalNotifications(list);
+    return newNotif;
   },
 
   // ==========================================
