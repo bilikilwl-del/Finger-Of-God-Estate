@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface PublicAnnouncementsViewProps {
   estateSettings: EstateSettings;
@@ -70,18 +71,14 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={onNavigateHome}>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-900 via-blue-900 to-indigo-800 flex items-center justify-center text-white shadow-xs">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <span className="font-bold text-sm sm:text-base text-slate-900 block leading-tight">
-                  {estateSettings.estate_name || 'Finger of God Estate'}
-                </span>
-                <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-600 uppercase tracking-wider block">
-                  Official Public Notices
-                </span>
-              </div>
+            <div className="flex items-center cursor-pointer" onClick={onNavigateHome}>
+              <EstateLogo
+                size="sm"
+                variant="horizontal"
+                theme="light"
+                estateName={estateSettings.estate_name || 'Finger of God Estate'}
+                subtitle="OFFICIAL NOTICES • ASABA"
+              />
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">

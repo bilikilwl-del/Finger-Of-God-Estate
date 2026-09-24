@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Announcement, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface AnnouncementDetailViewProps {
   slug: string;
@@ -145,6 +146,21 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full">
         <article className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm space-y-6">
+          {/* Official Letterhead */}
+          <div className="pb-4 mb-2 border-b border-slate-100 flex items-center justify-between">
+            <EstateLogo
+              size="sm"
+              variant="horizontal"
+              theme="light"
+              estateName={estateSettings.estate_name || 'Finger of God Estate'}
+              subtitle="EXECUTIVE COMMITTEE NOTICE • ASABA"
+            />
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest block">Official Notice</span>
+              <span className="text-xs font-mono font-semibold text-slate-700">Ref: #{announcement.id.slice(0, 8)}</span>
+            </div>
+          </div>
+
           {/* Header Metadata */}
           <div className="space-y-3 pb-6 border-b border-slate-100">
             <div className="flex flex-wrap items-center gap-2">

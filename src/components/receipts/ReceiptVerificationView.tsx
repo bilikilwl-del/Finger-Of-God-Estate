@@ -19,6 +19,7 @@ import {
 import { dbService } from '../../lib/supabase';
 import { PublicReceiptVerification } from '../../types/database';
 import { formatNaira } from '../../lib/paystack';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface ReceiptVerificationViewProps {
   initialReceiptNumber?: string;
@@ -73,12 +74,15 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
   return (
     <div className="min-h-[85vh] py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-8">
       {/* Top Banner & Title */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-emerald-700 text-white shadow-lg mb-1">
-          <ShieldCheck className="w-10 h-10" />
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Official Estate Security Ledger</p>
+      <div className="text-center space-y-3 flex flex-col items-center">
+        <EstateLogo
+          size="xl"
+          variant="stacked"
+          theme="light"
+          estateName="Finger of God Estate"
+          subtitle="OFFICIAL SECURITY LEDGER • ASABA"
+        />
+        <div className="space-y-1 pt-2">
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
             Receipt Verification Portal
           </h1>

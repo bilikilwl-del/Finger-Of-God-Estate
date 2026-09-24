@@ -38,6 +38,7 @@ import { dbService, residentSessionService } from '../../lib/supabase';
 import { formatNaira } from '../../lib/paystack';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 import { ReceiptModal } from '../payments/ReceiptModal';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
@@ -164,18 +165,14 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       {/* Top Resident Bar */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-xs">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 block">
-                Finger of God Estate Security Management
-              </span>
-              <span className="text-sm font-black text-white font-display">
-                Resident Portal • My Security Levy
-              </span>
-            </div>
+          <div className="flex items-center">
+            <EstateLogo
+              size="sm"
+              variant="horizontal"
+              theme="dark"
+              estateName={estateSettings?.estate_name || 'Finger of God Estate'}
+              subtitle="RESIDENT PORTAL • ASABA"
+            />
           </div>
 
           <div className="flex items-center gap-2 text-xs">

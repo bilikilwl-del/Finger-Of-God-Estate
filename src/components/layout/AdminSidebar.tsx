@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { isSupabaseConfigured } from '../../lib/supabase';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface AdminSidebarProps {
   currentTab: NavigationTab;
@@ -79,22 +80,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Brand Header */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-950/40 shrink-0">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-display font-bold text-sm leading-tight text-white truncate tracking-tight">
-                {estateSettings.estate_name || 'Finger of God Estate'}
-              </h1>
-              <p className="text-[11px] text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
-                <span>Security Levy</span>
-                <span className="text-slate-600">·</span>
-                <span className="text-emerald-400 font-medium">Stage 5 Active</span>
-              </p>
-            </div>
-          </div>
+        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+          <EstateLogo
+            size="sm"
+            variant="horizontal"
+            theme="dark"
+            estateName={estateSettings.estate_name || 'Finger of God Estate'}
+            subtitle="ADMIN CONSOLE • ASABA"
+            onClick={() => onSelectTab('dashboard')}
+          />
           <button 
             onClick={onCloseMobile}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden"

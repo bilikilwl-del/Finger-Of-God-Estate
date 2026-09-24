@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '../../lib/supabase';
 import { Resident } from '../../types/database';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface ResidentLoginModalProps {
   isOpen: boolean;
@@ -77,15 +78,14 @@ export const ResidentLoginModal: React.FC<ResidentLoginModalProps> = ({
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-md">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">Finger of God Estate</p>
-              <h2 className="text-lg font-black tracking-tight text-white font-display">Resident Access Portal</h2>
-              <p className="text-xs text-slate-300">My Security Levy & Digital Receipts</p>
-            </div>
+          <div className="flex items-center">
+            <EstateLogo
+              size="md"
+              variant="horizontal"
+              theme="dark"
+              estateName="Finger of God Estate"
+              subtitle="RESIDENT ACCESS PORTAL • ASABA"
+            />
           </div>
         </div>
 

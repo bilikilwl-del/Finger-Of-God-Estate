@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Receipt, EstateSettings } from '../../types/database';
 import { formatNaira } from '../../lib/paystack';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
@@ -85,15 +86,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         <div ref={printRef} className="p-6 sm:p-10 space-y-8 bg-white print:p-8">
           
           {/* Official Estate Header */}
-          <div className="text-center pb-6 border-b-2 border-slate-900/10 space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600 text-white shadow-md mb-2">
-              <ShieldCheck className="w-8 h-8" />
-            </div>
-            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-slate-900 uppercase font-display">
-              {estateSettings?.estate_name || 'FINGER OF GOD ESTATE SECURITY MANAGEMENT'}
-            </h1>
-            <p className="text-xs sm:text-sm font-medium text-slate-600 max-w-md mx-auto">
-              {estateSettings?.estate_address || 'Phase 1, Security Gate Boulevard, Eti-Osa, Lagos'}
+          <div className="text-center pb-6 border-b-2 border-slate-900/10 space-y-2 flex flex-col items-center">
+            <EstateLogo
+              size="lg"
+              variant="stacked"
+              theme="light"
+              estateName={estateSettings?.estate_name || 'Finger of God Estate'}
+              subtitle="OFFICIAL SECURITY & LEVY CLEARANCE SEAL • ASABA"
+            />
+            <p className="text-xs font-medium text-slate-600 max-w-md mx-auto pt-1">
+              {estateSettings?.estate_address || 'Phase 1, Security Gate Boulevard, Asaba, Delta State'}
             </p>
             <div className="pt-2">
               <span className="inline-block px-4 py-1 rounded-full bg-slate-900 text-white text-xs font-black tracking-widest uppercase">

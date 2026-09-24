@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Lock, Mail, User, ShieldCheck, Check, AlertCircle, ArrowRight } from 'lucide-react';
 import { authService, isSupabaseConfigured } from '../../lib/supabase';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -71,20 +72,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h3 className="font-display font-bold text-lg">
-                {mode === 'login' && 'Administrator Sign In'}
-                {mode === 'register' && 'Register Administrator'}
-                {mode === 'forgot' && 'Reset Security Password'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {isSupabaseConfigured ? 'Supabase Auth Backend' : 'Estate Security Console Access'}
-              </p>
-            </div>
+          <div className="flex items-center">
+            <EstateLogo
+              size="sm"
+              variant="horizontal"
+              theme="dark"
+              estateName="Finger of God Estate"
+              subtitle={
+                mode === 'login'
+                  ? 'ADMINISTRATOR SIGN IN • ASABA'
+                  : mode === 'register'
+                  ? 'REGISTER ADMINISTRATOR • ASABA'
+                  : 'RESET SECURITY PASSWORD • ASABA'
+              }
+            />
           </div>
           <button
             onClick={onClose}

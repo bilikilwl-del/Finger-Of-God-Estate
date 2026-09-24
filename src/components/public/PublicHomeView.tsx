@@ -27,6 +27,7 @@ import {
 import { EstateSettings, Announcement, Resident } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
+import { EstateLogo } from '../common/EstateLogo';
 
 interface PublicHomeViewProps {
   estateSettings: EstateSettings;
@@ -148,18 +149,14 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
             {/* Logo & Brand */}
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-slate-900 via-blue-900 to-indigo-800 flex items-center justify-center text-white shadow-md shadow-blue-900/20">
-                <ShieldCheck className="w-6 h-6 text-emerald-400" />
-              </div>
-              <div>
-                <span className="font-bold text-base sm:text-lg tracking-tight text-slate-900 block leading-tight">
-                  {estateSettings.estate_name || 'Finger of God Estate'}
-                </span>
-                <span className="text-[11px] font-semibold text-emerald-600 tracking-wider uppercase block">
-                  Security Management
-                </span>
-              </div>
+            <div className="flex items-center cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <EstateLogo
+                size="md"
+                variant="horizontal"
+                theme="light"
+                estateName={estateSettings.estate_name || 'Finger of God Estate'}
+                subtitle="SECURITY MANAGEMENT • ASABA"
+              />
             </div>
 
             {/* Desktop Navigation Links */}
@@ -322,52 +319,81 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
         
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-              <Shield className="w-3.5 h-3.5" />
-              <span>Official Estate Security & Levy Management Platform</span>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            <div className="lg:col-span-7 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold">
+                <Shield className="w-3.5 h-3.5" />
+                <span>Official Security & Levy Management Platform • Asaba</span>
+              </div>
+
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.15] text-white">
+                FINGER OF GOD ESTATE
+                <span className="block text-emerald-400 text-2xl sm:text-4xl mt-1 font-semibold">
+                  SECURITY MANAGEMENT
+                </span>
+              </h1>
+
+              <p className="text-lg sm:text-xl font-medium text-slate-300">
+                "Secure Estate. Accountable Payments. Better Community."
+              </p>
+
+              <p className="text-sm sm:text-base text-slate-400 leading-relaxed max-w-2xl">
+                This platform enables residents of Finger of God Estate, Asaba to securely fulfill monthly security levy obligations with automated Paystack verification, obtain instant tamper-evident digital receipts, and stay updated with official estate security notices.
+              </p>
+
+              {/* Call to Actions */}
+              <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
+                <button
+                  onClick={() => setIsQuickPayOpen(true)}
+                  className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay Security Levy</span>
+                </button>
+
+                <button
+                  onClick={onOpenResidentLogin}
+                  className="px-6 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-sm border border-slate-700 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <UserCheck className="w-4 h-4 text-blue-400" />
+                  <span>Resident Login</span>
+                </button>
+
+                <button
+                  onClick={onNavigateToAnnouncements}
+                  className="px-5 py-3.5 text-slate-300 hover:text-white font-semibold text-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>View Announcements</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.15] text-white">
-              FINGER OF GOD ESTATE
-              <span className="block text-emerald-400 text-2xl sm:text-4xl mt-1 font-semibold">
-                SECURITY MANAGEMENT
-              </span>
-            </h1>
-
-            <p className="text-lg sm:text-xl font-medium text-slate-300">
-              "Secure Estate. Accountable Payments. Better Community."
-            </p>
-
-            <p className="text-sm sm:text-base text-slate-400 leading-relaxed max-w-2xl">
-              This platform enables residents to securely fulfill their monthly security levy obligations with automated Paystack verification, obtain instant tamper-evident digital receipts, and stay updated with official estate security notices.
-            </p>
-
-            {/* Call to Actions */}
-            <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
-              <button
-                onClick={() => setIsQuickPayOpen(true)}
-                className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>Pay Security Levy</span>
-              </button>
-
-              <button
-                onClick={onOpenResidentLogin}
-                className="px-6 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-sm border border-slate-700 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                <UserCheck className="w-4 h-4 text-blue-400" />
-                <span>Resident Login</span>
-              </button>
-
-              <button
-                onClick={onNavigateToAnnouncements}
-                className="px-5 py-3.5 text-slate-300 hover:text-white font-semibold text-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>View Announcements</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            {/* Prominent Golden Crest Emblem Showcase */}
+            <div className="lg:col-span-5 flex justify-center lg:justify-end">
+              <div className="relative p-8 sm:p-10 rounded-3xl bg-gradient-to-b from-slate-800/80 via-slate-900/90 to-slate-950 border border-slate-700/60 shadow-2xl backdrop-blur-md flex flex-col items-center text-center max-w-sm w-full group hover:border-amber-500/40 transition-all">
+                <div className="absolute -top-3 px-4 py-1 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-widest rounded-full">
+                  Official Seal
+                </div>
+                <EstateLogo
+                  size="2xl"
+                  variant="stacked"
+                  theme="dark"
+                  estateName="Finger of God Estate"
+                  subtitle="SECURITY MANAGEMENT • ASABA"
+                />
+                <div className="mt-5 pt-4 border-t border-slate-800/80 w-full flex items-center justify-around text-xs text-slate-400">
+                  <div className="text-center">
+                    <span className="block font-mono font-bold text-emerald-400 text-sm">{levyAmountFormatted}</span>
+                    <span className="text-[10px] text-slate-500 uppercase">Monthly Levy</span>
+                  </div>
+                  <div className="h-6 w-px bg-slate-800" />
+                  <div className="text-center">
+                    <span className="block font-mono font-bold text-amber-300 text-sm">Oct 2026</span>
+                    <span className="text-[10px] text-slate-500 uppercase">Commencement</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -869,18 +895,14 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       <footer className="mt-auto bg-slate-950 text-slate-400 py-12 border-t border-slate-900 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-slate-900">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-white">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <span className="font-bold text-sm text-white block">
-                  {estateSettings.estate_name || 'Finger of God Estate'}
-                </span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">
-                  Official Security Levy Platform
-                </span>
-              </div>
+            <div className="flex items-center">
+              <EstateLogo
+                size="sm"
+                variant="horizontal"
+                theme="dark"
+                estateName={estateSettings.estate_name || 'Finger of God Estate'}
+                subtitle="OFFICIAL SECURITY LEVY PLATFORM • ASABA"
+              />
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-300">
