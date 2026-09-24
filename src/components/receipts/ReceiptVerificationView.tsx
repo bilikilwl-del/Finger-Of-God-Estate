@@ -76,7 +76,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
       {/* Top Banner & Title */}
       <div className="text-center space-y-3 flex flex-col items-center">
         <EstateLogo
-          size="xl"
+          size="lg"
           variant="stacked"
           theme="light"
           estateName="Finger of God Estate"
