@@ -64,6 +64,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   const systemNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { id: 'system_administration', label: 'System Administration', icon: ShieldCheck },
     { id: 'settings', label: 'Estate Settings', icon: Settings },
     { id: 'logs', label: 'Activity Logs', icon: History }
   ];

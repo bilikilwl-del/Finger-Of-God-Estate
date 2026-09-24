@@ -406,7 +406,8 @@ export type NavigationTab =
   | 'settings'
   | 'logs'
   | 'resident_portal'
-  | 'verify_receipt';
+  | 'verify_receipt'
+  | 'system_administration';
 
 export interface MonthlyFinancialSummary {
   period_month: number;

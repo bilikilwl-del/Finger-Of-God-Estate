@@ -19,13 +19,14 @@ import {
 
 import { AdminSidebar } from './components/layout/AdminSidebar';
 import { AdminHeader } from './components/layout/AdminHeader';
-import { DashboardOverview } from './components/dashboard/DashboardOverview';
+import { AdvancedManagementDashboard } from './components/dashboard/AdvancedManagementDashboard';
 import { ResidentList } from './components/residents/ResidentList';
 import { ResidentProfileView } from './components/residents/ResidentProfileView';
 import { ResidentFormModal } from './components/residents/ResidentFormModal';
 import { ResidentDetailModal } from './components/residents/ResidentDetailModal';
 import { EstateSettingsView } from './components/settings/EstateSettingsView';
 import { ActivityLogsView } from './components/activity/ActivityLogsView';
+import { SystemAdministrationView } from './components/admin/SystemAdministrationView';
 import { PaymentsView } from './components/payments/PaymentsView';
 import { OutstandingView } from './components/payments/OutstandingView';
 import { PaidResidentsView } from './components/admin/PaidResidentsView';
@@ -642,7 +643,7 @@ export default function App() {
           {/* Main View Port */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
             {currentTab === 'dashboard' && (
-              <DashboardOverview
+              <AdvancedManagementDashboard
                 residents={residents}
                 estateSettings={estateSettings}
                 activityLogs={activityLogs}
@@ -782,6 +783,10 @@ export default function App() {
 
             {currentTab === 'logs' && (
               <ActivityLogsView logs={activityLogs} />
+            )}
+
+            {currentTab === 'system_administration' && (
+              <SystemAdministrationView />
             )}
 
             {currentTab === 'announcements' && (
