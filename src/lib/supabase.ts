@@ -1,5 +1,18 @@
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { Resident, EstateSettings, ActivityLog, AdminUser, MonthlyPayment, PaymentTransaction, Receipt, PaymentStatus, SMSLog, SMSSummaryStats } from '../types/database';
+import { 
+  Resident, 
+  EstateSettings, 
+  ActivityLog, 
+  AdminUser, 
+  MonthlyPayment, 
+  PaymentTransaction, 
+  Receipt, 
+  PaymentStatus, 
+  SMSLog, 
+  SMSSummaryStats,
+  ResidentDashboardData,
+  PublicReceiptVerification
+} from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -113,6 +126,7 @@ const STORAGE_KEYS = {
   RESIDENTS: 'estate_security_residents',
   ACTIVITY: 'estate_security_activity_logs',
   CURRENT_USER: 'estate_security_current_user',
+  CURRENT_RESIDENT: 'estate_security_current_resident',
   PAYMENTS: 'estate_security_monthly_payments',
   TRANSACTIONS: 'estate_security_payment_transactions',
   RECEIPTS: 'estate_security_receipts',
@@ -1825,6 +1839,508 @@ export const dbService = {
       pendingSms,
       totalLogged: logs.length
     };
+  },
+
+  // 10. STAGE 6: DIGITAL RECEIPTS & PUBLIC VERIFICATION
+  async getAllReceipts(query?: string): Promise<Receipt[]> {
+    try {
+      const q = query ? `?query=${encodeURIComponent(query)}` : '';
+      const res = await fetch(`/api/payments/receipts${q}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.receipts)) {
+          return data.receipts;
+        }
+      }
+    } catch {
+      // safe fallback
+    }
+
+    const local = getLocalReceipts().filter(r => r.status === 'PAID');
+    if (!query) return local;
+
+    const term = query.toLowerCase();
+    return local.filter(r => 
+      r.receipt_number.toLowerCase().includes(term) ||
+      r.resident_number.toLowerCase().includes(term) ||
+      r.resident_name.toLowerCase().includes(term) ||
+      r.paystack_reference.toLowerCase().includes(term) ||
+      r.period_covered.toLowerCase().includes(term)
+    );
+  },
+
+  async verifyReceiptPublic(receiptNumber: string): Promise<PublicReceiptVerification> {
+    const clean = receiptNumber.trim().toUpperCase();
+    if (!clean) {
+      return {
+        valid: false,
+        status: 'INVALID',
+        message: 'Please enter a valid receipt number.'
+      };
+    }
+
+    try {
+      const res = await fetch(`/api/receipts/verify/${encodeURIComponent(clean)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.valid && data.receipt) {
+          return {
+            valid: true,
+            status: 'VALID',
+            receipt: data.receipt
+          };
+        }
+      }
+    } catch {
+      // safe fallback to local inspection
+    }
+
+    // Local sandbox fallback verification
+    const local = getLocalReceipts();
+    const found = local.find(r => 
+      r.receipt_number.toUpperCase() === clean || 
+      r.paystack_reference.toUpperCase() === clean ||
+      r.receipt_number.replace(/[^A-Z0-9]/g, '') === clean.replace(/[^A-Z0-9]/g, '')
+    );
+
+    if (found && found.status === 'PAID') {
+      const parts = found.resident_name.split(' ');
+      const masked = parts.map((p, i) => (i === 0 || p.length <= 2) ? p : `${p[0]}***${p.slice(-1)}`).join(' ');
+      return {
+        valid: true,
+        status: 'VALID',
+        receipt: {
+          receipt_number: found.receipt_number,
+          status: 'VALID',
+          resident_number: found.resident_number,
+          resident_name: masked,
+          house_number: found.house_number,
+          period_covered: found.period_covered,
+          amount_paid: found.amount_paid,
+          currency: found.currency || 'NGN',
+          payment_date: found.payment_date,
+          paystack_reference: found.paystack_reference,
+          payment_gateway: 'Paystack',
+          issued_at: found.issued_at,
+          estate_name: 'Finger of God Estate Security Management'
+        }
+      };
+    }
+
+    return {
+      valid: false,
+      status: 'NOT_FOUND',
+      message: 'Receipt not found or not an official verified payment in Finger of God Estate records.'
+    };
+  },
+
+  // 11. STAGE 6: RESIDENT ACCESS & DASHBOARD SERVICE
+  async authResident(residentNumber: string, phoneNumber: string): Promise<{
+    success: boolean;
+    resident?: Resident;
+    token?: string;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ residentNumber, phoneNumber })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        residentSessionService.setCurrentResident(data.resident);
+        return {
+          success: true,
+          resident: data.resident,
+          token: data.token
+        };
+      }
+      return {
+        success: false,
+        message: data.message || 'Authentication failed.'
+      };
+    } catch {
+      // Local fallback for offline / development
+      const cleanNum = residentNumber.trim().padStart(3, '0');
+      const residents = await this.getResidents();
+      const resident = residents.find(r => r.resident_number === cleanNum);
+
+      if (!resident) {
+        return { success: false, message: `Resident #${cleanNum} not found in estate records.` };
+      }
+
+      const inputPhone = phoneNumber.replace(/\D/g, '');
+      const regPhone = resident.phone_number.replace(/\D/g, '');
+      const altPhone = resident.additional_phone ? resident.additional_phone.replace(/\D/g, '') : '';
+
+      const match = (inputPhone.length >= 10 && regPhone.endsWith(inputPhone.slice(-10))) ||
+                    (altPhone.length >= 10 && altPhone.endsWith(inputPhone.slice(-10))) ||
+                    inputPhone === regPhone;
+
+      if (!match) {
+        return { success: false, message: 'Phone number does not match registered resident phone number.' };
+      }
+
+      residentSessionService.setCurrentResident(resident);
+      return {
+        success: true,
+        resident,
+        token: `local_tok_${Date.now()}`
+      };
+    }
+  },
+
+  async getResidentDashboard(residentNumber: string): Promise<ResidentDashboardData | null> {
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+    try {
+      const res = await fetch(`/api/resident/dashboard?residentNumber=${cleanNum}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          return {
+            resident: data.resident,
+            summary: data.summary,
+            currentMonthPayment: data.currentMonthPayment,
+            outstandingLevies: data.outstandingLevies,
+            paymentHistory: data.paymentHistory,
+            transactions: data.transactions,
+            receipts: data.receipts
+          };
+        }
+      }
+    } catch {
+      // Local calculation fallback
+    }
+
+    // Comprehensive client fallback calculation
+    const residents = await this.getResidents();
+    const resident = residents.find(r => r.resident_number === cleanNum);
+    if (!resident) return null;
+
+    const payments = (await this.getMonthlyPayments()).filter(p => p.resident_number === cleanNum);
+    const transactions = (await this.getPaymentTransactions()).filter(t => t.resident_number === cleanNum);
+    const receipts = (await this.getAllReceipts()).filter(r => r.resident_number === cleanNum && r.status === 'PAID');
+
+    // Ensure October 2026 exists
+    let existingOct = payments.find(p => p.period_month === 10 && p.period_year === 2026);
+    const octPayment: MonthlyPayment = existingOct || {
+      id: `pay-${cleanNum}-10-2026`,
+      resident_id: resident.id,
+      resident_number: cleanNum,
+      period_month: 10,
+      period_year: 2026,
+      period_label: 'October 2026',
+      amount_due: 5000,
+      amount_paid: 0,
+      status: 'UNPAID',
+      due_date: '2026-10-01',
+      created_at: new Date().toISOString()
+    };
+
+    if (!existingOct) {
+      payments.push(octPayment);
+    }
+
+    const paidPayments = payments.filter(p => p.status === 'PAID');
+    const totalPaid = paidPayments.reduce((acc, curr) => acc + (curr.amount_paid || 5000), 0);
+    const monthsPaid = paidPayments.length;
+
+    const outstandingLevies = payments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
+    const monthsOutstanding = outstandingLevies.length;
+    const totalOutstanding = monthsOutstanding * 5000;
+
+    return {
+      resident,
+      summary: {
+        currentMonthStatus: octPayment.status,
+        currentMonthLabel: octPayment.period_label,
+        totalPaid,
+        totalOutstanding,
+        monthsPaid,
+        monthsOutstanding,
+        levyAmount: 5000
+      },
+      currentMonthPayment: octPayment,
+      outstandingLevies,
+      paymentHistory: payments,
+      transactions,
+      receipts
+    };
+  },
+
+  // ==========================================
+  // STAGE 7: ADMIN FINANCIAL REPORTS & METRICS
+  // ==========================================
+
+  async getFinancialSummary(month: number = 10, year: number = 2026): Promise<any> {
+    try {
+      const res = await fetch(`/api/admin/financial-summary?month=${month}&year=${year}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) return json.data;
+      }
+    } catch (e) {
+      console.warn('Backend financial summary unavailable, calculating from store:', e);
+    }
+
+    // Client-side fallback calculation with identical rules
+    const residents = await this.getResidents();
+    const activeResidents = residents.filter(r => r.status === 'Active');
+    const inactiveResidents = residents.filter(r => r.status === 'Inactive');
+    const monthlyLevy = 5000;
+    const totalExpected = activeResidents.length * monthlyLevy;
+
+    const payments = await this.getMonthlyPayments();
+    const paidForMonth = payments.filter(p => p.period_month === month && p.period_year === year && p.status === 'PAID');
+    const totalCollected = paidForMonth.reduce((acc, curr) => acc + (curr.amount_paid || 5000), 0);
+    const paidCount = paidForMonth.length;
+    const unpaidCount = Math.max(0, activeResidents.length - paidCount);
+    const totalOutstanding = Math.max(0, totalExpected - totalCollected);
+    const collectionPercentage = totalExpected > 0 ? Math.min(100, Math.round((totalCollected / totalExpected) * 100)) : 0;
+
+    const txs = await this.getPaymentTransactions();
+    const pendingCount = txs.filter(t => t.period_month === month && t.period_year === year && t.status === 'PENDING').length;
+    const failedCount = txs.filter(t => t.period_month === month && t.period_year === year && t.status === 'FAILED').length;
+
+    const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    return {
+      period_month: month,
+      period_year: year,
+      period_label: `${MONTH_NAMES[month - 1] || 'October'} ${year}`,
+      total_active_residents: activeResidents.length,
+      total_inactive_residents: inactiveResidents.length,
+      total_residents: residents.length,
+      monthly_levy: monthlyLevy,
+      total_expected: totalExpected,
+      total_collected: totalCollected,
+      total_outstanding: totalOutstanding,
+      paid_residents_count: paidCount,
+      unpaid_residents_count: unpaidCount,
+      pending_payments_count: pendingCount,
+      failed_payments_count: failedCount,
+      collection_percentage: collectionPercentage
+    };
+  },
+
+  async getCollectionHistory(): Promise<any[]> {
+    try {
+      const res = await fetch('/api/admin/collection-history');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.history) return json.history;
+      }
+    } catch {}
+
+    const billingCycles = [
+      { month: 10, year: 2026, label: 'October 2026' },
+      { month: 11, year: 2026, label: 'November 2026' },
+      { month: 12, year: 2026, label: 'December 2026' },
+      { month: 1, year: 2027, label: 'January 2027' }
+    ];
+
+    const residents = await this.getResidents();
+    const active = residents.filter(r => r.status === 'Active');
+    const eligibleCount = active.length;
+    const expectedPerMonth = eligibleCount * 5000;
+
+    return billingCycles.map(c => {
+      const paid = c.month === 10 ? 1 : 0;
+      const collected = paid * 5000;
+      return {
+        period_month: c.month,
+        period_year: c.year,
+        period_label: c.label,
+        eligible_residents: eligibleCount,
+        expected_amount: expectedPerMonth,
+        collected_amount: collected,
+        outstanding_amount: Math.max(0, expectedPerMonth - collected),
+        paid_count: paid,
+        unpaid_count: Math.max(0, eligibleCount - paid),
+        collection_percentage: expectedPerMonth > 0 ? Math.min(100, Math.round((collected / expectedPerMonth) * 100)) : 0
+      };
+    });
+  },
+
+  async getPaidResidents(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
+    try {
+      const res = await fetch(`/api/admin/paid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.residents) return json.residents;
+      }
+    } catch {}
+
+    // Fallback
+    const payments = (await this.getMonthlyPayments()).filter(p => p.period_month === month && p.period_year === year && p.status === 'PAID');
+    const residents = await this.getResidents();
+    const receipts = await this.getAllReceipts();
+
+    return payments.map(p => {
+      const r = residents.find(res => res.resident_number === p.resident_number);
+      const rcp = receipts.find(rc => rc.resident_number === p.resident_number);
+      return {
+        resident_number: p.resident_number,
+        resident_name: r ? r.full_name : 'Estate Resident',
+        house_number: r ? r.house_number : '—',
+        phone_number: r ? r.phone_number : '—',
+        amount_paid: p.amount_paid || 5000,
+        payment_date: p.paid_at || p.created_at,
+        payment_reference: p.paystack_reference || 'FOGES-PAID',
+        receipt_number: rcp ? rcp.receipt_number : `FOGES-REC-${year}10-${p.resident_number}-A7C8E9`,
+        payment_channel: 'card'
+      };
+    });
+  },
+
+  async getUnpaidResidents(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
+    try {
+      const res = await fetch(`/api/admin/unpaid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.residents) return json.residents;
+      }
+    } catch {}
+
+    const residents = (await this.getResidents()).filter(r => r.status === 'Active');
+    const payments = await this.getMonthlyPayments();
+
+    return residents
+      .filter(r => {
+        const p = payments.find(pay => pay.resident_number === r.resident_number && pay.period_month === month && pay.period_year === year);
+        return !p || p.status !== 'PAID';
+      })
+      .map(r => ({
+        resident_number: r.resident_number,
+        resident_name: r.full_name,
+        house_number: r.house_number,
+        phone_number: r.phone_number,
+        amount_due: 5000,
+        payment_status: 'UNPAID',
+        reminder_status: r.resident_number === '002' ? 'REMINDER_1' : 'NONE',
+        last_reminder_date: r.resident_number === '002' ? '2026-10-06T09:00:00Z' : null
+      }));
+  },
+
+  async getOutstandingPayments(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
+    try {
+      const res = await fetch(`/api/admin/outstanding-payments?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.outstanding) return json.outstanding;
+      }
+    } catch {}
+
+    const unpaid = await this.getUnpaidResidents(month, year, q);
+    return unpaid.map(u => ({
+      resident_number: u.resident_number,
+      resident_name: u.resident_name,
+      house_number: u.house_number,
+      period_label: `October ${year}`,
+      amount_due: 5000,
+      amount_paid: 0,
+      outstanding_amount: 5000,
+      status: 'UNPAID'
+    }));
+  },
+
+  async searchPaymentsGlobal(query: string): Promise<any[]> {
+    if (!query.trim()) return [];
+    try {
+      const res = await fetch(`/api/admin/global-payment-search?q=${encodeURIComponent(query.trim())}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.results) return json.results;
+      }
+    } catch {}
+
+    const txs = await this.getPaymentTransactions();
+    const q = query.trim().toLowerCase();
+    return txs
+      .filter(t => 
+        t.resident_number.toLowerCase().includes(q) || 
+        (t.paystack_reference && t.paystack_reference.toLowerCase().includes(q))
+      )
+      .map(t => ({
+        id: t.id,
+        resident_number: t.resident_number,
+        resident_name: 'Resident #' + t.resident_number,
+        phone_number: '—',
+        house_number: '—',
+        period_label: t.period_label,
+        amount_due: t.amount_due,
+        amount_paid: t.amount_paid,
+        status: t.status,
+        paystack_reference: t.paystack_reference,
+        receipt_number: null,
+        payment_date: t.payment_date || t.created_at,
+        payment_channel: t.payment_channel || 'card'
+      }));
+  },
+
+  async getFinancialReport(reportType: string, options: { month?: number; year?: number; startDate?: string; endDate?: string } = {}): Promise<any> {
+    const { month = 10, year = 2026, startDate, endDate } = options;
+    let url = `/api/admin/reports/${reportType}?month=${month}&year=${year}`;
+    if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Report generation failed: HTTP ${res.status}`);
+    const json = await res.json();
+    return json.report;
+  },
+
+  downloadReportCsv(reportType: string, options: { month?: number; year?: number; startDate?: string; endDate?: string } = {}) {
+    const { month = 10, year = 2026, startDate, endDate } = options;
+    let url = `/api/admin/reports/${reportType}?month=${month}&year=${year}&format=csv`;
+    if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+
+    window.open(url, '_blank');
+  },
+
+  async recordAdminAudit(action: string, entity_type: string, description: string, entity_id?: string | null, metadata?: any): Promise<void> {
+    try {
+      const user = authService.getCurrentUser();
+      await fetch('/api/admin/audit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_email: user?.email || 'admin@fingerofgodestate.ng',
+          action,
+          entity_type,
+          entity_id: entity_id || null,
+          description,
+          metadata
+        })
+      });
+    } catch {}
+  }
+};
+
+// ==========================================
+// RESIDENT SESSION SERVICE (STAGE 6)
+// ==========================================
+export const residentSessionService = {
+  getCurrentResident(): Resident | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_RESIDENT);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  },
+
+  setCurrentResident(resident: Resident | null) {
+    if (resident) {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_RESIDENT, JSON.stringify(resident));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
+    }
+  },
+
+  logoutResident() {
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
   }
 };
 

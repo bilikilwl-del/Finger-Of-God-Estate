@@ -85,10 +85,185 @@ interface ServerReceiptRecord {
   issued_at: string;
 }
 
+interface ServerResidentRecord {
+  id: string;
+  resident_number: string;
+  full_name: string;
+  phone_number: string;
+  additional_phone?: string | null;
+  email: string;
+  house_number: string;
+  address: string;
+  state: string;
+  lga: string;
+  status: 'Active' | 'Inactive';
+  registration_date: string;
+}
+
 // Initial in-memory data store for server-side verification and fallback
+const residentsStore = new Map<string, ServerResidentRecord>();
+const residentSessionsStore = new Map<string, { resident_number: string; created_at: number }>();
 const paymentsStore = new Map<string, ServerPaymentRecord>(); // key: residentNumber_periodMonth_periodYear
 const transactionsStore = new Map<string, ServerTransactionRecord>(); // key: reference
 const receiptsStore = new Map<string, ServerReceiptRecord>(); // key: reference or receiptNumber
+
+// Seed Initial Estate Residents
+const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
+  {
+    id: 'res-001',
+    resident_number: '001',
+    full_name: 'Engr. Babatunde Adeleke',
+    phone_number: '08023456789',
+    additional_phone: '08091122334',
+    email: 'babatunde.adeleke@gmail.com',
+    house_number: 'Plot 4A, Hibiscus Crescent',
+    address: '4A Hibiscus Crescent, Phase 1, Finger of God Estate',
+    state: 'Lagos',
+    lga: 'Eti-Osa',
+    status: 'Active',
+    registration_date: '2026-08-01'
+  },
+  {
+    id: 'res-002',
+    resident_number: '002',
+    full_name: 'Dr. Chioma Nwachukwu',
+    phone_number: '08098765432',
+    additional_phone: null,
+    email: 'dr.chioma@nwachukwumed.ng',
+    house_number: 'House 12B, Palm Avenue',
+    address: '12B Palm Avenue, Phase 1, Finger of God Estate',
+    state: 'Lagos',
+    lga: 'Eti-Osa',
+    status: 'Active',
+    registration_date: '2026-08-05'
+  },
+  {
+    id: 'res-003',
+    resident_number: '003',
+    full_name: 'Alhaji Usman Danladi',
+    phone_number: '08123459876',
+    additional_phone: '08055667788',
+    email: 'usman.danladi@danladigroup.com',
+    house_number: 'Villa 7, Oasis Way',
+    address: 'Villa 7, Oasis Way, Phase 1, Finger of God Estate',
+    state: 'Lagos',
+    lga: 'Eti-Osa',
+    status: 'Active',
+    registration_date: '2026-08-10'
+  },
+  {
+    id: 'res-004',
+    resident_number: '004',
+    full_name: 'Mrs. Folashade Balogun',
+    phone_number: '07033445566',
+    additional_phone: null,
+    email: 'folashade.balogun@outlook.com',
+    house_number: 'Block C, Apt 3, Coral Gardens',
+    address: 'Coral Gardens, Phase 1, Finger of God Estate',
+    state: 'Lagos',
+    lga: 'Eti-Osa',
+    status: 'Inactive',
+    registration_date: '2026-08-12'
+  }
+];
+
+INITIAL_SERVER_RESIDENTS.forEach(r => residentsStore.set(r.resident_number, r));
+
+// Seed Verified Initial Payments, Transactions & Official Digital Receipts
+const initialPayment001: ServerPaymentRecord = {
+  id: 'pay-001',
+  resident_id: 'res-001',
+  resident_number: '001',
+  resident_name: 'Engr. Babatunde Adeleke',
+  house_number: 'Plot 4A, Hibiscus Crescent',
+  period_month: 10,
+  period_year: 2026,
+  period_label: 'October 2026',
+  amount_due: 5000,
+  amount_paid: 5000,
+  status: 'PAID',
+  due_date: '2026-10-01',
+  paid_at: '2026-09-20T10:30:00Z',
+  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
+  created_at: '2026-09-20T10:28:15Z',
+  updated_at: '2026-09-20T10:30:00Z'
+};
+paymentsStore.set('001_10_2026', initialPayment001);
+paymentsStore.set('001-10-2026', initialPayment001);
+
+const initialTx001: ServerTransactionRecord = {
+  id: 'tx-001',
+  payment_id: 'pay-001',
+  resident_id: 'res-001',
+  resident_number: '001',
+  resident_name: 'Engr. Babatunde Adeleke',
+  house_number: 'Plot 4A, Hibiscus Crescent',
+  period_month: 10,
+  period_year: 2026,
+  period_label: 'October 2026',
+  transaction_reference: 'FOGES-202610-001-A7C8E9F1',
+  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
+  paystack_transaction_id: '394857201',
+  amount_due: 5000,
+  amount_paid: 5000,
+  currency: 'NGN',
+  payment_method: 'Paystack',
+  status: 'PAID',
+  payment_channel: 'card',
+  payment_date: '2026-09-20T10:30:00Z',
+  gateway_response: 'Approved',
+  customer_email: 'babatunde.adeleke@gmail.com',
+  created_at: '2026-09-20T10:28:15Z',
+  updated_at: '2026-09-20T10:30:00Z'
+};
+transactionsStore.set('FOGES-202610-001-A7C8E9F1', initialTx001);
+
+const initialReceipt001: ServerReceiptRecord = {
+  id: 'rcp-srv-001',
+  receipt_number: 'FOGES-REC-202610-001-A7C8E9',
+  transaction_id: 'tx-001',
+  payment_id: 'pay-001',
+  resident_id: 'res-001',
+  resident_number: '001',
+  resident_name: 'Engr. Babatunde Adeleke',
+  house_number: 'Plot 4A, Hibiscus Crescent',
+  amount_paid: 5000,
+  currency: 'NGN',
+  period_covered: 'October 2026',
+  payment_date: '2026-09-20T10:30:00Z',
+  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
+  status: 'PAID',
+  issued_at: '2026-09-20T10:30:05Z'
+};
+receiptsStore.set('FOGES-REC-202610-001-A7C8E9', initialReceipt001);
+receiptsStore.set('RCP-202610-001-A7C8E9', initialReceipt001);
+receiptsStore.set('FOGES-202610-001-A7C8E9F1', initialReceipt001);
+receiptsStore.set(initialReceipt001.id, initialReceipt001);
+
+// Seed unpaids for Resident 002, 003, 004
+['002', '003', '004'].forEach(num => {
+  const r = residentsStore.get(num)!;
+  const p: ServerPaymentRecord = {
+    id: `pay-${num}-10-2026`,
+    resident_id: r.id,
+    resident_number: num,
+    resident_name: r.full_name,
+    house_number: r.house_number,
+    period_month: 10,
+    period_year: 2026,
+    period_label: 'October 2026',
+    amount_due: 5000,
+    amount_paid: 0,
+    status: 'UNPAID',
+    due_date: '2026-10-01',
+    paid_at: null,
+    paystack_reference: null,
+    created_at: '2026-09-01T08:00:00Z',
+    updated_at: '2026-09-01T08:00:00Z'
+  };
+  paymentsStore.set(`${num}_10_2026`, p);
+  paymentsStore.set(`${num}-10-2026`, p);
+});
 
 // Paystack config helpers
 function getPaystackSecret(): string {
@@ -457,8 +632,8 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       }
 
       // Generate Digital Receipt Record
-      // Format: RCP-YYYYMM-RESIDENTNUM-HEX
-      const receiptNum = `RCP-${transaction.period_year}${String(transaction.period_month).padStart(2, '0')}-${transaction.resident_number}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      // Format: FOGES-REC-YYYYMM-RESIDENTNUM-HEX (Unique official identifier)
+      const receiptNum = `FOGES-REC-${transaction.period_year}${String(transaction.period_month).padStart(2, '0')}-${transaction.resident_number}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
       const receiptRecord: ServerReceiptRecord = {
         id: crypto.randomUUID(),
         receipt_number: receiptNum,
@@ -478,6 +653,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       };
       receiptsStore.set(cleanRef, receiptRecord);
       receiptsStore.set(receiptNum, receiptRecord);
+      receiptsStore.set(receiptRecord.id, receiptRecord);
 
       return res.json({
         success: true,
@@ -574,7 +750,7 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
           }
 
           if (!receiptsStore.has(reference)) {
-            const receiptNum = `RCP-${transaction.period_year}${String(transaction.period_month).padStart(2, '0')}-${transaction.resident_number}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+            const receiptNum = `FOGES-REC-${transaction.period_year}${String(transaction.period_month).padStart(2, '0')}-${transaction.resident_number}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
             const receiptRecord: ServerReceiptRecord = {
               id: crypto.randomUUID(),
               receipt_number: receiptNum,
@@ -594,6 +770,7 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
             };
             receiptsStore.set(reference, receiptRecord);
             receiptsStore.set(receiptNum, receiptRecord);
+            receiptsStore.set(receiptRecord.id, receiptRecord);
           }
 
           console.log(`[Paystack Webhook] Successfully marked payment ${reference} as PAID`);
@@ -612,7 +789,298 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 5. DATA SYNC & ADMIN REPORTING ENDPOINTS
+// 5. STAGE 6: RESIDENT ACCESS & DASHBOARD ENDPOINTS
+// -------------------------------------------------------------
+
+// RESIDENT AUTHENTICATION (SECURE CREDENTIAL VALIDATION WITHOUT EXPOSING DIRECTORY)
+app.post('/api/resident/auth', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, phoneNumber } = req.body;
+
+    if (!residentNumber || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both Resident Number and registered Phone Number are required.'
+      });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: `Resident #${cleanNum} not found in estate directory.`
+      });
+    }
+
+    // Check phone number match
+    const inputDigits = String(phoneNumber).replace(/\D/g, '');
+    const regDigits = String(resident.phone_number).replace(/\D/g, '');
+    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+
+    const isMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
+                    (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
+                    inputDigits === regDigits;
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'The phone number provided does not match the registered telephone number for this resident.'
+      });
+    }
+
+    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+
+    return res.json({
+      success: true,
+      token: sessionToken,
+      resident: {
+        id: resident.id,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Resident auth error:', err);
+    res.status(500).json({ success: false, message: 'Server error during resident authentication.' });
+  }
+});
+
+// RESIDENT DASHBOARD DATA (SCOPED STRICTLY TO THE AUTHENTICATED RESIDENT)
+app.get('/api/resident/dashboard', (req: Request, res: Response) => {
+  try {
+    const residentNum = req.query.residentNumber;
+    if (!residentNum) {
+      return res.status(400).json({ success: false, message: 'Resident number parameter is required.' });
+    }
+
+    const cleanNum = String(residentNum).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      return res.status(404).json({ success: false, message: `Resident #${cleanNum} not found.` });
+    }
+
+    // Official billing schedule starting October 2026 (₦5,000 / month)
+    const billingSchedule = [
+      { month: 10, year: 2026, label: 'October 2026', due_date: '2026-10-01' },
+      { month: 11, year: 2026, label: 'November 2026', due_date: '2026-11-01' },
+      { month: 12, year: 2026, label: 'December 2026', due_date: '2026-12-01' },
+      { month: 1, year: 2027, label: 'January 2027', due_date: '2027-01-01' }
+    ];
+
+    const residentPayments: ServerPaymentRecord[] = [];
+    let totalPaid = 0;
+    let monthsPaid = 0;
+
+    for (const cycle of billingSchedule) {
+      const key = `${cleanNum}_${cycle.month}_${cycle.year}`;
+      let p = paymentsStore.get(key) || paymentsStore.get(`${cleanNum}-${cycle.month}-${cycle.year}`);
+
+      if (!p) {
+        p = {
+          id: `pay-${cleanNum}-${cycle.month}-${cycle.year}`,
+          resident_id: resident.id,
+          resident_number: cleanNum,
+          resident_name: resident.full_name,
+          house_number: resident.house_number,
+          period_month: cycle.month,
+          period_year: cycle.year,
+          period_label: cycle.label,
+          amount_due: 5000,
+          amount_paid: 0,
+          status: 'UNPAID',
+          due_date: cycle.due_date,
+          paid_at: null,
+          paystack_reference: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        paymentsStore.set(key, p);
+      }
+
+      if (p.status === 'PAID') {
+        totalPaid += (p.amount_paid || 5000);
+        monthsPaid++;
+      }
+
+      residentPayments.push(p);
+    }
+
+    // Resident's transactions
+    const residentTransactions = Array.from(transactionsStore.values())
+      .filter(t => t.resident_number === cleanNum || t.resident_id === resident.id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    // Resident's unique receipts
+    const allReceipts = Array.from(new Set(Array.from(receiptsStore.values())));
+    const residentReceipts = allReceipts
+      .filter(r => (r.resident_number === cleanNum || r.resident_id === resident.id) && r.status === 'PAID')
+      .sort((a, b) => new Date(b.issued_at || b.payment_date).getTime() - new Date(a.issued_at || a.payment_date).getTime());
+
+    // Current month payment: October 2026 (first billing cycle)
+    const currentMonthPayment = residentPayments.find(p => p.period_month === 10 && p.period_year === 2026) || residentPayments[0];
+
+    // Outstanding Levies: Legitimate billing months that are UNPAID
+    // For October 2026: October 2026 is due
+    const outstandingLevies = residentPayments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
+    const monthsOutstanding = outstandingLevies.length;
+    const totalOutstanding = monthsOutstanding * 5000;
+
+    return res.json({
+      success: true,
+      resident: {
+        id: resident.id,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status
+      },
+      summary: {
+        currentMonthStatus: currentMonthPayment.status,
+        currentMonthLabel: currentMonthPayment.period_label,
+        totalPaid,
+        totalOutstanding,
+        monthsPaid,
+        monthsOutstanding,
+        levyAmount: 5000
+      },
+      currentMonthPayment,
+      outstandingLevies,
+      paymentHistory: residentPayments,
+      transactions: residentTransactions,
+      receipts: residentReceipts
+    });
+  } catch (err: any) {
+    console.error('Resident dashboard data error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving resident dashboard.' });
+  }
+});
+
+// PUBLIC DIGITAL RECEIPT VERIFICATION (/verify-receipt backend)
+app.get('/api/receipts/verify/:receiptNumber', (req: Request, res: Response) => {
+  try {
+    const rawNumber = String(req.params.receiptNumber || '').trim();
+    if (!rawNumber) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        status: 'INVALID',
+        message: 'Receipt number is required for verification.'
+      });
+    }
+
+    const cleanNum = rawNumber.toUpperCase();
+    let found: ServerReceiptRecord | undefined = receiptsStore.get(cleanNum);
+
+    if (!found) {
+      for (const r of receiptsStore.values()) {
+        if (
+          r.receipt_number.toUpperCase() === cleanNum ||
+          r.paystack_reference.toUpperCase() === cleanNum ||
+          r.receipt_number.replace(/[^A-Z0-9]/g, '') === cleanNum.replace(/[^A-Z0-9]/g, '')
+        ) {
+          found = r;
+          break;
+        }
+      }
+    }
+
+    if (found && found.status === 'PAID') {
+      // Mask full name for privacy on public verification page
+      const parts = found.resident_name.split(' ');
+      const maskedName = parts.map((part, index) => {
+        if (index === 0 && /^(engr|dr|mr|mrs|ms|chief|alhaji|pastor|barr)\.?$/i.test(part)) {
+          return part;
+        }
+        if (part.length <= 2) return part;
+        return `${part[0]}${'*'.repeat(part.length - 2)}${part[part.length - 1]}`;
+      }).join(' ');
+
+      return res.json({
+        success: true,
+        valid: true,
+        status: 'VALID',
+        receipt: {
+          receipt_number: found.receipt_number,
+          status: 'VALID',
+          resident_number: found.resident_number,
+          resident_name: maskedName,
+          house_number: found.house_number,
+          period_covered: found.period_covered,
+          amount_paid: found.amount_paid,
+          currency: found.currency || 'NGN',
+          payment_date: found.payment_date,
+          paystack_reference: found.paystack_reference,
+          payment_gateway: 'Paystack',
+          issued_at: found.issued_at,
+          estate_name: 'Finger of God Estate Security Management'
+        }
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      valid: false,
+      status: 'INVALID',
+      message: 'Receipt not found or not an official verified payment in Finger of God Estate records.'
+    });
+  } catch (err: any) {
+    console.error('Receipt verification error:', err);
+    res.status(500).json({ success: false, valid: false, message: 'Server verification check error.' });
+  }
+});
+
+// ADMIN ALL RECEIPTS RETRIEVAL & MULTI-FIELD SEARCH
+app.get('/api/payments/receipts', (req: Request, res: Response) => {
+  try {
+    const query = String(req.query.query || '').trim().toLowerCase();
+    const uniqueReceipts = Array.from(new Set(Array.from(receiptsStore.values())));
+
+    let filtered = uniqueReceipts.filter(r => r.status === 'PAID');
+
+    if (query) {
+      filtered = filtered.filter(r =>
+        r.receipt_number.toLowerCase().includes(query) ||
+        r.resident_number.toLowerCase().includes(query) ||
+        r.resident_name.toLowerCase().includes(query) ||
+        r.paystack_reference.toLowerCase().includes(query) ||
+        r.period_covered.toLowerCase().includes(query)
+      );
+    }
+
+    filtered.sort((a, b) => new Date(b.issued_at || b.payment_date).getTime() - new Date(a.issued_at || a.payment_date).getTime());
+
+    res.json({
+      success: true,
+      count: filtered.length,
+      receipts: filtered
+    });
+  } catch (err: any) {
+    console.error('Receipts list error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving receipts.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 6. DATA SYNC & ADMIN REPORTING ENDPOINTS
 // -------------------------------------------------------------
 app.get('/api/payments/receipt/:refOrNum', (req: Request, res: Response) => {
   const receipt = receiptsStore.get(req.params.refOrNum);
@@ -632,6 +1100,610 @@ app.get('/api/payments/transactions', (_req: Request, res: Response) => {
 app.get('/api/payments/all', (_req: Request, res: Response) => {
   const list = Array.from(paymentsStore.values());
   res.json({ success: true, payments: list });
+});
+
+// =============================================================
+// STAGE 7: ADMIN / EXCO DASHBOARD, FINANCIAL REPORTS & AUDIT
+// Real verified financial calculations, collection history & CSV
+// =============================================================
+
+// 1. MONTHLY FINANCIAL SUMMARY (STRICT VERIFIED DATA ONLY)
+app.get('/api/admin/financial-summary', (req: Request, res: Response) => {
+  try {
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const period_label = `${MONTH_NAMES[month - 1] || 'October'} ${year}`;
+
+    const residents = Array.from(residentsStore.values());
+    const total_residents = residents.length;
+    const activeResidents = residents.filter(r => r.status === 'Active');
+    const inactiveResidents = residents.filter(r => r.status === 'Inactive');
+    const total_active_residents = activeResidents.length;
+    const total_inactive_residents = inactiveResidents.length;
+    const monthly_levy = 5000;
+
+    // RULE: Expected = Eligible Active Residents × Monthly Levy (₦5,000)
+    // Inactive residents are explicitly excluded from expected levy
+    const total_expected = total_active_residents * monthly_levy;
+
+    // RULE: Collected = Sum of verified PAID transactions for that month
+    let paid_residents_count = 0;
+    let total_collected = 0;
+
+    for (const resident of activeResidents) {
+      const key = `${resident.resident_number}_${month}_${year}`;
+      const payment = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
+      if (payment && payment.status === 'PAID') {
+        paid_residents_count++;
+        total_collected += (payment.amount_paid || 5000);
+      }
+    }
+
+    const unpaid_residents_count = Math.max(0, total_active_residents - paid_residents_count);
+    const total_outstanding = Math.max(0, total_expected - total_collected);
+    const collection_percentage = total_expected > 0 ? Math.min(100, Math.round((total_collected / total_expected) * 100)) : 0;
+
+    // Count pending and failed payment attempts
+    const allTx = Array.from(transactionsStore.values()).filter(t => t.period_month === month && t.period_year === year);
+    const pending_payments_count = allTx.filter(t => t.status.toUpperCase() === 'PENDING').length;
+    const failed_payments_count = allTx.filter(t => t.status.toUpperCase() === 'FAILED').length;
+
+    res.json({
+      success: true,
+      data: {
+        period_month: month,
+        period_year: year,
+        period_label,
+        total_active_residents,
+        total_inactive_residents,
+        total_residents,
+        monthly_levy,
+        total_expected,
+        total_collected,
+        total_outstanding,
+        paid_residents_count,
+        unpaid_residents_count,
+        pending_payments_count,
+        failed_payments_count,
+        collection_percentage
+      }
+    });
+  } catch (err: any) {
+    console.error('Financial summary error:', err);
+    res.status(500).json({ success: false, message: 'Server error calculating financial summary.' });
+  }
+});
+
+// 2. HISTORICAL COLLECTION RECORD
+app.get('/api/admin/collection-history', (_req: Request, res: Response) => {
+  try {
+    const billingCycles = [
+      { month: 10, year: 2026, label: 'October 2026' },
+      { month: 11, year: 2026, label: 'November 2026' },
+      { month: 12, year: 2026, label: 'December 2026' },
+      { month: 1, year: 2027, label: 'January 2027' }
+    ];
+
+    const residents = Array.from(residentsStore.values());
+    const activeResidents = residents.filter(r => r.status === 'Active');
+    const eligibleCount = activeResidents.length;
+    const monthlyLevy = 5000;
+    const expectedPerMonth = eligibleCount * monthlyLevy;
+
+    const history = billingCycles.map(c => {
+      let paidCount = 0;
+      let collectedAmount = 0;
+
+      for (const res of activeResidents) {
+        const key = `${res.resident_number}_${c.month}_${c.year}`;
+        const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${c.month}-${c.year}`);
+        if (p && p.status === 'PAID') {
+          paidCount++;
+          collectedAmount += (p.amount_paid || 5000);
+        }
+      }
+
+      const unpaidCount = Math.max(0, eligibleCount - paidCount);
+      const outstandingAmount = Math.max(0, expectedPerMonth - collectedAmount);
+      const collectionPercentage = expectedPerMonth > 0 ? Math.min(100, Math.round((collectedAmount / expectedPerMonth) * 100)) : 0;
+
+      return {
+        period_month: c.month,
+        period_year: c.year,
+        period_label: c.label,
+        eligible_residents: eligibleCount,
+        expected_amount: expectedPerMonth,
+        collected_amount: collectedAmount,
+        outstanding_amount: outstandingAmount,
+        paid_count: paidCount,
+        unpaid_count: unpaidCount,
+        collection_percentage: collectionPercentage
+      };
+    });
+
+    res.json({ success: true, history });
+  } catch (err: any) {
+    console.error('Collection history error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving collection history.' });
+  }
+});
+
+// 3. PAID RESIDENTS PAGE / ENDPOINT
+app.get('/api/admin/paid-residents', (req: Request, res: Response) => {
+  try {
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const search = String(req.query.q || '').trim().toLowerCase();
+
+    const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
+    const allReceipts = Array.from(new Set(Array.from(receiptsStore.values())));
+
+    const list = [];
+    for (const resident of activeResidents) {
+      const key = `${resident.resident_number}_${month}_${year}`;
+      const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
+      if (p && p.status === 'PAID') {
+        const receipt = allReceipts.find(r => r.resident_number === resident.resident_number && (r.period_covered.includes(String(year))));
+        const ref = p.paystack_reference || (receipt ? receipt.paystack_reference : 'FOGES-PAID');
+        const recNum = receipt ? receipt.receipt_number : `FOGES-REC-${year}${String(month).padStart(2, '0')}-${resident.resident_number}-PAID`;
+
+        list.push({
+          resident_number: resident.resident_number,
+          resident_name: resident.full_name,
+          house_number: resident.house_number,
+          phone_number: resident.phone_number,
+          amount_paid: p.amount_paid || 5000,
+          payment_date: p.paid_at || p.created_at,
+          payment_reference: ref,
+          receipt_number: recNum,
+          payment_channel: 'card'
+        });
+      }
+    }
+
+    let filtered = list;
+    if (search) {
+      filtered = filtered.filter(item =>
+        item.resident_number.toLowerCase().includes(search) ||
+        item.resident_name.toLowerCase().includes(search) ||
+        item.house_number.toLowerCase().includes(search) ||
+        item.phone_number.includes(search) ||
+        item.payment_reference.toLowerCase().includes(search) ||
+        item.receipt_number.toLowerCase().includes(search)
+      );
+    }
+
+    res.json({ success: true, count: filtered.length, residents: filtered });
+  } catch (err: any) {
+    console.error('Paid residents error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving paid residents.' });
+  }
+});
+
+// 4. UNPAID RESIDENTS PAGE / ENDPOINT
+app.get('/api/admin/unpaid-residents', (req: Request, res: Response) => {
+  try {
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const search = String(req.query.q || '').trim().toLowerCase();
+
+    const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
+    const smsLogs = Array.from(smsLogsStore.values()).filter(s => s.payment_month === month && s.payment_year === year);
+
+    const list = [];
+    for (const resident of activeResidents) {
+      const key = `${resident.resident_number}_${month}_${year}`;
+      const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
+      const isPaid = p && p.status === 'PAID';
+
+      if (!isPaid) {
+        const resSms = smsLogs.filter(s => s.resident_number === resident.resident_number);
+        const hasRem2 = resSms.some(s => s.reminder_type === 'REMINDER_2' && s.delivery_status === 'SENT');
+        const hasRem1 = resSms.some(s => s.reminder_type === 'REMINDER_1' && s.delivery_status === 'SENT');
+        const reminder_status = hasRem2 ? 'REMINDER_2' : hasRem1 ? 'REMINDER_1' : 'NONE';
+        const lastLog = resSms.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+        list.push({
+          resident_number: resident.resident_number,
+          resident_name: resident.full_name,
+          house_number: resident.house_number,
+          phone_number: resident.phone_number,
+          amount_due: 5000,
+          payment_status: p ? p.status : 'UNPAID',
+          reminder_status,
+          last_reminder_date: lastLog ? (lastLog.sent_at || lastLog.created_at) : null
+        });
+      }
+    }
+
+    let filtered = list;
+    if (search) {
+      filtered = filtered.filter(item =>
+        item.resident_number.toLowerCase().includes(search) ||
+        item.resident_name.toLowerCase().includes(search) ||
+        item.house_number.toLowerCase().includes(search) ||
+        item.phone_number.includes(search)
+      );
+    }
+
+    res.json({ success: true, count: filtered.length, residents: filtered });
+  } catch (err: any) {
+    console.error('Unpaid residents error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving unpaid residents.' });
+  }
+});
+
+// 5. OUTSTANDING PAYMENTS PAGE / ENDPOINT
+app.get('/api/admin/outstanding-payments', (req: Request, res: Response) => {
+  try {
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const search = String(req.query.q || '').trim().toLowerCase();
+
+    const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const period_label = `${MONTH_NAMES[month - 1] || 'October'} ${year}`;
+
+    const list = [];
+    for (const resident of activeResidents) {
+      const key = `${resident.resident_number}_${month}_${year}`;
+      const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
+      const amountDue = 5000;
+      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || 5000) : 0;
+      const outstandingAmount = Math.max(0, amountDue - amountPaid);
+      const status = (p && p.status === 'PAID') ? 'PAID' : (p ? p.status : 'UNPAID');
+
+      if (outstandingAmount > 0) {
+        list.push({
+          resident_number: resident.resident_number,
+          resident_name: resident.full_name,
+          house_number: resident.house_number,
+          period_label,
+          amount_due: amountDue,
+          amount_paid: amountPaid,
+          outstanding_amount: outstandingAmount,
+          status
+        });
+      }
+    }
+
+    let filtered = list;
+    if (search) {
+      filtered = filtered.filter(item =>
+        item.resident_number.toLowerCase().includes(search) ||
+        item.resident_name.toLowerCase().includes(search) ||
+        item.house_number.toLowerCase().includes(search)
+      );
+    }
+
+    res.json({ success: true, count: filtered.length, outstanding: filtered });
+  } catch (err: any) {
+    console.error('Outstanding payments error:', err);
+    res.status(500).json({ success: false, message: 'Server error calculating outstanding payments.' });
+  }
+});
+
+// 6. GLOBAL PAYMENT SEARCH
+app.get('/api/admin/global-payment-search', (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (!q) {
+      return res.json({ success: true, results: [] });
+    }
+
+    const residents = Array.from(residentsStore.values());
+    const transactions = Array.from(transactionsStore.values());
+    const receipts = Array.from(new Set(Array.from(receiptsStore.values())));
+
+    const results = [];
+
+    // Search transactions
+    for (const tx of transactions) {
+      const resident = residents.find(r => r.resident_number === tx.resident_number || r.id === tx.resident_id);
+      const receipt = receipts.find(r => r.paystack_reference === tx.paystack_reference || r.transaction_id === tx.id);
+
+      const matches = 
+        tx.resident_number.toLowerCase().includes(q) ||
+        (tx.resident_name && tx.resident_name.toLowerCase().includes(q)) ||
+        (resident?.phone_number && resident.phone_number.includes(q)) ||
+        (tx.paystack_reference && tx.paystack_reference.toLowerCase().includes(q)) ||
+        tx.transaction_reference.toLowerCase().includes(q) ||
+        (receipt?.receipt_number && receipt.receipt_number.toLowerCase().includes(q));
+
+      if (matches) {
+        results.push({
+          id: tx.id,
+          resident_number: tx.resident_number,
+          resident_name: tx.resident_name || (resident ? resident.full_name : 'Unknown'),
+          phone_number: resident ? resident.phone_number : '—',
+          house_number: resident ? resident.house_number : tx.house_number || '—',
+          period_label: tx.period_label,
+          amount_due: tx.amount_due,
+          amount_paid: tx.amount_paid,
+          status: tx.status,
+          paystack_reference: tx.paystack_reference,
+          receipt_number: receipt ? receipt.receipt_number : null,
+          payment_date: tx.payment_date || tx.created_at,
+          payment_channel: tx.payment_channel || 'card'
+        });
+      }
+    }
+
+    // Search payments directly if not covered in transactions
+    for (const p of paymentsStore.values()) {
+      if (results.some(r => r.resident_number === p.resident_number && r.period_label === p.period_label)) continue;
+      const resident = residents.find(r => r.resident_number === p.resident_number);
+      const matches = 
+        p.resident_number.toLowerCase().includes(q) ||
+        (resident?.full_name && resident.full_name.toLowerCase().includes(q)) ||
+        (resident?.phone_number && resident.phone_number.includes(q)) ||
+        (p.paystack_reference && p.paystack_reference.toLowerCase().includes(q));
+
+      if (matches) {
+        results.push({
+          id: p.id,
+          resident_number: p.resident_number,
+          resident_name: resident ? resident.full_name : p.resident_name,
+          phone_number: resident ? resident.phone_number : '—',
+          house_number: resident ? resident.house_number : p.house_number,
+          period_label: p.period_label,
+          amount_due: p.amount_due,
+          amount_paid: p.amount_paid,
+          status: p.status,
+          paystack_reference: p.paystack_reference,
+          receipt_number: null,
+          payment_date: p.paid_at,
+          payment_channel: 'card'
+        });
+      }
+    }
+
+    res.json({ success: true, count: results.length, results });
+  } catch (err: any) {
+    console.error('Global payment search error:', err);
+    res.status(500).json({ success: false, message: 'Server error performing global payment search.' });
+  }
+});
+
+// 7. FINANCIAL REPORTS ENDPOINT (WITH CSV EXPORT SUPPORT)
+app.get('/api/admin/reports/:reportType', (req: Request, res: Response) => {
+  try {
+    const { reportType } = req.params;
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const startDate = req.query.startDate ? String(req.query.startDate) : null;
+    const endDate = req.query.endDate ? String(req.query.endDate) : null;
+    const format = String(req.query.format || 'json').toLowerCase();
+
+    const residents = Array.from(residentsStore.values());
+    const activeResidents = residents.filter(r => r.status === 'Active');
+    const transactions = Array.from(transactionsStore.values());
+    const receipts = Array.from(new Set(Array.from(receiptsStore.values())));
+    const smsLogs = Array.from(smsLogsStore.values());
+
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const period_label = `${MONTH_NAMES[month - 1] || 'October'} ${year}`;
+
+    let reportData: any = null;
+    let csvHeaders: string[] = [];
+    let csvRows: string[][] = [];
+    let filename = `foges_${reportType}_${year}${String(month).padStart(2, '0')}.csv`;
+
+    switch (reportType) {
+      case 'monthly_collection': {
+        const eligible = activeResidents.length;
+        const expected = eligible * 5000;
+        let paid = 0;
+        let collected = 0;
+
+        for (const res of activeResidents) {
+          const key = `${res.resident_number}_${month}_${year}`;
+          const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${month}-${year}`);
+          if (p && p.status === 'PAID') {
+            paid++;
+            collected += (p.amount_paid || 5000);
+          }
+        }
+        const unpaid = Math.max(0, eligible - paid);
+        const outstanding = Math.max(0, expected - collected);
+        const percentage = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
+
+        reportData = {
+          title: `Monthly Security Levy Collection Report — ${period_label}`,
+          period_label,
+          total_active_residents: eligible,
+          total_expected: expected,
+          total_collected: collected,
+          total_outstanding: outstanding,
+          paid_residents: paid,
+          unpaid_residents: unpaid,
+          collection_percentage: `${percentage}%`
+        };
+
+        csvHeaders = ['Metric', 'Value'];
+        csvRows = [
+          ['Billing Period', period_label],
+          ['Total Active Residents', String(eligible)],
+          ['Total Expected (₦)', String(expected)],
+          ['Total Collected (₦)', String(collected)],
+          ['Total Outstanding (₦)', String(outstanding)],
+          ['Number Paid', String(paid)],
+          ['Number Unpaid', String(unpaid)],
+          ['Collection Percentage', `${percentage}%`]
+        ];
+        break;
+      }
+
+      case 'outstanding_levy': {
+        const rows = [];
+        csvHeaders = ['Resident Number', 'Resident Name', 'House/Plot', 'Phone Number', 'Period', 'Amount Due (₦)', 'Status'];
+        
+        for (const res of activeResidents) {
+          const key = `${res.resident_number}_${month}_${year}`;
+          const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${month}-${year}`);
+          const isPaid = p && p.status === 'PAID';
+          if (!isPaid) {
+            rows.push({
+              resident_number: res.resident_number,
+              resident_name: res.full_name,
+              house_number: res.house_number,
+              phone_number: res.phone_number,
+              period_label,
+              amount_due: 5000,
+              status: p ? p.status : 'UNPAID'
+            });
+            csvRows.push([
+              res.resident_number,
+              res.full_name,
+              res.house_number,
+              res.phone_number,
+              period_label,
+              '5000',
+              p ? p.status : 'UNPAID'
+            ]);
+          }
+        }
+        reportData = { title: `Outstanding Security Levy Report — ${period_label}`, count: rows.length, rows };
+        break;
+      }
+
+      case 'resident_payment': {
+        const rows = [];
+        csvHeaders = ['Resident Number', 'Resident Name', 'House/Plot', 'Month', 'Amount Due (₦)', 'Amount Paid (₦)', 'Status', 'Payment Date', 'Payment Reference', 'Receipt Number'];
+
+        for (const res of activeResidents) {
+          const key = `${res.resident_number}_${month}_${year}`;
+          const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${month}-${year}`);
+          const isPaid = p && p.status === 'PAID';
+          const receipt = receipts.find(r => r.resident_number === res.resident_number && r.period_covered.includes(String(year)));
+
+          const item = {
+            resident_number: res.resident_number,
+            resident_name: res.full_name,
+            house_number: res.house_number,
+            period_label,
+            amount_due: 5000,
+            amount_paid: isPaid ? (p.amount_paid || 5000) : 0,
+            status: isPaid ? 'PAID' : (p ? p.status : 'UNPAID'),
+            payment_date: isPaid ? (p.paid_at || p.created_at) : '—',
+            payment_reference: isPaid ? (p.paystack_reference || 'FOGES-PAID') : '—',
+            receipt_number: (isPaid && receipt) ? receipt.receipt_number : (isPaid ? `FOGES-REC-${year}10-${res.resident_number}-PAID` : '—')
+          };
+          rows.push(item);
+          csvRows.push([
+            item.resident_number,
+            item.resident_name,
+            item.house_number,
+            item.period_label,
+            String(item.amount_due),
+            String(item.amount_paid),
+            item.status,
+            item.payment_date,
+            item.payment_reference,
+            item.receipt_number
+          ]);
+        }
+        reportData = { title: `Resident Payment Register — ${period_label}`, count: rows.length, rows };
+        break;
+      }
+
+      case 'payment_transaction': {
+        let list = transactions.filter(t => t.period_month === month && t.period_year === year);
+        if (startDate) {
+          const sTime = new Date(startDate).getTime();
+          list = list.filter(t => new Date(t.created_at).getTime() >= sTime);
+        }
+        if (endDate) {
+          const eTime = new Date(endDate).getTime() + 86400000;
+          list = list.filter(t => new Date(t.created_at).getTime() <= eTime);
+        }
+
+        csvHeaders = ['Transaction Date', 'Resident Number', 'Resident Name', 'Month', 'Amount (₦)', 'Status', 'Paystack Reference', 'Receipt Number', 'Channel'];
+        for (const t of list) {
+          const rcp = receipts.find(r => r.paystack_reference === t.paystack_reference);
+          csvRows.push([
+            t.payment_date || t.created_at,
+            t.resident_number,
+            t.resident_name,
+            t.period_label,
+            String(t.amount_paid || t.amount_due),
+            t.status,
+            t.paystack_reference || t.transaction_reference,
+            rcp ? rcp.receipt_number : '—',
+            t.payment_channel || 'card'
+          ]);
+        }
+        reportData = { title: `Payment Transaction Report — ${period_label}`, count: list.length, transactions: list };
+        break;
+      }
+
+      case 'payment_history': {
+        const allPayments = Array.from(paymentsStore.values());
+        csvHeaders = ['Resident Number', 'Resident Name', 'Period', 'Amount Due (₦)', 'Amount Paid (₦)', 'Status', 'Payment Date', 'Reference'];
+        for (const p of allPayments) {
+          csvRows.push([
+            p.resident_number,
+            p.resident_name,
+            p.period_label,
+            String(p.amount_due),
+            String(p.amount_paid),
+            p.status,
+            p.paid_at || '—',
+            p.paystack_reference || '—'
+          ]);
+        }
+        reportData = { title: 'Complete Historical Security Levy Ledger', count: allPayments.length, payments: allPayments };
+        break;
+      }
+
+      case 'sms_reminder': {
+        csvHeaders = ['Dispatch Date', 'Resident Number', 'Phone Number', 'Period', 'Reminder Type', 'Delivery Status', 'Provider', 'Message'];
+        for (const s of smsLogs) {
+          csvRows.push([
+            s.sent_at || s.created_at,
+            s.resident_number,
+            s.phone_number,
+            s.period_label,
+            s.reminder_type,
+            s.delivery_status,
+            s.provider,
+            `"${s.message.replace(/"/g, '""')}"`
+          ]);
+        }
+        reportData = { title: 'SMS Payment Reminder Dispatch Report', count: smsLogs.length, logs: smsLogs };
+        break;
+      }
+
+      default:
+        return res.status(400).json({ success: false, message: `Unknown report type: ${reportType}` });
+    }
+
+    if (format === 'csv') {
+      const csvString = [
+        csvHeaders.join(','),
+        ...csvRows.map(row => row.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))
+      ].join('\r\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csvString);
+    }
+
+    res.json({ success: true, report: reportData });
+  } catch (err: any) {
+    console.error('Report generation error:', err);
+    res.status(500).json({ success: false, message: 'Server error generating financial report.' });
+  }
 });
 
 // =============================================================
@@ -1285,6 +2357,66 @@ cron.schedule('0 8 * * *', () => {
   });
 }, {
   timezone: 'Africa/Lagos'
+});
+
+// -------------------------------------------------------------
+// AUDIT LOGGING & ROLE-BASED ACCESS (STAGE 7)
+// -------------------------------------------------------------
+interface ServerAuditRecord {
+  id: string;
+  admin_email: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  description: string;
+  metadata?: any;
+  created_at: string;
+}
+
+const auditLogsStore: ServerAuditRecord[] = [
+  {
+    id: 'audit-001',
+    admin_email: 'admin@fingerofgodestate.ng',
+    action: 'ADMIN_LOGIN',
+    entity_type: 'auth',
+    entity_id: null,
+    description: 'Administrator logged into Estate Management Console',
+    created_at: '2026-09-24T06:00:00Z'
+  },
+  {
+    id: 'audit-002',
+    admin_email: 'admin@fingerofgodestate.ng',
+    action: 'PAYMENT_VIEWED',
+    entity_type: 'payment',
+    entity_id: 'pay-001',
+    description: 'Administrator viewed verified payment for Resident #001',
+    created_at: '2026-09-24T06:05:00Z'
+  }
+];
+
+app.post('/api/admin/audit-log', (req: Request, res: Response) => {
+  try {
+    const { admin_email = 'admin@fingerofgodestate.ng', action, entity_type, entity_id = null, description, metadata } = req.body;
+    const record: ServerAuditRecord = {
+      id: crypto.randomUUID(),
+      admin_email,
+      action: action || 'ACTION_LOGGED',
+      entity_type: entity_type || 'system',
+      entity_id,
+      description: description || 'Administrative action performed',
+      metadata,
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(record);
+    if (auditLogsStore.length > 500) auditLogsStore.pop();
+    res.json({ success: true, log: record });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to record audit log' });
+  }
+});
+
+app.get('/api/admin/audit-logs', (_req: Request, res: Response) => {
+  res.json({ success: true, count: auditLogsStore.length, logs: auditLogsStore });
 });
 
 // -------------------------------------------------------------

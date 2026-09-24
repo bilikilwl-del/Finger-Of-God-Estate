@@ -13,6 +13,7 @@ import {
 import { 
   dbService, 
   authService, 
+  residentSessionService,
   isSupabaseConfigured 
 } from './lib/supabase';
 
@@ -27,7 +28,14 @@ import { EstateSettingsView } from './components/settings/EstateSettingsView';
 import { ActivityLogsView } from './components/activity/ActivityLogsView';
 import { PaymentsView } from './components/payments/PaymentsView';
 import { OutstandingView } from './components/payments/OutstandingView';
+import { PaidResidentsView } from './components/admin/PaidResidentsView';
+import { UnpaidResidentsView } from './components/admin/UnpaidResidentsView';
+import { OutstandingPaymentsView } from './components/admin/OutstandingPaymentsView';
+import { FinancialReportsView } from './components/admin/FinancialReportsView';
 import { SMSDashboardView } from './components/sms/SMSDashboardView';
+import { ResidentDashboardView } from './components/resident-portal/ResidentDashboardView';
+import { ResidentLoginModal } from './components/resident-portal/ResidentLoginModal';
+import { ReceiptVerificationView } from './components/receipts/ReceiptVerificationView';
 import { StagePlaceholderView } from './components/placeholders/StagePlaceholderView';
 import { SupabaseSetupModal } from './components/setup/SupabaseSetupModal';
 import { AuthModal } from './components/auth/AuthModal';
@@ -61,6 +69,11 @@ export default function App() {
 
   // Admin User State
   const [adminUser, setAdminUser] = useState<any>(null);
+
+  // Resident Portal State (Stage 6)
+  const [currentResident, setCurrentResident] = useState<Resident | null>(null);
+  const [isResidentLoginOpen, setIsResidentLoginOpen] = useState(false);
+  const [receiptToVerify, setReceiptToVerify] = useState<string>('');
 
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -99,6 +112,16 @@ export default function App() {
         setEstateSettings(loadedSettings);
         setResidents(loadedResidents);
         setActivityLogs(loadedLogs);
+
+        // Load saved resident session if exists
+        const savedRes = residentSessionService.getCurrentResident();
+        if (savedRes) {
+          setCurrentResident(savedRes);
+        } else if (loadedResidents.length > 0) {
+          // Pre-set first resident for instant test readiness
+          setCurrentResident(loadedResidents[0]);
+          residentSessionService.setCurrentResident(loadedResidents[0]);
+        }
       } catch (err) {
         console.warn('Notice initializing app data, falling back to local storage:', err);
       } finally {
@@ -127,6 +150,12 @@ export default function App() {
 
   const handleSelectTab = (tab: NavigationTab) => {
     setViewingResidentProfile(null);
+    if (tab === 'resident_portal') {
+      const active = currentResident || residentSessionService.getCurrentResident();
+      if (!active) {
+        setIsResidentLoginOpen(true);
+      }
+    }
     setCurrentTab(tab);
   };
 
@@ -207,6 +236,126 @@ export default function App() {
     const logs = await dbService.getActivityLogs();
     setActivityLogs(logs);
   };
+
+  if (currentTab === 'resident_portal') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        {currentResident ? (
+          <ResidentDashboardView
+            currentResident={currentResident}
+            onLogout={() => {
+              residentSessionService.logoutResident();
+              setCurrentResident(null);
+              showToast('Signed out of resident portal', 'info');
+              setCurrentTab('dashboard');
+            }}
+            onSwitchResident={() => setIsResidentLoginOpen(true)}
+            onNavigateToVerifyReceipt={(recNum) => {
+              if (recNum) setReceiptToVerify(recNum);
+              setCurrentTab('verify_receipt');
+            }}
+            onNavigateToAdmin={() => setCurrentTab('dashboard')}
+            estateSettings={estateSettings}
+          />
+        ) : (
+          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100">
+            <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-black text-slate-900 font-display">Resident Portal Sign In</h2>
+              <p className="text-xs text-slate-600">Please sign in with your Resident Number and Phone Number to access your security levy dashboard.</p>
+              <button
+                onClick={() => setIsResidentLoginOpen(true)}
+                className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs tracking-wider uppercase cursor-pointer"
+              >
+                Sign In to Resident Portal
+              </button>
+              <button
+                onClick={() => setCurrentTab('dashboard')}
+                className="text-xs text-slate-500 hover:underline block mx-auto cursor-pointer"
+              >
+                Back to Admin Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => {
+            setIsResidentLoginOpen(false);
+            if (!currentResident) setCurrentTab('dashboard');
+          }}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'verify_receipt') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <ReceiptVerificationView
+          initialReceiptNumber={receiptToVerify}
+          onNavigateToPortal={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+          onNavigateToAdmin={() => setCurrentTab('dashboard')}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            setCurrentTab('resident_portal');
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
@@ -313,8 +462,8 @@ export default function App() {
               />
             )}
 
-            {currentTab === 'outstanding' && (
-              <OutstandingView
+            {currentTab === 'paid_residents' && (
+              <PaidResidentsView
                 estateSettings={estateSettings}
                 onNavigateToResident={(resNum) => {
                   const target = residents.find(r => r.resident_number === resNum);
@@ -323,6 +472,38 @@ export default function App() {
                     setCurrentTab('residents');
                   }
                 }}
+              />
+            )}
+
+            {currentTab === 'unpaid_residents' && (
+              <UnpaidResidentsView
+                estateSettings={estateSettings}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
+              />
+            )}
+
+            {currentTab === 'outstanding' && (
+              <OutstandingPaymentsView
+                estateSettings={estateSettings}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
+              />
+            )}
+
+            {currentTab === 'reports' && (
+              <FinancialReportsView
+                estateSettings={estateSettings}
               />
             )}
 
@@ -340,7 +521,7 @@ export default function App() {
               <ActivityLogsView logs={activityLogs} />
             )}
 
-            {['reports', 'announcements', 'admins'].includes(currentTab) && (
+            {['announcements', 'admins'].includes(currentTab) && (
               <StagePlaceholderView
                 tab={currentTab}
                 estateSettings={estateSettings}

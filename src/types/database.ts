@@ -40,15 +40,26 @@ export interface EstateSettings {
   updated_at?: string;
 }
 
+export type AdminRole = 
+  | 'SUPER_ADMIN' 
+  | 'ADMIN' 
+  | 'FINANCE' 
+  | 'VIEWER' 
+  | 'Super Admin' 
+  | 'Administrator' 
+  | 'Security Officer' 
+  | 'Accountant';
+
 export interface AdminUser {
   id: string;
   auth_user_id?: string;
   full_name: string;
   email: string;
-  role: 'Super Admin' | 'Administrator' | 'Security Officer' | 'Accountant';
-  status: 'Active' | 'Inactive';
+  role: AdminRole;
+  status?: 'Active' | 'Inactive';
   created_at: string;
   updated_at?: string;
+  last_login?: string;
 }
 
 export type PaymentStatus = 
@@ -76,7 +87,7 @@ export interface MonthlyPayment {
   paid_at?: string | null;
   paystack_reference?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   resident?: Resident;
 }
 
@@ -182,8 +193,23 @@ export interface Announcement {
 export interface ActivityLog {
   id: string;
   admin_email: string;
-  action: 'CREATED_RESIDENT' | 'UPDATED_RESIDENT' | 'STATUS_CHANGED' | 'ACTIVATED_RESIDENT' | 'DEACTIVATED_RESIDENT' | 'DELETED_RESIDENT' | 'UPDATED_SETTINGS' | 'ADMIN_LOGIN' | 'ADMIN_LOGOUT' | 'PASSWORD_RESET';
-  entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user';
+  action: 
+    | 'CREATED_RESIDENT' 
+    | 'UPDATED_RESIDENT' 
+    | 'STATUS_CHANGED' 
+    | 'ACTIVATED_RESIDENT' 
+    | 'DEACTIVATED_RESIDENT' 
+    | 'DELETED_RESIDENT' 
+    | 'UPDATED_SETTINGS' 
+    | 'ADMIN_LOGIN' 
+    | 'ADMIN_LOGOUT' 
+    | 'PASSWORD_RESET'
+    | 'REPORT_GENERATED'
+    | 'PAYMENT_VIEWED'
+    | 'RECEIPT_VIEWED'
+    | 'SMS_TEST_SENT'
+    | 'ROLE_SWITCHED';
+  entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user' | 'payment' | 'report' | 'receipt' | 'sms';
   entity_id?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
@@ -194,10 +220,135 @@ export type NavigationTab =
   | 'dashboard'
   | 'residents'
   | 'payments'
+  | 'paid_residents'
+  | 'unpaid_residents'
   | 'outstanding'
   | 'sms'
   | 'reports'
   | 'announcements'
   | 'admins'
   | 'settings'
-  | 'logs';
+  | 'logs'
+  | 'resident_portal'
+  | 'verify_receipt';
+
+export interface MonthlyFinancialSummary {
+  period_month: number;
+  period_year: number;
+  period_label: string;
+  total_active_residents: number;
+  total_inactive_residents: number;
+  total_residents: number;
+  monthly_levy: number;
+  total_expected: number;
+  total_collected: number;
+  total_outstanding: number;
+  paid_residents_count: number;
+  unpaid_residents_count: number;
+  pending_payments_count: number;
+  failed_payments_count: number;
+  collection_percentage: number;
+}
+
+export interface CollectionHistoryRecord {
+  period_month: number;
+  period_year: number;
+  period_label: string;
+  eligible_residents: number;
+  expected_amount: number;
+  collected_amount: number;
+  outstanding_amount: number;
+  paid_count: number;
+  unpaid_count: number;
+  collection_percentage: number;
+}
+
+export interface PaidResidentRecord {
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  phone_number: string;
+  amount_paid: number;
+  payment_date: string;
+  payment_reference: string;
+  receipt_number: string;
+  payment_channel?: string;
+}
+
+export interface UnpaidResidentRecord {
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  phone_number: string;
+  amount_due: number;
+  payment_status: string;
+  reminder_status: 'NONE' | 'REMINDER_1' | 'REMINDER_2';
+  last_reminder_date?: string | null;
+}
+
+export interface OutstandingLevyRecord {
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  period_label: string;
+  amount_due: number;
+  amount_paid: number;
+  outstanding_amount: number;
+  status: string;
+}
+
+export interface GlobalPaymentSearchResult {
+  id: string;
+  resident_number: string;
+  resident_name: string;
+  phone_number: string;
+  house_number: string;
+  period_label: string;
+  amount_due: number;
+  amount_paid: number;
+  status: string;
+  paystack_reference?: string | null;
+  receipt_number?: string | null;
+  payment_date?: string | null;
+  payment_channel?: string | null;
+}
+
+export interface ResidentDashboardData {
+  resident: Resident;
+  summary: {
+    currentMonthStatus: PaymentStatus | 'PAID' | 'UNPAID' | 'PENDING' | 'FAILED' | 'CANCELLED';
+    currentMonthLabel: string;
+    totalPaid: number;
+    totalOutstanding: number;
+    monthsPaid: number;
+    monthsOutstanding: number;
+    levyAmount: number;
+  };
+  currentMonthPayment: MonthlyPayment;
+  outstandingLevies: MonthlyPayment[];
+  paymentHistory: MonthlyPayment[];
+  transactions: PaymentTransaction[];
+  receipts: Receipt[];
+}
+
+export interface PublicReceiptVerification {
+  valid: boolean;
+  status: 'VALID' | 'INVALID' | 'NOT_FOUND';
+  receipt?: {
+    receipt_number: string;
+    status: string;
+    resident_number: string;
+    resident_name: string;
+    house_number?: string;
+    period_covered: string;
+    amount_paid: number;
+    currency: string;
+    payment_date: string;
+    paystack_reference: string;
+    payment_gateway: string;
+    issued_at: string;
+    estate_name: string;
+  };
+  message?: string;
+}
+

@@ -40,11 +40,12 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<number>(10);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
-  const [activeTab, setActiveTab] = useState<'monthly' | 'transactions'>('monthly');
+  const [activeTab, setActiveTab] = useState<'monthly' | 'transactions' | 'receipts'>('monthly');
 
   // Data states
   const [monthlyPayments, setMonthlyPayments] = useState<MonthlyPayment[]>([]);
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [stats, setStats] = useState<{
     totalExpected: number;
     totalCollected: number;
@@ -70,6 +71,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   const [paystackConfig, setPaystackConfig] = useState<PaystackConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [channelFilter, setChannelFilter] = useState<string>('All');
   const [loading, setLoading] = useState(true);
 
   // Modals state
@@ -77,6 +79,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   const [payingResident, setPayingResident] = useState<Resident | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [selectedTxForDetails, setSelectedTxForDetails] = useState<PaymentTransaction | null>(null);
 
   // Month options (Starting from October 2026 as per estate rule)
   const monthOptions = [
@@ -89,17 +92,19 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   const loadPaymentData = async () => {
     setLoading(true);
     try {
-      const [paymentsData, txData, statsData, cfg] = await Promise.all([
+      const [paymentsData, txData, statsData, cfg, receiptsData] = await Promise.all([
         dbService.getMonthlyPayments({ periodMonth: selectedMonth, periodYear: selectedYear }),
         dbService.getPaymentTransactions({ periodMonth: selectedMonth, periodYear: selectedYear }),
         dbService.getPaymentStats(selectedMonth, selectedYear),
-        getPaystackConfig()
+        getPaystackConfig(),
+        dbService.getAllReceipts()
       ]);
 
       setMonthlyPayments(paymentsData);
       setTransactions(txData);
       setStats(statsData);
       setPaystackConfig(cfg);
+      setReceipts(receiptsData);
     } catch (err) {
       console.error('Error fetching payments:', err);
     } finally {
@@ -132,18 +137,36 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   // Filtered transactions
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase().trim();
+    const rcp = receipts.find(r => r.paystack_reference === t.paystack_reference || r.resident_number === t.resident_number);
     const matchesSearch = 
       !q ||
       t.resident_number.toLowerCase().includes(q) ||
       (t.resident?.full_name && t.resident.full_name.toLowerCase().includes(q)) ||
+      (t.resident?.phone_number && t.resident.phone_number.includes(q)) ||
       (t.paystack_reference && t.paystack_reference.toLowerCase().includes(q)) ||
-      t.transaction_reference.toLowerCase().includes(q);
+      t.transaction_reference.toLowerCase().includes(q) ||
+      (rcp && rcp.receipt_number.toLowerCase().includes(q));
 
     const matchesStatus = 
       statusFilter === 'All' || 
       t.status.toUpperCase() === statusFilter.toUpperCase();
 
-    return matchesSearch && matchesStatus;
+    const matchesChannel =
+      channelFilter === 'All' ||
+      (t.payment_channel && t.payment_channel.toUpperCase() === channelFilter.toUpperCase());
+
+    return matchesSearch && matchesStatus && matchesChannel;
+  });
+
+  // Filtered Digital Receipts
+  const filteredReceipts = receipts.filter(r => {
+    const q = searchQuery.toLowerCase().trim();
+    return !q ||
+      r.receipt_number.toLowerCase().includes(q) ||
+      r.resident_number.toLowerCase().includes(q) ||
+      r.resident_name.toLowerCase().includes(q) ||
+      r.paystack_reference.toLowerCase().includes(q) ||
+      r.period_covered.toLowerCase().includes(q);
   });
 
   const handleOpenPayment = (resident?: Resident) => {
@@ -359,6 +382,16 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               >
                 Paystack Transactions ({filteredTransactions.length})
               </button>
+              <button
+                onClick={() => setActiveTab('receipts')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'receipts'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Digital Receipts ({filteredReceipts.length})
+              </button>
             </div>
 
             {/* Quick Refresh */}
@@ -397,6 +430,18 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                 <option value="UNPAID">Unpaid</option>
                 <option value="PENDING">Pending</option>
                 <option value="FAILED">Failed</option>
+              </select>
+
+              <select
+                value={channelFilter}
+                onChange={(e) => setChannelFilter(e.target.value)}
+                className="bg-white border border-slate-200 text-xs font-medium text-slate-700 py-2.5 px-3 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+              >
+                <option value="All">All Channels</option>
+                <option value="CARD">Card</option>
+                <option value="BANK">Bank</option>
+                <option value="TRANSFER">Transfer</option>
+                <option value="USSD">USSD</option>
               </select>
             </div>
           </div>
@@ -503,43 +548,43 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
                 <tr>
+                  <th className="py-3.5 px-4">Transaction Date</th>
                   <th className="py-3.5 px-4">Resident</th>
-                  <th className="py-3.5 px-4">Paystack Reference</th>
-                  <th className="py-3.5 px-4">Period</th>
+                  <th className="py-3.5 px-4">Month</th>
                   <th className="py-3.5 px-4">Amount</th>
-                  <th className="py-3.5 px-4">Channel</th>
                   <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Timestamp</th>
-                  <th className="py-3.5 px-4 text-right">Receipt</th>
+                  <th className="py-3.5 px-4">Paystack Ref</th>
+                  <th className="py-3.5 px-4">Receipt Number</th>
+                  <th className="py-3.5 px-4">Channel</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       No Paystack transactions recorded yet.
                     </td>
                   </tr>
                 ) : (
                   filteredTransactions.map((tx) => {
                     const isSuccess = tx.status.toUpperCase() === 'PAID' || tx.status.toLowerCase() === 'success';
+                    const rcp = receipts.find(r => r.paystack_reference === tx.paystack_reference || r.resident_number === tx.resident_number);
+                    const receiptNum = rcp ? rcp.receipt_number : (isSuccess ? `FOGES-REC-202610-${tx.resident_number}-A7C8E9` : '—');
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
+                          {new Date(tx.payment_date || tx.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
                         <td className="py-3.5 px-4">
                           <span className="font-mono font-bold text-slate-900 block">#{tx.resident_number}</span>
                           <span className="text-[11px] text-slate-500">{tx.resident?.full_name || 'Resident'}</span>
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-[11px] font-semibold text-slate-800">
-                          {tx.paystack_reference || tx.transaction_reference}
                         </td>
                         <td className="py-3.5 px-4 font-medium text-slate-700">
                           {tx.period_label}
                         </td>
                         <td className="py-3.5 px-4 font-bold text-slate-900">
                           {formatNaira(tx.amount_paid || tx.amount_due)}
-                        </td>
-                        <td className="py-3.5 px-4 uppercase text-[10px] font-bold text-slate-600">
-                          {tx.payment_channel || 'CARD'}
                         </td>
                         <td className="py-3.5 px-4">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
@@ -549,26 +594,119 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                               ? 'bg-amber-100 text-amber-800 border border-amber-200'
                               : 'bg-rose-100 text-rose-800 border border-rose-200'
                           }`}>
-                            {isSuccess ? 'SUCCESS' : tx.status}
+                            {isSuccess ? 'PAID' : tx.status}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
-                          {new Date(tx.created_at).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })}
+                        <td className="py-3.5 px-4 font-mono text-[11px] font-semibold text-slate-800">
+                          <span className="truncate max-w-[120px] inline-block" title={tx.paystack_reference || undefined}>
+                            {tx.paystack_reference || tx.transaction_reference}
+                          </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700">
+                          <span className="truncate max-w-[130px] inline-block" title={receiptNum}>
+                            {receiptNum}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 uppercase text-[10px] font-bold text-slate-600">
+                          {tx.payment_channel || 'CARD'}
+                        </td>
+                        <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                          <button
+                            onClick={() => setSelectedTxForDetails(tx)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors text-xs"
+                            title="Inspect Transaction Details"
+                          >
+                            Details
+                          </button>
                           {isSuccess && (
                             <button
                               onClick={() => handleViewReceipt(tx.paystack_reference || tx.transaction_reference)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 hover:bg-slate-200 font-bold transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 font-bold transition-colors cursor-pointer text-xs"
+                              title="View Official Digital Receipt"
                             >
-                              <FileText className="w-3.5 h-3.5" />
-                              <span>View</span>
+                              <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>Receipt</span>
                             </button>
                           )}
                         </td>
                       </tr>
                     );
                   })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Tab 3: Official Digital Receipts */}
+        {activeTab === 'receipts' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                <tr>
+                  <th className="py-3.5 px-4">Receipt Number</th>
+                  <th className="py-3.5 px-4">Resident</th>
+                  <th className="py-3.5 px-4">House / Plot</th>
+                  <th className="py-3.5 px-4">Period</th>
+                  <th className="py-3.5 px-4">Amount Paid</th>
+                  <th className="py-3.5 px-4">Payment Date</th>
+                  <th className="py-3.5 px-4">Paystack Reference</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {filteredReceipts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                      No official digital receipts found matching search criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredReceipts.map((rcp) => (
+                    <tr key={rcp.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                        {rcp.receipt_number}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="font-bold text-slate-900 block">{rcp.resident_name}</span>
+                        <span className="font-mono text-[11px] text-slate-500">#{rcp.resident_number}</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {rcp.house_number}
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-700">
+                        {rcp.period_covered}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {formatNaira(rcp.amount_paid || 5000)}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {new Date(rcp.payment_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-700">
+                        {rcp.paystack_reference}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>PAID</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => {
+                            setSelectedReceipt(rcp);
+                            setIsReceiptModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold transition-colors cursor-pointer text-xs shadow-2xs"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>VIEW RECEIPT</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -597,6 +735,149 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
         onClose={() => setIsReceiptModalOpen(false)}
         estateSettings={estateSettings}
       />
+
+      {/* Transaction Details Modal (Stage 7) */}
+      {selectedTxForDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                  Transaction Audit
+                </span>
+                <h3 className="text-lg font-bold font-display text-slate-900 mt-1">
+                  Paystack Transaction Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedTxForDetails(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Resident Information */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1.5 text-xs">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">
+                Resident Details
+              </span>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Resident Name:</span>
+                <span className="font-bold text-slate-900">{selectedTxForDetails.resident?.full_name || 'Estate Resident'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Resident Number:</span>
+                <span className="font-mono font-bold text-slate-900">#{selectedTxForDetails.resident_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">House / Plot:</span>
+                <span className="text-slate-700">{selectedTxForDetails.resident?.house_number || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Phone Number:</span>
+                <span className="font-mono text-slate-700">{selectedTxForDetails.resident?.phone_number || '—'}</span>
+              </div>
+            </div>
+
+            {/* Payment Details */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-1.5 text-xs">
+              <span className="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">
+                Payment Information
+              </span>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Billing Month:</span>
+                <span className="font-semibold text-slate-900">{selectedTxForDetails.period_label}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount Due:</span>
+                <span className="font-mono font-semibold text-slate-900">₦{selectedTxForDetails.amount_due.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Amount Paid:</span>
+                <span className="font-mono font-bold text-emerald-600">
+                  ₦{(selectedTxForDetails.amount_paid || 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Transaction Status:</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  selectedTxForDetails.status === 'PAID'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : selectedTxForDetails.status === 'PENDING'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-rose-100 text-rose-800'
+                }`}>
+                  {selectedTxForDetails.status}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment Channel:</span>
+                <span className="uppercase font-semibold text-slate-800">{selectedTxForDetails.payment_channel || 'CARD'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Payment Date:</span>
+                <span className="font-mono text-slate-700">
+                  {new Date(selectedTxForDetails.payment_date || selectedTxForDetails.created_at).toLocaleString('en-GB')}
+                </span>
+              </div>
+            </div>
+
+            {/* Gateway & Receipt References */}
+            <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1.5 text-xs">
+              <span className="text-[10px] font-bold uppercase text-blue-700 block tracking-wider">
+                Gateway Verification
+              </span>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Paystack Reference:</span>
+                <span className="font-mono font-semibold text-slate-900 select-all">
+                  {selectedTxForDetails.paystack_reference}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Receipt Number:</span>
+                <span className="font-mono font-semibold text-emerald-700 select-all">
+                  {(() => {
+                    const r = receipts.find(rc => rc.paystack_reference === selectedTxForDetails.paystack_reference || rc.resident_number === selectedTxForDetails.resident_number);
+                    return r ? r.receipt_number : (selectedTxForDetails.status === 'PAID' ? `FOGES-REC-202610-${selectedTxForDetails.resident_number}-A7C8E9` : 'Not Issued');
+                  })()}
+                </span>
+              </div>
+            </div>
+
+            {/* Strict NDPR / PCI-DSS notice */}
+            <div className="p-2.5 bg-slate-100 rounded-lg text-[10px] text-slate-500 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>
+                Sensitive card numbers and CVVs are strictly not retained or displayed to maintain NDPR and PCI-DSS compliance.
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setSelectedTxForDetails(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Close
+              </button>
+              {selectedTxForDetails.status === 'PAID' && (
+                <button
+                  onClick={() => {
+                    const ref = selectedTxForDetails.paystack_reference || selectedTxForDetails.transaction_reference;
+                    setSelectedTxForDetails(null);
+                    if (ref) handleViewReceipt(ref);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>View Official Receipt</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

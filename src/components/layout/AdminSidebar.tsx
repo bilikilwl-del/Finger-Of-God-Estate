@@ -14,7 +14,9 @@ import {
   LogOut,
   Building2,
   CheckCircle2,
-  X
+  X,
+  UserCheck,
+  FileCheck
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -44,15 +46,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   mobileOpen,
   onCloseMobile
 }) => {
-  const navItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }>; badge?: string | number; stage?: number }[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'residents', label: 'Residents', icon: Users, badge: residentCount },
-    { id: 'payments', label: 'Payments', icon: CreditCard, stage: 2 },
-    { id: 'outstanding', label: 'Outstanding Payments', icon: AlertCircle, stage: 2 },
-    { id: 'sms', label: 'SMS Reminders', icon: MessageSquare, stage: 3 },
-    { id: 'reports', label: 'Reports', icon: FileText, stage: 3 },
-    { id: 'announcements', label: 'Announcements', icon: Bell, stage: 3 },
-    { id: 'admins', label: 'Admin Users', icon: ShieldCheck, stage: 3 },
+  const mainNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }>; badge?: string | number; tag?: string }[] = [
+    { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+    { id: 'residents', label: 'Resident Directory', icon: Users, badge: residentCount },
+    { id: 'paid_residents', label: 'Paid Residents', icon: CheckCircle2 },
+    { id: 'unpaid_residents', label: 'Unpaid Residents', icon: AlertCircle },
+    { id: 'outstanding', label: 'Outstanding Levies', icon: AlertCircle },
+    { id: 'payments', label: 'Paystack Transactions', icon: CreditCard, tag: 'Gateway' },
+    { id: 'reports', label: 'Financial Reports', icon: FileText, tag: 'Export' },
+    { id: 'sms', label: 'SMS Reminders', icon: MessageSquare, tag: 'Auto SMS' }
+  ];
+
+  const systemNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'settings', label: 'Estate Settings', icon: Settings },
     { id: 'logs', label: 'Activity Logs', icon: History }
   ];
@@ -100,10 +105,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         {/* Navigation List */}
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Core Modules
+            Estate Management
           </div>
 
-          {navItems.slice(0, 5).map((item) => {
+          {mainNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
@@ -124,13 +129,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
-                {item.id === 'payments' ? (
+                {item.tag ? (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Paystack
-                  </span>
-                ) : item.id === 'sms' ? (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                    Auto SMS
+                    {item.tag}
                   </span>
                 ) : item.badge !== undefined ? (
                   <span className={`text-xs font-mono font-medium px-2 py-0.5 rounded-md ${isActive ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300'}`}>
@@ -141,44 +142,59 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             );
           })}
 
-          <div className="pt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-            <span>Upcoming Stages</span>
-            <span className="text-[10px] text-slate-400 font-normal">Future</span>
+          {/* Stage 6: Resident & Public Portals */}
+          <div className="pt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
+            <span>Resident & Public</span>
+            <span className="text-[10px] text-emerald-400 font-mono px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/60">Stage 6</span>
           </div>
 
-          {navItems.slice(5, 8).map((item) => {
-            const Icon = item.icon;
-            const isActive = currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  onSelectTab(item.id);
-                  onCloseMobile();
-                }}
-                className={`
-                  w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer
-                  ${isActive 
-                    ? 'bg-slate-800 text-white border border-slate-700' 
-                    : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'}
-                `}
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className="w-4 h-4 shrink-0 text-slate-400" />
-                  <span>{item.label}</span>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 font-mono border border-slate-700/50">
-                  Stage {item.stage || 5}
-                </span>
-              </button>
-            );
-          })}
+          <button
+            onClick={() => {
+              onSelectTab('resident_portal');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'resident_portal'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-emerald-300 hover:bg-slate-800/80 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <UserCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>Resident Portal</span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Live
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              onSelectTab('verify_receipt');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'verify_receipt'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <FileCheck className="w-4 h-4 shrink-0 text-slate-400" />
+              <span>Verify Receipt</span>
+            </div>
+            <span className="text-[10px] font-mono text-slate-400">
+              Public
+            </span>
+          </button>
 
           <div className="pt-4 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             System & Logs
           </div>
 
-          {navItems.slice(8).map((item) => {
+          {systemNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
@@ -189,7 +205,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   onCloseMobile();
                 }}
                 className={`
-                  w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
                   ${isActive 
                     ? 'bg-emerald-600 text-white shadow-sm' 
                     : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'}
@@ -239,9 +255,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {adminUser ? (
             <div className="flex items-center justify-between p-2 rounded-lg bg-slate-800/40">
               <div className="min-w-0 pr-2">
-                <p className="text-xs font-semibold text-white truncate">
-                  {adminUser.full_name || 'Administrator'}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-white truncate">
+                    {adminUser.full_name || 'Administrator'}
+                  </p>
+                  <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {adminUser.role || 'SUPER_ADMIN'}
+                  </span>
+                </div>
                 <p className="text-[11px] text-slate-400 truncate">
                   {adminUser.email}
                 </p>
@@ -249,7 +270,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <button
                 onClick={onLogout}
                 title="Sign out"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors shrink-0"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -257,7 +278,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           ) : (
             <button
               onClick={onOpenAuth}
-              className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Admin Sign In</span>
             </button>

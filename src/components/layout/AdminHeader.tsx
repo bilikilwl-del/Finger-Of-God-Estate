@@ -29,14 +29,16 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   }, []);
   const getBreadcrumbTitle = (tab: NavigationTab) => {
     switch (tab) {
-      case 'dashboard': return 'Dashboard Overview';
+      case 'dashboard': return 'Financial Management & Admin Overview';
       case 'residents': return 'Resident Management Directory';
-      case 'payments': return 'Levy Payments Management (Stage 3)';
-      case 'outstanding': return 'Outstanding Balances & Arrears (Stage 3)';
-      case 'sms': return 'SMS Reminders & Broadcasts (Stage 3)';
-      case 'reports': return 'Financial & Security Reports (Stage 3)';
-      case 'announcements': return 'Estate Announcements (Stage 3)';
-      case 'admins': return 'Admin Users & Permissions (Stage 3)';
+      case 'paid_residents': return 'Paid Residents Directory';
+      case 'unpaid_residents': return 'Unpaid Residents & Arrears';
+      case 'payments': return 'Paystack Payment Transactions';
+      case 'outstanding': return 'Outstanding Levies & Balances';
+      case 'reports': return 'Financial Reports & Collection Summaries';
+      case 'sms': return 'SMS Reminders & Broadcasts';
+      case 'announcements': return 'Estate Announcements';
+      case 'admins': return 'Admin Users & Permissions';
       case 'settings': return 'Estate & Security Settings';
       case 'logs': return 'System Activity Audit Trail';
       default: return 'Estate Security Console';
