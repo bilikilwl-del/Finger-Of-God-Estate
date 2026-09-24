@@ -7,6 +7,8 @@ export type ResidentStatus = 'Active' | 'Inactive';
 
 export interface Resident {
   id: string;
+  auth_user_id?: string | null; // Linked Supabase Auth User ID
+  account_activated?: boolean; // Indicates if online account has been activated
   resident_number: string; // e.g. "001", "002", "010", "100", "300", "500", etc.
   full_name: string;
   phone_number: string;
@@ -258,6 +260,7 @@ export type NavigationTab =
   | 'home'
   | 'public_announcements'
   | 'announcement_detail'
+  | 'login'
   | 'dashboard'
   | 'residents'
   | 'payments'

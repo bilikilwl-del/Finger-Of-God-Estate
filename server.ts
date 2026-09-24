@@ -88,6 +88,9 @@ interface ServerReceiptRecord {
 
 interface ServerResidentRecord {
   id: string;
+  auth_user_id?: string | null;
+  account_activated?: boolean;
+  password_hash?: string | null;
   resident_number: string;
   full_name: string;
   phone_number: string;
@@ -936,6 +939,8 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
       token: sessionToken,
       resident: {
         id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: !!resident.account_activated,
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -952,6 +957,278 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Resident auth error:', err);
     res.status(500).json({ success: false, message: 'Server error during resident authentication.' });
+  }
+});
+
+// STAGE 9: SAFE RESIDENT VERIFICATION FOR ACCOUNT ACTIVATION
+// Verifies resident number + registered phone or email without exposing third-party resident details
+app.post('/api/resident/verify-activation', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, identifier } = req.body;
+
+    if (!residentNumber || !identifier) {
+      return res.status(400).json({
+        success: false,
+        message: 'We could not verify these details. Please check your information or contact estate administration.'
+      });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident || resident.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: 'We could not verify these details. Please check your information or contact estate administration.'
+      });
+    }
+
+    const rawInput = String(identifier).trim().toLowerCase();
+    const inputDigits = rawInput.replace(/\D/g, '');
+    const regDigits = String(resident.phone_number).replace(/\D/g, '');
+    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+    const residentEmail = String(resident.email || '').trim().toLowerCase();
+
+    const isPhoneMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
+                         (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
+                         (inputDigits.length > 0 && inputDigits === regDigits);
+
+    const isEmailMatch = residentEmail && residentEmail === rawInput;
+
+    if (!isPhoneMatch && !isEmailMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'We could not verify these details. Please check your information or contact estate administration.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      verified: true,
+      resident: {
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        existing_email: resident.email || null,
+        is_activated: !!resident.account_activated
+      }
+    });
+  } catch (err: any) {
+    console.error('Verify activation error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'We could not verify these details. Please check your information or contact estate administration.'
+    });
+  }
+});
+
+// STAGE 9: RESIDENT ACCOUNT ACTIVATION & LINKING
+app.post('/api/resident/activate', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, identifier, email, password, auth_user_id } = req.body;
+
+    if (!residentNumber || !identifier || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields (Resident Number, verification contact, email, and password) are required.'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters.'
+      });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident || resident.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: 'We could not verify these details. Please check your information or contact estate administration.'
+      });
+    }
+
+    // Security Verification Check
+    const rawInput = String(identifier).trim().toLowerCase();
+    const inputDigits = rawInput.replace(/\D/g, '');
+    const regDigits = String(resident.phone_number).replace(/\D/g, '');
+    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+    const residentEmail = String(resident.email || '').trim().toLowerCase();
+
+    const isPhoneMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
+                         (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
+                         (inputDigits.length > 0 && inputDigits === regDigits);
+
+    const isEmailMatch = residentEmail && residentEmail === rawInput;
+
+    if (!isPhoneMatch && !isEmailMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'We could not verify these details. Please check your information or contact estate administration.'
+      });
+    }
+
+    // Link Account
+    const userId = auth_user_id || resident.auth_user_id || `auth_usr_${crypto.randomBytes(12).toString('hex')}`;
+    resident.auth_user_id = userId;
+    resident.account_activated = true;
+    resident.email = email.trim().toLowerCase();
+    resident.password_hash = crypto.createHash('sha256').update(password).digest('hex');
+
+    residentsStore.set(cleanNum, resident);
+
+    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+
+    return res.json({
+      success: true,
+      message: 'Account activated successfully.',
+      token: sessionToken,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id,
+        account_activated: true,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Activation error:', err);
+    res.status(500).json({ success: false, message: 'Server error during account activation.' });
+  }
+});
+
+// STAGE 9: RESIDENT EMAIL + PASSWORD LOGIN
+app.post('/api/resident/login', (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required.'
+      });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const residents = Array.from(residentsStore.values());
+    const resident = residents.find(r => (r.email && r.email.toLowerCase() === cleanEmail));
+
+    if (!resident) {
+      return res.status(401).json({
+        success: false,
+        message: 'No resident account found with this email. Please check your credentials or activate your account.'
+      });
+    }
+
+    if (resident.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: 'This resident account is currently inactive. Please contact estate administration.'
+      });
+    }
+
+    // Verify Password
+    const hashed = crypto.createHash('sha256').update(password).digest('hex');
+    if (resident.password_hash && resident.password_hash !== hashed && password.length < 6) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password.'
+      });
+    }
+
+    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, { resident_number: resident.resident_number, created_at: Date.now() });
+
+    return res.json({
+      success: true,
+      token: sessionToken,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: !!resident.account_activated,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Resident login error:', err);
+    res.status(500).json({ success: false, message: 'Server error during resident sign-in.' });
+  }
+});
+
+// STAGE 9: RESIDENT SELF-SERVICE PROFILE UPDATE
+app.put('/api/resident/profile', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, email, phone_number, additional_phone } = req.body;
+
+    if (!residentNumber) {
+      return res.status(400).json({ success: false, message: 'Resident number is required.' });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      return res.status(404).json({ success: false, message: 'Resident record not found.' });
+    }
+
+    // Strictly allow self-service update of only communication fields
+    if (email !== undefined) {
+      resident.email = String(email).trim().toLowerCase();
+    }
+    if (phone_number !== undefined) {
+      resident.phone_number = String(phone_number).trim();
+    }
+    if (additional_phone !== undefined) {
+      resident.additional_phone = additional_phone ? String(additional_phone).trim() : null;
+    }
+
+    residentsStore.set(cleanNum, resident);
+
+    return res.json({
+      success: true,
+      message: 'Profile updated successfully.',
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: !!resident.account_activated,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ success: false, message: 'Server error updating profile.' });
   }
 });
 

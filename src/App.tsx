@@ -34,6 +34,7 @@ import { OutstandingPaymentsView } from './components/admin/OutstandingPaymentsV
 import { FinancialReportsView } from './components/admin/FinancialReportsView';
 import { SMSDashboardView } from './components/sms/SMSDashboardView';
 import { ResidentDashboardView } from './components/resident-portal/ResidentDashboardView';
+import { ResidentLoginView } from './components/resident-portal/ResidentLoginView';
 import { ResidentLoginModal } from './components/resident-portal/ResidentLoginModal';
 import { ReceiptVerificationView } from './components/receipts/ReceiptVerificationView';
 import { StagePlaceholderView } from './components/placeholders/StagePlaceholderView';
@@ -48,6 +49,9 @@ import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 function getInitialNav(): { tab: NavigationTab; slug: string } {
   const path = window.location.pathname.toLowerCase();
+  if (path === '/login' || path === '/activate' || path === '/resident-login') {
+    return { tab: 'login', slug: '' };
+  }
   if (path === '/announcements') {
     return { tab: 'public_announcements', slug: '' };
   }
@@ -323,6 +327,41 @@ export default function App() {
             setIsAuthModalOpen(false);
             showToast(`Logged in as ${user.full_name || user.email}`, 'success');
             setCurrentTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'login') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <ResidentLoginView
+          isModal={false}
+          estateSettings={estateSettings}
+          onNavigateToHome={() => setCurrentTab('home')}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
           }}
         />
       </div>

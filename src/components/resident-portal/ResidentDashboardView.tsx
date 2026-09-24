@@ -71,6 +71,84 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'profile'>('overview');
 
+  // Stage 9 Profile & Password Management State
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editEmail, setEditEmail] = useState(currentResident.email || '');
+  const [editPhone, setEditPhone] = useState(currentResident.phone_number || '');
+  const [editAdditionalPhone, setEditAdditionalPhone] = useState(currentResident.additional_phone || '');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setEditEmail(currentResident.email || '');
+    setEditPhone(currentResident.phone_number || '');
+    setEditAdditionalPhone(currentResident.additional_phone || '');
+  }, [currentResident]);
+
+  const handleSaveContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    setProfileMsg(null);
+
+    try {
+      const res = await dbService.updateResidentProfile(currentResident.resident_number, {
+        email: editEmail.trim(),
+        phone_number: editPhone.trim(),
+        additional_phone: editAdditionalPhone.trim() || null
+      });
+
+      if (res.success && res.resident) {
+        setProfileMsg({ type: 'success', text: 'Contact details updated successfully.' });
+        setIsEditingContact(false);
+        await loadData();
+      } else {
+        setProfileMsg({ type: 'error', text: res.message || 'Failed to update contact details.' });
+      }
+    } catch {
+      setProfileMsg({ type: 'error', text: 'Network error updating profile.' });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordMsg(null);
+
+    if (newPassword.length < 6) {
+      setPasswordMsg({ type: 'error', text: 'New password must be at least 6 characters.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ type: 'error', text: 'Passwords do not match.' });
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const res = await dbService.changeResidentPassword(newPassword);
+      if (res.success) {
+        setPasswordMsg({ type: 'success', text: 'Password successfully updated.' });
+        setNewPassword('');
+        setConfirmPassword('');
+        setIsChangingPassword(false);
+      } else {
+        setPasswordMsg({ type: 'error', text: res.message || 'Failed to change password.' });
+      }
+    } catch {
+      setPasswordMsg({ type: 'error', text: 'Error updating password.' });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -796,78 +874,296 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
         {/* Tab 3: Resident Profile & Estate Info */}
         {activeTab === 'profile' && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
-            <div>
-              <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">
-                ESTATE RESIDENT PROFILE
-              </h3>
-              <p className="text-xs text-slate-500">
-                Official residency registration records for Finger of God Estate
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">
+                  ESTATE RESIDENT PROFILE
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Official residency registration & individual account details for Finger of God Estate
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold uppercase flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>{currentResident.status || 'Active'}</span>
+                </span>
+                <span className="px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-mono font-bold">
+                  RESIDENT #{currentResident.resident_number}
+                </span>
+              </div>
             </div>
 
-            {/* Read-Only Notice */}
+            {/* Profile Feedback Notifications */}
+            {profileMsg && (
+              <div className={`p-4 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
+                profileMsg.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}>
+                {profileMsg.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <span className="font-semibold">{profileMsg.text}</span>
+              </div>
+            )}
+
+            {passwordMsg && (
+              <div className={`p-4 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
+                passwordMsg.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}>
+                {passwordMsg.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <span className="font-semibold">{passwordMsg.text}</span>
+              </div>
+            )}
+
+            {/* Read-Only Security Policy Notice */}
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3 text-xs text-slate-600">
               <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-slate-800">Security Profile Integrity</p>
-                <p className="mt-0.5">
-                  Residents are not permitted to modify sensitive resident identification information directly. To update your name, house allocation, or registered telephone numbers, please contact the security administration desk.
+                <p className="font-bold text-slate-800">Security Profile Integrity Rule</p>
+                <p className="mt-0.5 leading-relaxed">
+                  Your permanent Resident Number (<span className="font-mono font-bold text-slate-900">#{currentResident.resident_number}</span>), house/plot allocation, and residency status are strictly administrative fields. Self-service updates are enabled for communication info (email, phone) and login password.
                 </p>
               </div>
             </div>
 
+            {/* Main Information Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Resident Number</span>
-                <span className="font-mono text-base font-bold text-slate-900">#{currentResident.resident_number}</span>
+              {/* Permanent Estate Identifier (Protected) */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 relative group">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Permanent Resident Number</span>
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                </div>
+                <span className="font-mono text-base font-bold text-slate-900 block mt-1">#{currentResident.resident_number}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Permanent non-reusable estate ID</span>
               </div>
 
+              {/* Full Name (Protected) */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Full Name</span>
-                <span className="text-sm font-bold text-slate-900">{currentResident.full_name}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Registered Name</span>
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                </div>
+                <span className="text-sm font-bold text-slate-900 block mt-1">{currentResident.full_name}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Primary household representative</span>
               </div>
 
+              {/* House / Plot (Protected) */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">House / Plot</span>
-                <span className="text-sm font-semibold text-slate-800">{currentResident.house_number}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">House / Plot Allocation</span>
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                </div>
+                <span className="text-sm font-semibold text-slate-800 block mt-1">{currentResident.house_number}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">Verified estate property</span>
               </div>
 
+              {/* Street Address (Protected) */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Address</span>
-                <span className="text-sm font-semibold text-slate-800">{currentResident.address}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Registered Phone</span>
-                <span className="font-mono text-sm font-semibold text-slate-900">{currentResident.phone_number}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Additional Phone</span>
-                <span className="font-mono text-sm text-slate-700">{currentResident.additional_phone || 'None registered'}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Email Address</span>
-                <span className="text-sm text-slate-800">{currentResident.email || 'None registered'}</span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">State & LGA</span>
-                <span className="text-sm text-slate-800">{currentResident.state || 'Lagos'}, {currentResident.lga || 'Eti-Osa'}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Estate Address</span>
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                </div>
+                <span className="text-sm font-semibold text-slate-800 block mt-1">{currentResident.address}</span>
+                <span className="text-[10px] text-slate-500 block mt-0.5">{currentResident.state || 'Lagos'}, {currentResident.lga || 'Eti-Osa'}</span>
               </div>
             </div>
 
-            {/* Estate Office Contact */}
+            {/* Self-Service Contact Information Section */}
+            <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Communication & Notification Details</h4>
+                  <p className="text-xs text-slate-500">Used for official levy reminders, clearance receipts, and portal login.</p>
+                </div>
+                {!isEditingContact && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingContact(true)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Edit Contact Details
+                  </button>
+                )}
+              </div>
+
+              {isEditingContact ? (
+                <form onSubmit={handleSaveContact} className="space-y-4 pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Primary Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="resident@example.com"
+                        required
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Registered Telephone
+                      </label>
+                      <input
+                        type="tel"
+                        value={editPhone}
+                        onChange={(e) => setEditPhone(e.target.value)}
+                        placeholder="08023456789"
+                        required
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Additional Phone / Emergency Contact (Optional)
+                      </label>
+                      <input
+                        type="tel"
+                        value={editAdditionalPhone}
+                        onChange={(e) => setEditAdditionalPhone(e.target.value)}
+                        placeholder="08091122334"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingContact(false)}
+                      className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingProfile}
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    >
+                      {isSavingProfile ? 'Saving...' : 'Save Contact Details'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Email Address</span>
+                    <span className="text-xs font-bold text-slate-900 block mt-0.5">{currentResident.email || 'None registered'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Registered Phone</span>
+                    <span className="font-mono text-xs font-bold text-slate-900 block mt-0.5">{currentResident.phone_number}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Additional Phone</span>
+                    <span className="font-mono text-xs text-slate-700 block mt-0.5">{currentResident.additional_phone || 'None registered'}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Password & Security Management Section */}
+            <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Security & Password Management</h4>
+                  <p className="text-xs text-slate-500">Update the password used to access your individual resident account.</p>
+                </div>
+                {!isChangingPassword && (
+                  <button
+                    type="button"
+                    onClick={() => setIsChangingPassword(true)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Change Password
+                  </button>
+                )}
+              </div>
+
+              {isChangingPassword && (
+                <form onSubmit={handleChangePassword} className="space-y-4 pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        New Password (Min 6 Characters)
+                      </label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChangingPassword(false);
+                        setNewPassword('');
+                        setConfirmPassword('');
+                      }}
+                      className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingPassword}
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    >
+                      {isSavingPassword ? 'Updating Password...' : 'Update Password'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Estate Office Help Contact */}
             <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 space-y-2">
-              <p className="font-bold text-sm text-emerald-900">Need Help or Profile Update?</p>
-              <p className="text-emerald-800">
-                For corrections, disputes, or security clearance passes, reach out to the Finger of God Estate Security Management Office:
+              <p className="font-bold text-sm text-emerald-900">Need Help or Property Allocation Adjustment?</p>
+              <p className="text-emerald-800 leading-relaxed">
+                For property boundary updates, house allocation corrections, or official security clearance cards, please contact the Estate Security Management Secretariat:
               </p>
               <div className="flex flex-wrap gap-4 pt-1 font-semibold text-emerald-900">
-                <span>Phone: 08023456789</span>
-                <span>Email: admin@fingerofgodestate.ng</span>
-                <span>Location: Security Command Gate, Phase 1</span>
+                <span>Phone: {estateSettings?.contact_phone || '08023456789'}</span>
+                <span>Email: {estateSettings?.contact_email || 'admin@fingerofgodestate.ng'}</span>
+                <span>Location: Security Command Desk, Phase 1</span>
               </div>
             </div>
           </div>

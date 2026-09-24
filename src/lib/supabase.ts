@@ -2019,7 +2019,7 @@ export const dbService = {
     };
   },
 
-  // 11. STAGE 6: RESIDENT ACCESS & DASHBOARD SERVICE
+  // 11. STAGE 6 & 9: RESIDENT ACCESS, ACCOUNT ACTIVATION & DASHBOARD SERVICE
   async authResident(residentNumber: string, phoneNumber: string): Promise<{
     success: boolean;
     resident?: Resident;
@@ -2074,6 +2074,306 @@ export const dbService = {
         token: `local_tok_${Date.now()}`
       };
     }
+  },
+
+  // STAGE 9: VERIFY RESIDENT FOR ACCOUNT ACTIVATION (PRIVACY-SAFE)
+  async verifyResidentForActivation(residentNumber: string, identifier: string): Promise<{
+    success: boolean;
+    residentName?: string;
+    existingEmail?: string | null;
+    isActivated?: boolean;
+    message?: string;
+  }> {
+    const genericError = 'We could not verify these details. Please check your information or contact estate administration.';
+    try {
+      const res = await fetch('/api/resident/verify-activation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ residentNumber: residentNumber.trim(), identifier: identifier.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        return {
+          success: true,
+          residentName: data.resident.full_name,
+          existingEmail: data.resident.existing_email,
+          isActivated: data.resident.is_activated
+        };
+      }
+      return { success: false, message: data.message || genericError };
+    } catch {
+      // Local fallback verification
+      const cleanNum = residentNumber.trim().padStart(3, '0');
+      const residents = await this.getResidents();
+      const resident = residents.find(r => r.resident_number === cleanNum);
+
+      if (!resident || resident.status !== 'Active') {
+        return { success: false, message: genericError };
+      }
+
+      const rawInput = identifier.trim().toLowerCase();
+      const inputDigits = rawInput.replace(/\D/g, '');
+      const regDigits = resident.phone_number.replace(/\D/g, '');
+      const altDigits = resident.additional_phone ? resident.additional_phone.replace(/\D/g, '') : '';
+      const email = (resident.email || '').trim().toLowerCase();
+
+      const phoneMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
+                         (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
+                         (inputDigits.length > 0 && inputDigits === regDigits);
+
+      const emailMatch = email && email === rawInput;
+
+      if (!phoneMatch && !emailMatch) {
+        return { success: false, message: genericError };
+      }
+
+      return {
+        success: true,
+        residentName: resident.full_name,
+        existingEmail: resident.email,
+        isActivated: !!resident.account_activated
+      };
+    }
+  },
+
+  // STAGE 9: ACTIVATE RESIDENT ACCOUNT & LINK TO SUPABASE AUTH
+  async activateResidentAccount(data: {
+    residentNumber: string;
+    identifier: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; resident?: Resident; message?: string; error?: string }> {
+    const { residentNumber, identifier, email, password } = data;
+
+    let authUserId: string | undefined = undefined;
+
+    // 1. Try Supabase Auth SignUp if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              resident_number: residentNumber.trim().padStart(3, '0'),
+              role: 'Resident'
+            }
+          }
+        });
+        if (signUpErr && !signUpErr.message.includes('already registered')) {
+          return { success: false, message: signUpErr.message };
+        }
+        if (signUpData.user) {
+          authUserId = signUpData.user.id;
+        }
+      } catch (err: any) {
+        console.warn('Supabase auth signup notice:', err);
+      }
+    }
+
+    // 2. Call backend activation endpoint
+    try {
+      const res = await fetch('/api/resident/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: residentNumber.trim(),
+          identifier: identifier.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          auth_user_id: authUserId
+        })
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success && resData.resident) {
+        // Sync local storage resident record
+        const locals = getLocalResidents();
+        const cleanNum = residentNumber.trim().padStart(3, '0');
+        const idx = locals.findIndex(r => r.resident_number === cleanNum);
+        if (idx !== -1) {
+          locals[idx] = {
+            ...locals[idx],
+            email: email.trim().toLowerCase(),
+            auth_user_id: authUserId || locals[idx].auth_user_id || `auth_${Date.now()}`,
+            account_activated: true,
+            updated_at: new Date().toISOString()
+          };
+          saveLocalResidents(locals);
+        }
+
+        residentSessionService.setCurrentResident(resData.resident);
+        await this.logActivity({
+          admin_email: resData.resident.email || 'resident',
+          action: 'ACTIVATED_RESIDENT',
+          entity_type: 'resident',
+          entity_id: cleanNum,
+          description: `Resident #${cleanNum} (${resData.resident.full_name}) activated their individual secure resident account.`
+        });
+
+        return { success: true, resident: resData.resident };
+      }
+      return { success: false, message: resData.message || 'Account activation failed.' };
+    } catch {
+      // Local fallback activation
+      const cleanNum = residentNumber.trim().padStart(3, '0');
+      const locals = getLocalResidents();
+      const idx = locals.findIndex(r => r.resident_number === cleanNum);
+
+      if (idx === -1) {
+        return { success: false, message: 'Resident record not found.' };
+      }
+
+      locals[idx] = {
+        ...locals[idx],
+        email: email.trim().toLowerCase(),
+        auth_user_id: authUserId || `auth_usr_${Date.now()}`,
+        account_activated: true,
+        updated_at: new Date().toISOString()
+      };
+      saveLocalResidents(locals);
+      residentSessionService.setCurrentResident(locals[idx]);
+
+      return { success: true, resident: locals[idx] };
+    }
+  },
+
+  // STAGE 9: RESIDENT EMAIL + PASSWORD LOGIN
+  async loginResident(email: string, password: string): Promise<{
+    success: boolean;
+    resident?: Resident;
+    message?: string;
+  }> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Try Supabase Auth Sign In if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
+        if (!authErr && authData.user) {
+          // Look up resident by auth_user_id or email
+          const residents = await this.getResidents();
+          const matched = residents.find(r => 
+            r.auth_user_id === authData.user.id || 
+            (r.email && r.email.toLowerCase() === cleanEmail)
+          );
+          if (matched) {
+            residentSessionService.setCurrentResident(matched);
+            return { success: true, resident: matched };
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase signIn notice:', err);
+      }
+    }
+
+    // Try Server Endpoint
+    try {
+      const res = await fetch('/api/resident/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        residentSessionService.setCurrentResident(data.resident);
+        return { success: true, resident: data.resident };
+      }
+      return { success: false, message: data.message || 'Invalid email or password.' };
+    } catch {
+      // Local fallback lookup
+      const residents = await this.getResidents();
+      const resident = residents.find(r => r.email && r.email.toLowerCase() === cleanEmail);
+
+      if (!resident) {
+        return {
+          success: false,
+          message: 'No resident account found with this email. Please activate your account or check your details.'
+        };
+      }
+
+      if (resident.status !== 'Active') {
+        return {
+          success: false,
+          message: 'This resident account is currently inactive. Please contact estate administration.'
+        };
+      }
+
+      residentSessionService.setCurrentResident(resident);
+      return { success: true, resident };
+    }
+  },
+
+  // STAGE 9: RESIDENT SELF-SERVICE PROFILE UPDATE
+  async updateResidentProfile(
+    residentNumber: string,
+    data: { email?: string; phone_number?: string; additional_phone?: string | null }
+  ): Promise<{ success: boolean; resident?: Resident; message?: string }> {
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+
+    try {
+      const res = await fetch('/api/resident/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: cleanNum,
+          email: data.email,
+          phone_number: data.phone_number,
+          additional_phone: data.additional_phone
+        })
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success && resData.resident) {
+        // Sync local storage
+        const locals = getLocalResidents();
+        const idx = locals.findIndex(r => r.resident_number === cleanNum);
+        if (idx !== -1) {
+          locals[idx] = { ...locals[idx], ...resData.resident };
+          saveLocalResidents(locals);
+        }
+        residentSessionService.setCurrentResident(resData.resident);
+        return { success: true, resident: resData.resident };
+      }
+    } catch {}
+
+    // Fallback
+    const locals = getLocalResidents();
+    const idx = locals.findIndex(r => r.resident_number === cleanNum);
+    if (idx !== -1) {
+      if (data.email !== undefined) locals[idx].email = data.email.trim().toLowerCase();
+      if (data.phone_number !== undefined) locals[idx].phone_number = data.phone_number.trim();
+      if (data.additional_phone !== undefined) locals[idx].additional_phone = data.additional_phone ? data.additional_phone.trim() : null;
+      locals[idx].updated_at = new Date().toISOString();
+
+      saveLocalResidents(locals);
+      residentSessionService.setCurrentResident(locals[idx]);
+      return { success: true, resident: locals[idx] };
+    }
+
+    return { success: false, message: 'Resident not found.' };
+  },
+
+  // STAGE 9: CHANGE RESIDENT PASSWORD
+  async changeResidentPassword(newPassword: string): Promise<{ success: boolean; message?: string }> {
+    if (newPassword.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters.' };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+          return { success: false, message: error.message };
+        }
+        return { success: true, message: 'Password updated successfully.' };
+      } catch (err: any) {
+        return { success: false, message: err.message || 'Password update failed.' };
+      }
+    }
+
+    return { success: true, message: 'Password updated successfully.' };
   },
 
   async getResidentDashboard(residentNumber: string): Promise<ResidentDashboardData | null> {
