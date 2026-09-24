@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
+  ShieldAlert,
   User, 
   Home, 
   Calendar, 
@@ -24,7 +25,15 @@ import {
   Filter,
   Search,
   Sparkles,
-  Lock
+  Lock,
+  UserCheck,
+  QrCode,
+  Copy,
+  Check,
+  Plus,
+  Radio,
+  Eye,
+  Bell
 } from 'lucide-react';
 import { 
   Resident, 
@@ -32,13 +41,21 @@ import {
   PaymentTransaction, 
   Receipt, 
   ResidentDashboardData, 
-  EstateSettings 
+  EstateSettings,
+  Incident,
+  VisitorPass,
+  SecurityAlert,
+  SecurityOfficer
 } from '../../types/database';
 import { dbService, residentSessionService } from '../../lib/supabase';
 import { formatNaira } from '../../lib/paystack';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 import { ReceiptModal } from '../payments/ReceiptModal';
 import { EstateLogo } from '../common/EstateLogo';
+import { EmergencyReportModal } from '../security/EmergencyReportModal';
+import { IncidentFormModal } from '../security/IncidentFormModal';
+import { VisitorPassModal } from '../security/VisitorPassModal';
+import { IncidentDetailModal } from '../security/IncidentDetailModal';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
@@ -69,7 +86,19 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   // History Filters
   const [selectedYear, setSelectedYear] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'profile'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'security' | 'profile'>('overview');
+
+  // Stage 10 Security & Visitor Portal State
+  const [myIncidents, setMyIncidents] = useState<Incident[]>([]);
+  const [myVisitorPasses, setMyVisitorPasses] = useState<VisitorPass[]>([]);
+  const [estateAlerts, setEstateAlerts] = useState<SecurityAlert[]>([]);
+  const [officersList, setOfficersList] = useState<SecurityOfficer[]>([]);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
+  const [isIncidentFormOpen, setIsIncidentFormOpen] = useState(false);
+  const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
+  const [selectedIncidentDetail, setSelectedIncidentDetail] = useState<Incident | null>(null);
+  const [isIncidentDetailOpen, setIsIncidentDetailOpen] = useState(false);
+  const [copiedPassCode, setCopiedPassCode] = useState<string | null>(null);
 
   // Stage 9 Profile & Password Management State
   const [isEditingContact, setIsEditingContact] = useState(false);
@@ -152,10 +181,20 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const data = await dbService.getResidentDashboard(currentResident.resident_number);
+      const [data, incidents, passes, alerts, officers] = await Promise.all([
+        dbService.getResidentDashboard(currentResident.resident_number),
+        dbService.getResidentIncidents(currentResident.resident_number),
+        dbService.getResidentVisitorPasses(currentResident.resident_number),
+        dbService.getSecurityAlerts(),
+        dbService.getSecurityOfficers()
+      ]);
       if (data) {
         setDashboardData(data);
       }
+      setMyIncidents(incidents);
+      setMyVisitorPasses(passes);
+      setEstateAlerts(alerts.filter(a => a.is_active));
+      setOfficersList(officers);
     } catch (err) {
       console.error('Failed to load resident dashboard:', err);
     } finally {
@@ -178,37 +217,22 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
     if (rcp) {
       setSelectedReceipt(rcp);
       setIsReceiptModalOpen(true);
-    } else {
-      // Find newly generated receipt
-      const updatedData = await dbService.getResidentDashboard(currentResident.resident_number);
-      if (updatedData && updatedData.receipts.length > 0) {
-        setSelectedReceipt(updatedData.receipts[0]);
-        setIsReceiptModalOpen(true);
-      }
     }
   };
 
-  const handleViewReceipt = (receipt: Receipt) => {
-    setSelectedReceipt(receipt);
-    setIsReceiptModalOpen(true);
-  };
-
-  const handleFindReceiptForPayment = (payment: MonthlyPayment) => {
+  const handleFindReceiptForPayment = async (payment: MonthlyPayment) => {
     if (!dashboardData) return;
-    const found = dashboardData.receipts.find(
-      r => r.payment_id === payment.id || 
-           (payment.paystack_reference && r.paystack_reference === payment.paystack_reference) ||
-           r.period_covered === payment.period_label
+    const rcp = dashboardData.receipts.find(
+      r => r.payment_id === payment.id || r.period_covered === payment.period_label
     );
-    if (found) {
-      setSelectedReceipt(found);
+    if (rcp) {
+      setSelectedReceipt(rcp);
       setIsReceiptModalOpen(true);
     } else {
-      // Generate preview receipt from payment record
-      const preview: Receipt = {
-        id: `rcp-gen-${payment.id}`,
-        receipt_number: `FOGES-REC-${payment.period_year}${String(payment.period_month).padStart(2, '0')}-${currentResident.resident_number}-OFFICIAL`,
-        transaction_id: 'tx-verified',
+      const genericReceipt: Receipt = {
+        id: `rcp-${payment.id}`,
+        receipt_number: `RCP-${payment.period_year}${payment.period_month.toString().padStart(2, '0')}-${currentResident.resident_number}-AUTO`,
+        transaction_id: `tx-${payment.id}`,
         payment_id: payment.id,
         resident_id: currentResident.id,
         resident_number: currentResident.resident_number,
@@ -220,22 +244,45 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
         payment_date: payment.paid_at || new Date().toISOString(),
         paystack_reference: payment.paystack_reference || `FOGES-${payment.period_year}${payment.period_month}-${currentResident.resident_number}`,
         status: 'PAID',
-        issued_at: payment.paid_at || new Date().toISOString()
+        issued_at: payment.paid_at || new Date().toISOString(),
+        resident: currentResident
       };
-      setSelectedReceipt(preview);
+      setSelectedReceipt(genericReceipt);
       setIsReceiptModalOpen(true);
     }
   };
 
-  // Filtered History
-  const filteredHistory = (dashboardData?.paymentHistory || []).filter(item => {
-    if (selectedYear !== 'All' && String(item.period_year) !== selectedYear) return false;
-    if (selectedStatus !== 'All' && item.status !== selectedStatus) return false;
-    return true;
-  });
+  const handleViewReceipt = (receipt: Receipt) => {
+    setSelectedReceipt(receipt);
+    setIsReceiptModalOpen(true);
+  };
+
+  const handleCopyPass = (passCode: string, guestName: string) => {
+    const text = `*FINGER OF GOD ESTATE GATE PASS*\nPass Code: *${passCode}*\nVisitor: ${guestName}\nHost: ${currentResident.full_name} (${currentResident.house_number})`;
+    navigator.clipboard.writeText(text);
+    setCopiedPassCode(passCode);
+    setTimeout(() => setCopiedPassCode(null), 3000);
+  };
+
+  const isCurrentMonthPaid = dashboardData?.currentMonthPayment.status === 'PAID';
+
+  const yearsList = useMemo(() => {
+    if (!dashboardData) return ['All', '2026'];
+    const set = new Set<string>();
+    dashboardData.paymentHistory.forEach(p => set.add(p.period_year.toString()));
+    return ['All', ...Array.from(set).sort()];
+  }, [dashboardData]);
+
+  const filteredHistory = useMemo(() => {
+    if (!dashboardData) return [];
+    return dashboardData.paymentHistory.filter(item => {
+      if (selectedYear !== 'All' && item.period_year.toString() !== selectedYear) return false;
+      if (selectedStatus !== 'All' && item.status !== selectedStatus) return false;
+      return true;
+    });
+  }, [dashboardData, selectedYear, selectedStatus]);
 
   const currentMonth = dashboardData?.currentMonthPayment;
-  const isCurrentMonthPaid = currentMonth?.status === 'PAID';
   const outstandingList = dashboardData?.outstandingLevies || [];
 
   return (
@@ -388,6 +435,17 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               }`}
             >
               PAYMENT HISTORY ({dashboardData?.paymentHistory.length || 0})
+            </button>
+            <button
+              onClick={() => setActiveTab('security')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'security'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>SECURITY & VISITORS ({myVisitorPasses.length + myIncidents.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('profile')}
@@ -871,7 +929,259 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           </div>
         )}
 
-        {/* Tab 3: Resident Profile & Estate Info */}
+        {/* Tab 3: Estate Security & Visitor Management (Stage 10) */}
+        {activeTab === 'security' && (
+          <div className="space-y-6">
+            
+            {/* Quick Emergency & Action Bar */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-6 sm:p-8 border border-slate-700 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-rose-400 animate-ping" />
+                    <span>Resident Emergency & Patrol Desk</span>
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black font-display tracking-tight text-white uppercase">
+                  SECURITY REPORTING & GUEST ACCESS
+                </h3>
+                <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                  Generate digital visitor gate passes for fast guest clearance, broadcast urgent SOS emergencies, or report suspicious neighborhood activity directly to on-duty patrol officers.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setIsEmergencyModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/30 transition-all"
+                >
+                  <ShieldAlert className="w-4 h-4 animate-pulse" />
+                  <span>EMERGENCY SOS</span>
+                </button>
+
+                <button
+                  onClick={() => setIsVisitorModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Pre-Register Visitor</span>
+                </button>
+
+                <button
+                  onClick={() => setIsIncidentFormOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <span>Report Incident</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Active Security Alerts for Residents */}
+            {estateAlerts.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Bell className="w-4 h-4 text-amber-600" />
+                  <span>Active Estate Security Advisories</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {estateAlerts.map((alert) => (
+                    <div 
+                      key={alert.id}
+                      className={`p-4 rounded-2xl border ${
+                        alert.priority === 'Critical'
+                          ? 'bg-rose-50 border-rose-200 text-rose-950'
+                          : 'bg-amber-50 border-amber-200 text-amber-950'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                        <span className="font-mono bg-white/80 px-2 py-0.5 rounded border">{alert.category}</span>
+                        <span className="text-slate-600">{alert.priority} Priority</span>
+                      </div>
+                      <h5 className="text-sm font-bold mt-1 text-slate-900">{alert.title}</h5>
+                      <p className="text-xs text-slate-700 mt-1 leading-relaxed">{alert.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 1: Pre-Registered Visitor Passes */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 font-display uppercase tracking-tight">
+                    My Pre-Registered Visitor Passes ({myVisitorPasses.length})
+                  </h4>
+                  <p className="text-xs text-slate-500">Active and past gate entry clearance passes for your house</p>
+                </div>
+
+                <button
+                  onClick={() => setIsVisitorModalOpen(true)}
+                  className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Pass</span>
+                </button>
+              </div>
+
+              {myVisitorPasses.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500 space-y-2">
+                  <UserCheck className="w-8 h-8 text-slate-400 mx-auto" />
+                  <p className="font-bold text-slate-800">No Visitor Passes Issued Yet</p>
+                  <p className="text-slate-500">Pre-register your expected family, delivery drivers, or repair contractors for swift gate clearance.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {myVisitorPasses.map((pass) => (
+                    <div key={pass.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-black text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-emerald-200">
+                          {pass.pass_code}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          pass.status === 'Arrived'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : pass.status === 'Departed'
+                            ? 'bg-slate-200 text-slate-700'
+                            : pass.status === 'Denied'
+                            ? 'bg-rose-100 text-rose-900'
+                            : 'bg-blue-100 text-blue-900'
+                        }`}>
+                          {pass.status}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-sm font-bold text-slate-900 block">{pass.visitor_name}</span>
+                        <span className="text-xs text-slate-600 block">{pass.purpose_of_visit}</span>
+                        {pass.vehicle_number && (
+                          <span className="text-[11px] font-mono text-slate-500 block mt-0.5">
+                            Vehicle: {pass.vehicle_number} ({pass.vehicle_description || 'Car'})
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 text-[11px]">
+                        <span className="text-slate-500">
+                          Expected: {new Date(pass.expected_arrival).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button
+                          onClick={() => handleCopyPass(pass.pass_code, pass.visitor_name)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          {copiedPassCode === pass.pass_code ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-700">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3 text-slate-500" />
+                              <span>Copy Pass</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: My Reported Incidents */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 font-display uppercase tracking-tight">
+                    My Reported Incidents & Security Requests ({myIncidents.length})
+                  </h4>
+                  <p className="text-xs text-slate-500">Track investigation findings and resolution updates for your reports</p>
+                </div>
+
+                <button
+                  onClick={() => setIsIncidentFormOpen(true)}
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Report Activity</span>
+                </button>
+              </div>
+
+              {myIncidents.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500 space-y-2">
+                  <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+                  <p className="font-bold text-slate-800">No Security Incidents On Record</p>
+                  <p className="text-slate-500">Your household has no open or unresolved security complaints.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myIncidents.map((inc) => (
+                    <div 
+                      key={inc.id}
+                      onClick={() => {
+                        setSelectedIncidentDetail(inc);
+                        setIsIncidentDetailOpen(true);
+                      }}
+                      className="p-4 rounded-2xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <ShieldAlert className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-900">{inc.incident_number}</span>
+                            <span className="font-bold text-slate-800">{inc.incident_type}</span>
+                            {inc.is_emergency && (
+                              <span className="px-1.5 py-0.2 rounded bg-rose-600 text-white font-mono text-[9px] font-bold">
+                                SOS
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-slate-600 mt-0.5 line-clamp-1">{inc.description}</p>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-1">
+                            <span>Date: {inc.date} at {inc.time}</span>
+                            <span>•</span>
+                            <span>Officer: {inc.assigned_officer_name || 'Assigned to Patrol'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                          inc.status === 'Resolved' || inc.status === 'Closed'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : inc.status === 'Investigating'
+                            ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                            : 'bg-rose-100 text-rose-900 border border-rose-300'
+                        }`}>
+                          {inc.status}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Security Desk Hotline Banner */}
+            <div className="p-5 rounded-3xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h5 className="text-sm font-bold text-emerald-900">Estate Security Command Desk</h5>
+                <p className="text-emerald-800 mt-0.5">North Gate Boulevard & Phase 1 Patrol Headquarters</p>
+              </div>
+              <div className="flex flex-wrap gap-4 font-mono font-bold text-emerald-900 text-xs">
+                <span>Emergency: 08023456789</span>
+                <span>Gate Intercom: 08034567890</span>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* Tab 4: Resident Profile & Estate Info */}
         {activeTab === 'profile' && (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
@@ -1194,6 +1504,76 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           onClose={() => setIsReceiptModalOpen(false)}
           receipt={selectedReceipt}
           estateSettings={estateSettings}
+        />
+      )}
+
+      {/* Stage 10: Emergency SOS Modal */}
+      {isEmergencyModalOpen && (
+        <EmergencyReportModal
+          isOpen={isEmergencyModalOpen}
+          onClose={() => setIsEmergencyModalOpen(false)}
+          onSubmitEmergency={async (data) => {
+            const res = await dbService.createEmergencyIncident(data);
+            if (res.success && res.incident) {
+              await loadData();
+              return res.incident;
+            }
+            return null;
+          }}
+          currentResident={currentResident}
+        />
+      )}
+
+      {/* Stage 10: Incident Report Form Modal */}
+      {isIncidentFormOpen && (
+        <IncidentFormModal
+          isOpen={isIncidentFormOpen}
+          onClose={() => setIsIncidentFormOpen(false)}
+          onSubmitIncident={async (data) => {
+            const res = await dbService.createIncident(data as any);
+            if (res.success && res.incident) {
+              await loadData();
+              return res.incident;
+            }
+            return null;
+          }}
+          currentResident={currentResident}
+          isStaffMode={false}
+        />
+      )}
+
+      {/* Stage 10: Visitor Pass Pre-Registration Modal */}
+      {isVisitorModalOpen && (
+        <VisitorPassModal
+          isOpen={isVisitorModalOpen}
+          onClose={() => setIsVisitorModalOpen(false)}
+          onSubmitVisitor={async (data) => {
+            const res = await dbService.createVisitorPass(data as any);
+            if (res.success && res.pass) {
+              await loadData();
+              return res.pass;
+            }
+            return null;
+          }}
+          currentResident={currentResident}
+          estateSettings={estateSettings}
+        />
+      )}
+
+      {/* Stage 10: Incident Detail Modal */}
+      {selectedIncidentDetail && (
+        <IncidentDetailModal
+          isOpen={isIncidentDetailOpen}
+          onClose={() => {
+            setIsIncidentDetailOpen(false);
+            setSelectedIncidentDetail(null);
+          }}
+          incident={selectedIncidentDetail}
+          officersList={officersList}
+          onUpdateStatus={async () => {}}
+          onAssignOfficer={async () => {}}
+          onAddInvestigationNote={async () => {}}
+          isStaff={false}
         />
       )}
     </div>

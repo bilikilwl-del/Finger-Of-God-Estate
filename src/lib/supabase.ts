@@ -15,7 +15,25 @@ import {
   Announcement,
   AnnouncementCategory,
   AnnouncementPriority,
-  AnnouncementStatus
+  AnnouncementStatus,
+  Incident,
+  IncidentType,
+  IncidentPriority,
+  IncidentStatus,
+  IncidentEvidence,
+  IncidentTimelineEntry,
+  SecurityOfficer,
+  OfficerStatus,
+  OfficerShift,
+  SecurityAlert,
+  SecurityAlertCategory,
+  VisitorPass,
+  VisitorStatus,
+  GateLogEntry,
+  GateEntityType,
+  PatrolRecord,
+  PatrolStatus,
+  SecurityOperationsSummary
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
@@ -135,8 +153,325 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'estate_security_payment_transactions',
   RECEIPTS: 'estate_security_receipts',
   SMS_LOGS: 'estate_security_sms_logs',
-  ANNOUNCEMENTS: 'estate_security_announcements'
+  ANNOUNCEMENTS: 'estate_security_announcements',
+  INCIDENTS: 'estate_security_incidents',
+  OFFICERS: 'estate_security_officers',
+  ALERTS: 'estate_security_alerts',
+  VISITORS: 'estate_security_visitors',
+  GATE_LOGS: 'estate_security_gate_logs',
+  PATROLS: 'estate_security_patrols'
 };
+
+const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
+  {
+    id: 'off-001',
+    officer_badge_id: 'FOG-SEC-01',
+    full_name: 'Sgt. Audu Momoh',
+    phone_number: '08023456789',
+    email: 'audu.momoh@fingerofgodestate.ng',
+    rank: 'Chief Security Officer',
+    shift: 'Morning (06:00 - 14:00)',
+    status: 'On Duty',
+    assigned_area: 'Central Command & North Gate',
+    active_incidents_count: 1,
+    created_at: '2026-09-01T06:00:00Z'
+  },
+  {
+    id: 'off-002',
+    officer_badge_id: 'FOG-SEC-02',
+    full_name: 'Inspector Chinedu Okoro',
+    phone_number: '08034567891',
+    email: 'chinedu.okoro@fingerofgodestate.ng',
+    rank: 'Security Supervisor',
+    shift: 'Afternoon (14:00 - 22:00)',
+    status: 'On Duty',
+    assigned_area: 'Phase 1 Boulevard & Perimeter',
+    active_incidents_count: 1,
+    created_at: '2026-09-01T06:00:00Z'
+  },
+  {
+    id: 'off-003',
+    officer_badge_id: 'FOG-SEC-03',
+    full_name: 'Guard Yakubu Danjuma',
+    phone_number: '08129876543',
+    email: 'yakubu.d@fingerofgodestate.ng',
+    rank: 'Patrol Officer',
+    shift: 'Morning (06:00 - 14:00)',
+    status: 'On Patrol',
+    assigned_area: 'Hibiscus Crescent & Phase 2',
+    active_incidents_count: 0,
+    created_at: '2026-09-01T06:00:00Z'
+  },
+  {
+    id: 'off-004',
+    officer_badge_id: 'FOG-SEC-04',
+    full_name: 'Guard Sunday Eze',
+    phone_number: '07031122445',
+    email: 'sunday.eze@fingerofgodestate.ng',
+    rank: 'Gate Controller',
+    shift: 'Morning (06:00 - 14:00)',
+    status: 'On Duty',
+    assigned_area: 'Main Inflow Barrier Gate 1',
+    active_incidents_count: 0,
+    created_at: '2026-09-01T06:00:00Z'
+  }
+];
+
+const INITIAL_INCIDENTS_SEED: Incident[] = [
+  {
+    id: 'inc-001',
+    incident_number: 'FOG-INC-2026-0001',
+    incident_type: 'Suspicious activity',
+    priority: 'High',
+    status: 'Investigating',
+    date: '2026-09-23',
+    time: '21:45',
+    location: 'Hibiscus Crescent, near Plot 4A',
+    house_number: 'Plot 4A',
+    phase: 'Phase 1',
+    description: 'An unidentified dark sedan was observed idling with headlights off for over 35 minutes along the perimeter curve.',
+    people_involved: 'Two occupants observed inside vehicle',
+    vehicle_details: 'Dark Grey Toyota Camry (No visible front plate)',
+    additional_notes: 'Patrol unit dispatched for driver verification and perimeter check.',
+    reporter_type: 'Resident',
+    reported_by: 'Engr. Babatunde Adeleke',
+    reporter_phone: '08034567890',
+    reporter_resident_number: '001',
+    is_emergency: false,
+    assigned_officer_id: 'off-002',
+    assigned_officer_name: 'Inspector Chinedu Okoro',
+    assigned_officer_phone: '08034567891',
+    investigation_notes: 'Officer Chinedu arrived on site at 21:52. Vehicle was questioned; driver was visiting Plot 8 resident.',
+    actions_taken: 'Driver credentials logged at gate register. Host resident confirmed appointment.',
+    resolution_summary: null,
+    evidence: [
+      {
+        id: 'ev-001',
+        incident_id: 'inc-001',
+        file_name: 'Perimeter_CCTV_Frame_2148.jpg',
+        file_type: 'image',
+        url: 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?auto=format&fit=crop&w=600&q=80',
+        uploaded_by: 'Inspector Chinedu Okoro',
+        uploaded_at: '2026-09-23T22:05:00Z'
+      }
+    ],
+    timeline: [
+      {
+        id: 'tl-001',
+        incident_id: 'inc-001',
+        timestamp: '2026-09-23T21:45:00Z',
+        title: 'Incident Report Submitted',
+        description: 'Resident #001 reported suspicious idling vehicle on Hibiscus Crescent.',
+        performed_by: 'Engr. Babatunde Adeleke',
+        performed_by_role: 'Resident',
+        action_type: 'REPORT_CREATED'
+      },
+      {
+        id: 'tl-002',
+        incident_id: 'inc-001',
+        timestamp: '2026-09-23T21:47:00Z',
+        title: 'Incident Acknowledged',
+        description: 'Command desk verified location coordinates.',
+        performed_by: 'Sgt. Audu Momoh',
+        performed_by_role: 'Chief Security Officer',
+        action_type: 'ACKNOWLEDGED'
+      },
+      {
+        id: 'tl-003',
+        incident_id: 'inc-001',
+        timestamp: '2026-09-23T21:50:00Z',
+        title: 'Officer Dispatched & Assigned',
+        description: 'Inspector Chinedu Okoro assigned as lead patrol investigator.',
+        performed_by: 'Sgt. Audu Momoh',
+        performed_by_role: 'Chief Security Officer',
+        action_type: 'OFFICER_ASSIGNED'
+      }
+    ],
+    created_at: '2026-09-23T21:45:00Z',
+    updated_at: '2026-09-23T22:05:00Z'
+  },
+  {
+    id: 'inc-002',
+    incident_number: 'FOG-INC-2026-0002',
+    incident_type: 'Power/electrical emergency',
+    priority: 'Medium',
+    status: 'Resolved',
+    date: '2026-09-22',
+    time: '18:15',
+    location: 'Palm View Boulevard Transformer Pillar',
+    house_number: 'House 12',
+    phase: 'Phase 1',
+    description: 'Low-hanging power distribution cable sparking after heavy rainstorm wind.',
+    people_involved: null,
+    vehicle_details: null,
+    additional_notes: 'Power isolation requested from facility electrical engineer.',
+    reporter_type: 'Resident',
+    reported_by: 'Dr. Chioma Nwachukwu',
+    reporter_phone: '08098765432',
+    reporter_resident_number: '002',
+    is_emergency: false,
+    assigned_officer_id: 'off-001',
+    assigned_officer_name: 'Sgt. Audu Momoh',
+    assigned_officer_phone: '08023456789',
+    investigation_notes: 'Transformer breaker isolated at 18:22. Maintenance contractor re-tensioned cable.',
+    actions_taken: 'Area cordoned off with security cones. Power safely restored.',
+    resolution_summary: 'Cable re-anchored, electrical junction box secured and power certified safe by estate engineering.',
+    resolved_at: '2026-09-22T20:10:00Z',
+    closed_at: '2026-09-22T20:15:00Z',
+    evidence: [],
+    timeline: [
+      {
+        id: 'tl-101',
+        incident_id: 'inc-002',
+        timestamp: '2026-09-22T18:15:00Z',
+        title: 'Report Created',
+        description: 'Sparking cable reported on Palm View Boulevard.',
+        performed_by: 'Dr. Chioma Nwachukwu',
+        action_type: 'REPORT_CREATED'
+      },
+      {
+        id: 'tl-102',
+        incident_id: 'inc-002',
+        timestamp: '2026-09-22T20:10:00Z',
+        title: 'Incident Resolved & Area Cleared',
+        description: 'Electrical engineers certified repair. Danger cones removed.',
+        performed_by: 'Sgt. Audu Momoh',
+        action_type: 'RESOLVED'
+      }
+    ],
+    created_at: '2026-09-22T18:15:00Z',
+    updated_at: '2026-09-22T20:15:00Z'
+  }
+];
+
+const INITIAL_ALERTS_SEED: SecurityAlert[] = [
+  {
+    id: 'alt-001',
+    alert_code: 'FOG-ALT-2026-001',
+    title: 'Heightened Night Gate Verification (22:00 - 05:00)',
+    message: 'All unannounced nighttime visitors must be confirmed via phone call with resident host prior to barrier opening.',
+    category: 'Gate restriction',
+    priority: 'High',
+    start_time: '2026-09-20T00:00:00Z',
+    expiry_time: '2026-10-31T23:59:59Z',
+    target_audience: 'All Residents',
+    is_active: true,
+    created_by: 'Chief Security Officer',
+    created_at: '2026-09-20T08:00:00Z'
+  }
+];
+
+const INITIAL_VISITORS_SEED: VisitorPass[] = [
+  {
+    id: 'vis-001',
+    pass_code: 'FOG-VIS-9812',
+    visitor_name: 'Pastor Emmanuel Eze',
+    visitor_phone: '08039988776',
+    vehicle_number: 'KJA-542-AA',
+    vehicle_description: 'Black Toyota Highlander',
+    purpose_of_visit: 'Personal / Family Visit',
+    resident_id: 'res-001',
+    resident_number: '001',
+    resident_name: 'Engr. Babatunde Adeleke',
+    house_number: 'Plot 4A',
+    resident_phone: '08034567890',
+    expected_arrival: new Date(Date.now() + 7200000).toISOString(),
+    status: 'Expected',
+    qr_code_data: 'FOG-VIS-9812-RES001',
+    notes: 'Guest arriving with family members',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'vis-002',
+    pass_code: 'FOG-VIS-4219',
+    visitor_name: 'Engr. Samuel Bassey (Technician)',
+    visitor_phone: '08123344556',
+    vehicle_number: 'EPE-109-BD',
+    vehicle_description: 'White Hiace Van',
+    purpose_of_visit: 'Contractor / Repair Work',
+    resident_id: 'res-002',
+    resident_number: '002',
+    resident_name: 'Dr. Chioma Nwachukwu',
+    house_number: 'House 12',
+    resident_phone: '08098765432',
+    expected_arrival: new Date(Date.now() - 3600000).toISOString(),
+    entry_time: new Date(Date.now() - 1800000).toISOString(),
+    status: 'Arrived',
+    checked_in_by: 'Guard Sunday Eze',
+    qr_code_data: 'FOG-VIS-4219-RES002',
+    notes: 'Carrying air conditioning tools',
+    created_at: new Date(Date.now() - 7200000).toISOString()
+  }
+];
+
+const INITIAL_GATE_LOGS_SEED: GateLogEntry[] = [
+  {
+    id: 'gl-001',
+    log_number: 'GL-20260924-001',
+    movement_type: 'Entry',
+    entity_type: 'Visitor',
+    name: 'Engr. Samuel Bassey (Technician)',
+    phone_number: '08123344556',
+    vehicle_number: 'EPE-109-BD',
+    house_number: 'House 12',
+    destination: 'Palm View Boulevard, House 12',
+    pass_code: 'FOG-VIS-4219',
+    officer_badge: 'FOG-SEC-04',
+    officer_name: 'Guard Sunday Eze',
+    timestamp: new Date(Date.now() - 1800000).toISOString(),
+    notes: 'AC servicing technician, host confirmed via intercom'
+  },
+  {
+    id: 'gl-002',
+    log_number: 'GL-20260924-002',
+    movement_type: 'Entry',
+    entity_type: 'Delivery',
+    name: 'GIG Logistics Courier (Ifeanyi)',
+    phone_number: '07081122334',
+    vehicle_number: 'KJA-881-XY (Motorcycle)',
+    house_number: 'Plot 4A',
+    destination: 'Hibiscus Crescent',
+    officer_badge: 'FOG-SEC-04',
+    officer_name: 'Guard Sunday Eze',
+    timestamp: new Date(Date.now() - 5400000).toISOString(),
+    notes: 'Package delivery'
+  }
+];
+
+const INITIAL_PATROLS_SEED: PatrolRecord[] = [
+  {
+    id: 'ptr-001',
+    patrol_code: 'PTR-20260924-01',
+    officer_id: 'off-003',
+    officer_name: 'Guard Yakubu Danjuma',
+    officer_badge: 'FOG-SEC-03',
+    patrol_area: 'Phase 1 Perimeter Fence & South Gate Boulevard',
+    start_time: '07:00',
+    end_time: '08:30',
+    status: 'Completed',
+    checkpoints_count: 8,
+    checkpoints_completed: 8,
+    issues_discovered: [],
+    notes: 'All 8 checkpoint NFC beacons confirmed, fence clear, solar floodlights active.',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'ptr-002',
+    patrol_code: 'PTR-20260924-02',
+    officer_id: 'off-003',
+    officer_name: 'Guard Yakubu Danjuma',
+    officer_badge: 'FOG-SEC-03',
+    patrol_area: 'Phase 2 Access Road & West Drainage Line',
+    start_time: '11:00',
+    end_time: null,
+    status: 'In Progress',
+    checkpoints_count: 6,
+    checkpoints_completed: 4,
+    issues_discovered: ['Overgrown branch near post 4'],
+    notes: 'Branch reported to landscaping contractor.',
+    created_at: new Date().toISOString()
+  }
+];
 
 const INITIAL_PAYMENTS_SEED: MonthlyPayment[] = [
   {
@@ -2904,6 +3239,550 @@ export const dbService = {
     const locals = getLocalAnnouncements().filter(a => a.id !== id);
     saveLocalAnnouncements(locals);
     return true;
+  },
+
+  // ==========================================
+  // STAGE 10: SECURITY OPERATIONS & INCIDENT MANAGEMENT METHODS
+  // ==========================================
+
+  // 1. Incidents
+  async getIncidents(): Promise<Incident[]> {
+    try {
+      const res = await fetch('/api/security/incidents');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.incidents)) {
+          localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(json.incidents));
+          return json.incidents;
+        }
+      }
+    } catch {}
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.INCIDENTS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(INITIAL_INCIDENTS_SEED));
+    return INITIAL_INCIDENTS_SEED;
+  },
+
+  async getIncidentByNumber(incidentNumber: string): Promise<Incident | null> {
+    const list = await this.getIncidents();
+    return list.find(i => i.incident_number.toLowerCase() === incidentNumber.toLowerCase()) || null;
+  },
+
+  async getResidentIncidents(residentNumber: string): Promise<Incident[]> {
+    const list = await this.getIncidents();
+    return list.filter(i => 
+      i.reporter_resident_number === residentNumber || 
+      (i.house_number && i.house_number.toLowerCase() === residentNumber.toLowerCase())
+    );
+  },
+
+  async createIncident(incidentData: Omit<Incident, 'id' | 'incident_number' | 'status' | 'evidence' | 'timeline' | 'created_at' | 'updated_at'> & { evidence?: IncidentEvidence[] }): Promise<{ success: boolean; incident?: Incident; message?: string }> {
+    try {
+      const res = await fetch('/api/security/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(incidentData)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.incident) {
+          const list = await this.getIncidents();
+          list.unshift(json.incident);
+          localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(list));
+          return json;
+        }
+      }
+    } catch {}
+
+    // Local generation fallback
+    const list = await this.getIncidents();
+    const nextSeq = String(list.length + 1).padStart(4, '0');
+    const incidentNumber = `FOG-INC-2026-${nextSeq}`;
+    
+    const newInc: Incident = {
+      id: 'inc-' + Date.now(),
+      incident_number: incidentNumber,
+      incident_type: incidentData.incident_type,
+      priority: incidentData.priority || 'Medium',
+      status: 'New',
+      date: incidentData.date,
+      time: incidentData.time,
+      location: incidentData.location,
+      house_number: incidentData.house_number || null,
+      description: incidentData.description,
+      people_involved: incidentData.people_involved || null,
+      vehicle_details: incidentData.vehicle_details || null,
+      additional_notes: incidentData.additional_notes || null,
+      reporter_type: incidentData.reporter_type,
+      reported_by: incidentData.reported_by,
+      reporter_phone: incidentData.reporter_phone || null,
+      reporter_resident_number: incidentData.reporter_resident_number || null,
+      is_emergency: incidentData.is_emergency || false,
+      evidence: incidentData.evidence || [],
+      timeline: [
+        {
+          id: 'tl-' + Date.now(),
+          incident_id: '',
+          timestamp: new Date().toISOString(),
+          title: 'Incident Report Created',
+          description: `Report logged via portal for ${incidentData.incident_type} at ${incidentData.location}.`,
+          performed_by: incidentData.reported_by,
+          performed_by_role: incidentData.reporter_type,
+          action_type: 'REPORT_CREATED'
+        }
+      ],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    list.unshift(newInc);
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: incidentData.reporter_phone || 'system@fingerofgodestate.ng',
+      action: 'INCIDENT_CREATED',
+      entity_type: 'incident',
+      entity_id: newInc.id,
+      description: `New ${incidentData.priority} security incident recorded: #${incidentNumber} (${incidentData.incident_type})`
+    });
+
+    return { success: true, incident: newInc };
+  },
+
+  async createEmergencyIncident(data: {
+    type: 'Security emergency' | 'Fire' | 'Medical emergency' | 'Crime/trespassing' | 'Other';
+    location: string;
+    description: string;
+    contactNumber: string;
+    houseNumber?: string;
+  }): Promise<{ success: boolean; incident?: Incident; message?: string }> {
+    const res = await this.createIncident({
+      incident_type: data.type === 'Fire' ? 'Fire' : data.type === 'Medical emergency' ? 'Medical emergency' : 'Gate/security breach',
+      priority: 'Critical',
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      location: data.location,
+      house_number: data.houseNumber || null,
+      description: `[EMERGENCY SOS] ${data.description}`,
+      reporter_type: 'Resident',
+      reported_by: 'Emergency Resident Caller',
+      reporter_phone: data.contactNumber,
+      is_emergency: true
+    });
+
+    if (res.success && res.incident) {
+      await this.logActivity({
+        admin_email: data.contactNumber,
+        action: 'EMERGENCY_REPORTED',
+        entity_type: 'incident',
+        entity_id: res.incident.id,
+        description: `URGENT EMERGENCY SOS broadcasted at ${data.location}: Ref #${res.incident.incident_number}`
+      });
+    }
+
+    return res;
+  },
+
+  async updateIncidentStatus(incidentId: string, newStatus: IncidentStatus, note?: string, user: string = 'Security Officer'): Promise<{ success: boolean; incident?: Incident; message?: string }> {
+    const list = await this.getIncidents();
+    const target = list.find(i => i.id === incidentId);
+    if (!target) return { success: false, message: 'Incident not found' };
+
+    const oldStatus = target.status;
+    target.status = newStatus;
+    target.updated_at = new Date().toISOString();
+
+    if (newStatus === 'Resolved' || newStatus === 'Closed') {
+      target.resolved_at = new Date().toISOString();
+      target.resolution_summary = note || `Resolved and secured by ${user}.`;
+    }
+
+    target.timeline.unshift({
+      id: 'tl-' + Date.now(),
+      incident_id: target.id,
+      timestamp: new Date().toISOString(),
+      title: `Status Changed to ${newStatus}`,
+      description: note ? `Status transitioned from ${oldStatus} to ${newStatus}. Note: ${note}` : `Status updated to ${newStatus}.`,
+      performed_by: user,
+      action_type: newStatus === 'Resolved' ? 'RESOLVED' : newStatus === 'Closed' ? 'CLOSED' : 'STATUS_CHANGED'
+    });
+
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: user,
+      action: newStatus === 'Resolved' ? 'INCIDENT_RESOLVED' : 'INCIDENT_STATUS_CHANGED',
+      entity_type: 'incident',
+      entity_id: target.id,
+      description: `Incident #${target.incident_number} status updated to ${newStatus}`
+    });
+
+    return { success: true, incident: target };
+  },
+
+  async assignIncidentOfficer(incidentId: string, officerId: string, officerName: string, officerPhone: string, user: string = 'Security Supervisor'): Promise<{ success: boolean; incident?: Incident; message?: string }> {
+    const list = await this.getIncidents();
+    const target = list.find(i => i.id === incidentId);
+    if (!target) return { success: false, message: 'Incident not found' };
+
+    target.assigned_officer_id = officerId;
+    target.assigned_officer_name = officerName;
+    target.assigned_officer_phone = officerPhone;
+    if (target.status === 'New') {
+      target.status = 'Acknowledged';
+    }
+    target.updated_at = new Date().toISOString();
+
+    target.timeline.unshift({
+      id: 'tl-' + Date.now(),
+      incident_id: target.id,
+      timestamp: new Date().toISOString(),
+      title: `Assigned to Officer ${officerName}`,
+      description: `Lead security investigator assigned: ${officerName} (Hotline: ${officerPhone}).`,
+      performed_by: user,
+      action_type: 'OFFICER_ASSIGNED'
+    });
+
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: user,
+      action: 'INCIDENT_ASSIGNED',
+      entity_type: 'incident',
+      entity_id: target.id,
+      description: `Assigned Incident #${target.incident_number} to ${officerName}`
+    });
+
+    return { success: true, incident: target };
+  },
+
+  async addIncidentInvestigationNote(incidentId: string, note: string, actionTaken?: string, user: string = 'Investigating Officer'): Promise<{ success: boolean; incident?: Incident; message?: string }> {
+    const list = await this.getIncidents();
+    const target = list.find(i => i.id === incidentId);
+    if (!target) return { success: false, message: 'Incident not found' };
+
+    target.investigation_notes = (target.investigation_notes ? target.investigation_notes + '\n\n' : '') + `[${new Date().toLocaleDateString('en-NG')} ${user}]: ${note}`;
+    if (actionTaken) {
+      target.actions_taken = (target.actions_taken ? target.actions_taken + '\n' : '') + `• ${actionTaken}`;
+    }
+    target.updated_at = new Date().toISOString();
+
+    target.timeline.unshift({
+      id: 'tl-' + Date.now(),
+      incident_id: target.id,
+      timestamp: new Date().toISOString(),
+      title: 'Investigation Finding Logged',
+      description: actionTaken ? `${note} Action: ${actionTaken}` : note,
+      performed_by: user,
+      action_type: 'NOTE_ADDED'
+    });
+
+    localStorage.setItem(STORAGE_KEYS.INCIDENTS, JSON.stringify(list));
+    return { success: true, incident: target };
+  },
+
+  // 2. Security Officers Roster
+  async getSecurityOfficers(): Promise<SecurityOfficer[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.OFFICERS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.OFFICERS, JSON.stringify(INITIAL_OFFICERS_SEED));
+    return INITIAL_OFFICERS_SEED;
+  },
+
+  async updateOfficerStatus(officerId: string, status: OfficerStatus, user: string = 'admin'): Promise<{ success: boolean; officer?: SecurityOfficer }> {
+    const list = await this.getSecurityOfficers();
+    const target = list.find(o => o.id === officerId);
+    if (!target) return { success: false };
+    target.status = status;
+    localStorage.setItem(STORAGE_KEYS.OFFICERS, JSON.stringify(list));
+    return { success: true, officer: target };
+  },
+
+  // 3. Security Alerts
+  async getSecurityAlerts(): Promise<SecurityAlert[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.ALERTS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(INITIAL_ALERTS_SEED));
+    return INITIAL_ALERTS_SEED;
+  },
+
+  async createSecurityAlert(alertData: Omit<SecurityAlert, 'id' | 'alert_code' | 'is_active' | 'created_at'>): Promise<{ success: boolean; alert?: SecurityAlert; message?: string }> {
+    const list = await this.getSecurityAlerts();
+    const code = `FOG-ALT-2026-${String(list.length + 1).padStart(3, '0')}`;
+    const newAlert: SecurityAlert = {
+      id: 'alt-' + Date.now(),
+      alert_code: code,
+      title: alertData.title,
+      message: alertData.message,
+      category: alertData.category,
+      priority: alertData.priority,
+      start_time: alertData.start_time,
+      expiry_time: alertData.expiry_time,
+      target_audience: alertData.target_audience,
+      is_active: true,
+      created_by: alertData.created_by,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newAlert);
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: alertData.created_by,
+      action: 'SECURITY_ALERT_CREATED',
+      entity_type: 'security_alert',
+      entity_id: newAlert.id,
+      description: `Broadcasted Security Alert: "${alertData.title}" (${alertData.priority} priority)`
+    });
+
+    return { success: true, alert: newAlert };
+  },
+
+  async toggleSecurityAlertStatus(alertId: string, isActive: boolean, user: string = 'admin'): Promise<{ success: boolean }> {
+    const list = await this.getSecurityAlerts();
+    const target = list.find(a => a.id === alertId);
+    if (target) {
+      target.is_active = isActive;
+      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(list));
+    }
+    return { success: true };
+  },
+
+  // 4. Visitor Passes
+  async getVisitorPasses(): Promise<VisitorPass[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.VISITORS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(INITIAL_VISITORS_SEED));
+    return INITIAL_VISITORS_SEED;
+  },
+
+  async getResidentVisitorPasses(residentNumber: string): Promise<VisitorPass[]> {
+    const list = await this.getVisitorPasses();
+    return list.filter(v => v.resident_number === residentNumber);
+  },
+
+  async createVisitorPass(passData: Omit<VisitorPass, 'id' | 'pass_code' | 'status' | 'qr_code_data' | 'created_at'>): Promise<{ success: boolean; pass?: VisitorPass; message?: string }> {
+    const list = await this.getVisitorPasses();
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const passCode = `FOG-VIS-${randomSuffix}`;
+
+    const newPass: VisitorPass = {
+      id: 'vis-' + Date.now(),
+      pass_code: passCode,
+      visitor_name: passData.visitor_name,
+      visitor_phone: passData.visitor_phone,
+      vehicle_number: passData.vehicle_number || null,
+      vehicle_description: passData.vehicle_description || null,
+      purpose_of_visit: passData.purpose_of_visit,
+      resident_id: passData.resident_id,
+      resident_number: passData.resident_number,
+      resident_name: passData.resident_name,
+      house_number: passData.house_number,
+      resident_phone: passData.resident_phone,
+      expected_arrival: passData.expected_arrival,
+      expected_departure: passData.expected_departure,
+      status: 'Expected',
+      qr_code_data: `${passCode}-RES${passData.resident_number}`,
+      notes: passData.notes || null,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newPass);
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: passData.resident_phone,
+      action: 'VISITOR_REGISTERED',
+      entity_type: 'visitor',
+      entity_id: newPass.id,
+      description: `Visitor Pass ${passCode} registered for ${passData.visitor_name} (Host: ${passData.resident_name})`
+    });
+
+    return { success: true, pass: newPass };
+  },
+
+  async updateVisitorStatus(passId: string, status: 'Arrived' | 'Departed' | 'Denied', officerName: string, denialReason?: string): Promise<{ success: boolean; pass?: VisitorPass; message?: string }> {
+    const list = await this.getVisitorPasses();
+    const target = list.find(v => v.id === passId);
+    if (!target) return { success: false, message: 'Pass not found' };
+
+    target.status = status;
+    if (status === 'Arrived') {
+      target.entry_time = new Date().toISOString();
+      target.checked_in_by = officerName;
+      // Also automatically record in Gate Log
+      await this.createGateLog({
+        movement_type: 'Entry',
+        entity_type: 'Visitor',
+        name: target.visitor_name,
+        phone_number: target.visitor_phone,
+        vehicle_number: target.vehicle_number || undefined,
+        house_number: target.house_number,
+        destination: `${target.house_number} (${target.resident_name})`,
+        pass_code: target.pass_code,
+        officer_badge: 'FOG-SEC-01',
+        officer_name: officerName,
+        notes: `Checked in using visitor pass ${target.pass_code}`
+      });
+    } else if (status === 'Departed') {
+      target.exit_time = new Date().toISOString();
+      target.checked_out_by = officerName;
+      await this.createGateLog({
+        movement_type: 'Exit',
+        entity_type: 'Visitor',
+        name: target.visitor_name,
+        phone_number: target.visitor_phone,
+        vehicle_number: target.vehicle_number || undefined,
+        house_number: target.house_number,
+        destination: `Exit Gate`,
+        pass_code: target.pass_code,
+        officer_badge: 'FOG-SEC-01',
+        officer_name: officerName,
+        notes: `Departed gate`
+      });
+    } else if (status === 'Denied') {
+      target.denial_reason = denialReason || 'Access denied by gate control';
+    }
+
+    localStorage.setItem(STORAGE_KEYS.VISITORS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: officerName,
+      action: status === 'Arrived' ? 'VISITOR_CHECKED_IN' : status === 'Departed' ? 'VISITOR_CHECKED_OUT' : 'VISITOR_DENIED',
+      entity_type: 'visitor',
+      entity_id: target.id,
+      description: `Visitor ${target.visitor_name} (${target.pass_code}) marked as ${status} by ${officerName}`
+    });
+
+    return { success: true, pass: target };
+  },
+
+  // 5. Gate Security Logs
+  async getGateLogs(): Promise<GateLogEntry[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.GATE_LOGS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.GATE_LOGS, JSON.stringify(INITIAL_GATE_LOGS_SEED));
+    return INITIAL_GATE_LOGS_SEED;
+  },
+
+  async createGateLog(logData: Omit<GateLogEntry, 'id' | 'log_number' | 'timestamp'>): Promise<{ success: boolean; log?: GateLogEntry }> {
+    const list = await this.getGateLogs();
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const seq = String(list.length + 1).padStart(3, '0');
+    const logNumber = `GL-${dateStr}-${seq}`;
+
+    const newLog: GateLogEntry = {
+      id: 'gl-' + Date.now(),
+      log_number: logNumber,
+      movement_type: logData.movement_type,
+      entity_type: logData.entity_type,
+      name: logData.name,
+      phone_number: logData.phone_number,
+      vehicle_number: logData.vehicle_number,
+      house_number: logData.house_number,
+      destination: logData.destination,
+      pass_code: logData.pass_code || null,
+      officer_badge: logData.officer_badge,
+      officer_name: logData.officer_name,
+      timestamp: new Date().toISOString(),
+      notes: logData.notes || null
+    };
+
+    list.unshift(newLog);
+    localStorage.setItem(STORAGE_KEYS.GATE_LOGS, JSON.stringify(list));
+
+    await this.logActivity({
+      admin_email: logData.officer_name,
+      action: 'GATE_LOG_RECORDED',
+      entity_type: 'gate_log',
+      entity_id: newLog.id,
+      description: `Recorded Gate ${logData.movement_type} for ${logData.name} (${logData.entity_type})`
+    });
+
+    return { success: true, log: newLog };
+  },
+
+  // 6. Patrol Records
+  async getPatrols(): Promise<PatrolRecord[]> {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.PATROLS);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(STORAGE_KEYS.PATROLS, JSON.stringify(INITIAL_PATROLS_SEED));
+    return INITIAL_PATROLS_SEED;
+  },
+
+  async createPatrolRecord(data: Omit<PatrolRecord, 'id' | 'patrol_code' | 'created_at'>): Promise<{ success: boolean; patrol?: PatrolRecord }> {
+    const list = await this.getPatrols();
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const code = `PTR-${dateStr}-${String(list.length + 1).padStart(2, '0')}`;
+
+    const newPatrol: PatrolRecord = {
+      id: 'ptr-' + Date.now(),
+      patrol_code: code,
+      officer_id: data.officer_id,
+      officer_name: data.officer_name,
+      officer_badge: data.officer_badge,
+      patrol_area: data.patrol_area,
+      start_time: data.start_time,
+      end_time: data.end_time || null,
+      status: data.status,
+      checkpoints_count: data.checkpoints_count,
+      checkpoints_completed: data.checkpoints_completed,
+      issues_discovered: data.issues_discovered || [],
+      notes: data.notes,
+      created_at: new Date().toISOString()
+    };
+
+    list.unshift(newPatrol);
+    localStorage.setItem(STORAGE_KEYS.PATROLS, JSON.stringify(list));
+    return { success: true, patrol: newPatrol };
+  },
+
+  // 7. Security Summary Stats
+  async getSecurityStats(): Promise<SecurityOperationsSummary> {
+    const [incidents, officers, alerts, visitors, patrols] = await Promise.all([
+      this.getIncidents(),
+      this.getSecurityOfficers(),
+      this.getSecurityAlerts(),
+      this.getVisitorPasses(),
+      this.getPatrols()
+    ]);
+
+    const activeInc = incidents.filter(i => i.status !== 'Resolved' && i.status !== 'Closed').length;
+    const critInc = incidents.filter(i => i.priority === 'Critical' && i.status !== 'Closed').length;
+    const activeAlerts = alerts.filter(a => a.is_active).length;
+    const insideVis = visitors.filter(v => v.status === 'Arrived').length;
+    const expectedVis = visitors.filter(v => v.status === 'Expected').length;
+    const dutyOff = officers.filter(o => o.status === 'On Duty' || o.status === 'On Patrol' || o.status === 'Responding').length;
+    const activePatrols = patrols.filter(p => p.status === 'In Progress').length;
+
+    return {
+      security_status: critInc > 0 ? 'Emergency' : activeInc > 5 ? 'Elevated Alert' : 'Normal',
+      active_incidents_count: activeInc,
+      open_incidents_count: incidents.filter(i => i.status === 'New').length,
+      investigating_count: incidents.filter(i => i.status === 'Investigating').length,
+      resolved_incidents_count: incidents.filter(i => i.status === 'Resolved' || i.status === 'Closed').length,
+      pending_reports_count: incidents.filter(i => i.status === 'Acknowledged' || i.status === 'Action Required').length,
+      critical_incidents_count: critInc,
+      active_alerts_count: activeAlerts,
+      visitors_inside_count: insideVis,
+      expected_visitors_today: expectedVis,
+      emergency_reports_count: incidents.filter(i => i.is_emergency).length,
+      officers_on_duty_count: dutyOff,
+      active_patrols_count: activePatrols
+    };
   }
 };
 

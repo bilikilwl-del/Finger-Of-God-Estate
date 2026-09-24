@@ -3146,7 +3146,268 @@ app.delete('/api/admin/announcements/:id', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 6. HEALTH CHECK
+// 6. STAGE 10: SECURITY OPERATIONS API ENDPOINTS
+// -------------------------------------------------------------
+
+interface ServerIncidentRecord {
+  id: string;
+  incident_number: string;
+  incident_type: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'New' | 'Acknowledged' | 'Investigating' | 'Action Required' | 'Resolved' | 'Closed';
+  date: string;
+  time: string;
+  location: string;
+  house_number: string | null;
+  phase?: string;
+  description: string;
+  people_involved?: string | null;
+  vehicle_details?: string | null;
+  additional_notes?: string | null;
+  reporter_type: string;
+  reported_by: string;
+  reporter_phone?: string | null;
+  reporter_email?: string | null;
+  reporter_resident_number?: string | null;
+  is_emergency: boolean;
+  assigned_officer_id?: string | null;
+  assigned_officer_name?: string | null;
+  assigned_officer_phone?: string | null;
+  investigation_notes?: string | null;
+  actions_taken?: string | null;
+  resolution_summary?: string | null;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  evidence: any[];
+  timeline: any[];
+  created_at: string;
+  updated_at: string;
+}
+
+const serverIncidentsStore = new Map<string, ServerIncidentRecord>();
+const serverVisitorsStore = new Map<string, any>();
+const serverGateLogsStore: any[] = [];
+const serverSecurityAlertsStore = new Map<string, any>();
+
+// Seed initial server incidents
+serverIncidentsStore.set('inc-001', {
+  id: 'inc-001',
+  incident_number: 'FOG-INC-2026-0001',
+  incident_type: 'Suspicious activity',
+  priority: 'High',
+  status: 'Investigating',
+  date: '2026-09-23',
+  time: '21:45',
+  location: 'Hibiscus Crescent, near Plot 4A',
+  house_number: 'Plot 4A',
+  phase: 'Phase 1',
+  description: 'An unidentified dark sedan was observed idling with headlights off for over 35 minutes along the perimeter curve.',
+  people_involved: 'Two occupants observed inside vehicle',
+  vehicle_details: 'Dark Grey Toyota Camry (No visible front plate)',
+  reporter_type: 'Resident',
+  reported_by: 'Engr. Babatunde Adeleke',
+  reporter_phone: '08034567890',
+  reporter_resident_number: '001',
+  is_emergency: false,
+  assigned_officer_id: 'off-002',
+  assigned_officer_name: 'Inspector Chinedu Okoro',
+  assigned_officer_phone: '08034567891',
+  investigation_notes: 'Patrol officer dispatched to confirm vehicle identity.',
+  actions_taken: 'Driver credentials logged at gate.',
+  evidence: [],
+  timeline: [
+    {
+      id: 'tl-001',
+      incident_id: 'inc-001',
+      timestamp: '2026-09-23T21:45:00Z',
+      title: 'Incident Report Created',
+      description: 'Report logged by resident.',
+      performed_by: 'Engr. Babatunde Adeleke',
+      action_type: 'REPORT_CREATED'
+    }
+  ],
+  created_at: '2026-09-23T21:45:00Z',
+  updated_at: '2026-09-23T22:00:00Z'
+});
+
+// GET /api/security/incidents
+app.get('/api/security/incidents', (_req: Request, res: Response) => {
+  const incidents = Array.from(serverIncidentsStore.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  res.json({ success: true, incidents });
+});
+
+// POST /api/security/incidents
+app.post('/api/security/incidents', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const count = serverIncidentsStore.size + 1;
+    const incidentNumber = `FOG-INC-2026-${String(count).padStart(4, '0')}`;
+    const newId = `inc-${Date.now()}`;
+
+    const newIncident: ServerIncidentRecord = {
+      id: newId,
+      incident_number: incidentNumber,
+      incident_type: data.incident_type || 'Suspicious activity',
+      priority: data.priority || 'Medium',
+      status: 'New',
+      date: data.date || new Date().toISOString().split('T')[0],
+      time: data.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      location: data.location || 'Finger of God Estate',
+      house_number: data.house_number || null,
+      description: data.description || '',
+      people_involved: data.people_involved || null,
+      vehicle_details: data.vehicle_details || null,
+      additional_notes: data.additional_notes || null,
+      reporter_type: data.reporter_type || 'Resident',
+      reported_by: data.reported_by || 'Resident Caller',
+      reporter_phone: data.reporter_phone || null,
+      reporter_resident_number: data.reporter_resident_number || null,
+      is_emergency: Boolean(data.is_emergency),
+      evidence: data.evidence || [],
+      timeline: [
+        {
+          id: `tl-${Date.now()}`,
+          incident_id: newId,
+          timestamp: new Date().toISOString(),
+          title: 'Incident Report Created',
+          description: `Logged report for ${data.incident_type} at ${data.location}.`,
+          performed_by: data.reported_by || 'Reporter',
+          action_type: 'REPORT_CREATED'
+        }
+      ],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    serverIncidentsStore.set(newId, newIncident);
+
+    // Audit Log
+    auditLogsStore.unshift({
+      id: crypto.randomUUID(),
+      admin_email: data.reporter_phone || 'security@fingerofgodestate.ng',
+      action: 'INCIDENT_CREATED',
+      entity_type: 'incident',
+      entity_id: newId,
+      description: `New ${newIncident.priority} incident logged: #${incidentNumber} (${newIncident.incident_type})`,
+      created_at: new Date().toISOString()
+    });
+
+    res.json({ success: true, incident: newIncident });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to record incident' });
+  }
+});
+
+// GET /api/security/alerts
+app.get('/api/security/alerts', (_req: Request, res: Response) => {
+  const alerts = Array.from(serverSecurityAlertsStore.values());
+  res.json({ success: true, alerts });
+});
+
+// POST /api/security/alerts
+app.post('/api/security/alerts', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const newId = `alt-${Date.now()}`;
+    const alertCode = `FOG-ALT-2026-${String(serverSecurityAlertsStore.size + 1).padStart(3, '0')}`;
+    const newAlert = {
+      id: newId,
+      alert_code: alertCode,
+      title: data.title,
+      message: data.message,
+      category: data.category || 'Security warning',
+      priority: data.priority || 'High',
+      start_time: data.start_time || new Date().toISOString(),
+      expiry_time: data.expiry_time || new Date(Date.now() + 86400000 * 3).toISOString(),
+      target_audience: data.target_audience || 'All Residents',
+      is_active: true,
+      created_by: data.created_by || 'Security Command',
+      created_at: new Date().toISOString()
+    };
+    serverSecurityAlertsStore.set(newId, newAlert);
+    res.json({ success: true, alert: newAlert });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to broadcast alert' });
+  }
+});
+
+// GET /api/security/visitors
+app.get('/api/security/visitors', (_req: Request, res: Response) => {
+  const visitors = Array.from(serverVisitorsStore.values());
+  res.json({ success: true, visitors });
+});
+
+// POST /api/security/visitors
+app.post('/api/security/visitors', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const newId = `vis-${Date.now()}`;
+    const passCode = `FOG-VIS-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newPass = {
+      id: newId,
+      pass_code: passCode,
+      visitor_name: data.visitor_name,
+      visitor_phone: data.visitor_phone,
+      vehicle_number: data.vehicle_number || null,
+      vehicle_description: data.vehicle_description || null,
+      purpose_of_visit: data.purpose_of_visit || 'Personal / Family Visit',
+      resident_id: data.resident_id,
+      resident_number: data.resident_number,
+      resident_name: data.resident_name,
+      house_number: data.house_number,
+      resident_phone: data.resident_phone,
+      expected_arrival: data.expected_arrival || new Date().toISOString(),
+      status: 'Expected',
+      qr_code_data: `${passCode}-RES${data.resident_number}`,
+      notes: data.notes || null,
+      created_at: new Date().toISOString()
+    };
+    serverVisitorsStore.set(newId, newPass);
+    res.json({ success: true, pass: newPass });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to create pass' });
+  }
+});
+
+// GET /api/security/gate-logs
+app.get('/api/security/gate-logs', (_req: Request, res: Response) => {
+  res.json({ success: true, logs: serverGateLogsStore });
+});
+
+// POST /api/security/gate-logs
+app.post('/api/security/gate-logs', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const seq = String(serverGateLogsStore.length + 1).padStart(3, '0');
+    const logNumber = `GL-${dateStr}-${seq}`;
+    const newLog = {
+      id: `gl-${Date.now()}`,
+      log_number: logNumber,
+      movement_type: data.movement_type || 'Entry',
+      entity_type: data.entity_type || 'Visitor',
+      name: data.name,
+      phone_number: data.phone_number,
+      vehicle_number: data.vehicle_number,
+      house_number: data.house_number,
+      destination: data.destination,
+      pass_code: data.pass_code || null,
+      officer_badge: data.officer_badge || 'FOG-SEC-01',
+      officer_name: data.officer_name || 'Officer on Duty',
+      timestamp: new Date().toISOString(),
+      notes: data.notes || null
+    };
+    serverGateLogsStore.unshift(newLog);
+    res.json({ success: true, log: newLog });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to record gate log' });
+  }
+});
+
+// -------------------------------------------------------------
+// 7. HEALTH CHECK
 // -------------------------------------------------------------
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({

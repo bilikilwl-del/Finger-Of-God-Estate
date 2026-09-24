@@ -44,6 +44,7 @@ import { PublicHomeView } from './components/public/PublicHomeView';
 import { PublicAnnouncementsView } from './components/public/PublicAnnouncementsView';
 import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
 import { AnnouncementsView } from './components/admin/AnnouncementsView';
+import { SecurityOperationsView } from './components/security/SecurityOperationsView';
 
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
@@ -645,6 +646,20 @@ export default function App() {
                 onAddResident={handleOpenAddResident}
                 onViewResident={handleOpenViewResident}
                 onOpenSqlModal={() => setIsSqlModalOpen(true)}
+              />
+            )}
+
+            {currentTab === 'security_ops' && (
+              <SecurityOperationsView
+                estateSettings={estateSettings}
+                adminUser={adminUser}
+                onNavigateToResident={(resNum) => {
+                  const target = residents.find(r => r.resident_number === resNum);
+                  if (target) {
+                    setViewingResidentProfile(target);
+                    setCurrentTab('residents');
+                  }
+                }}
               />
             )}
 

@@ -248,8 +248,39 @@ export interface ActivityLog {
     | 'ANNOUNCEMENT_UPDATED'
     | 'ANNOUNCEMENT_PUBLISHED'
     | 'ANNOUNCEMENT_ARCHIVED'
-    | 'ANNOUNCEMENT_DELETED';
-  entity_type: 'resident' | 'estate_settings' | 'auth' | 'admin_user' | 'payment' | 'report' | 'receipt' | 'sms' | 'announcement';
+    | 'ANNOUNCEMENT_DELETED'
+    | 'INCIDENT_CREATED'
+    | 'INCIDENT_UPDATED'
+    | 'INCIDENT_ASSIGNED'
+    | 'INCIDENT_STATUS_CHANGED'
+    | 'INCIDENT_RESOLVED'
+    | 'INCIDENT_CLOSED'
+    | 'EMERGENCY_REPORTED'
+    | 'SECURITY_ALERT_CREATED'
+    | 'SECURITY_ALERT_UPDATED'
+    | 'SECURITY_ALERT_DEACTIVATED'
+    | 'VISITOR_REGISTERED'
+    | 'VISITOR_CHECKED_IN'
+    | 'VISITOR_CHECKED_OUT'
+    | 'VISITOR_DENIED'
+    | 'GATE_LOG_RECORDED'
+    | 'PATROL_LOGGED';
+  entity_type: 
+    | 'resident' 
+    | 'estate_settings' 
+    | 'auth' 
+    | 'admin_user' 
+    | 'payment' 
+    | 'report' 
+    | 'receipt' 
+    | 'sms' 
+    | 'announcement'
+    | 'incident'
+    | 'security_alert'
+    | 'visitor'
+    | 'gate_log'
+    | 'officer'
+    | 'patrol';
   entity_id?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
@@ -263,6 +294,7 @@ export type NavigationTab =
   | 'login'
   | 'dashboard'
   | 'residents'
+  | 'security_ops'
   | 'payments'
   | 'paid_residents'
   | 'unpaid_residents'
@@ -395,4 +427,245 @@ export interface PublicReceiptVerification {
   };
   message?: string;
 }
+
+// ==========================================
+// STAGE 10: SECURITY OPERATIONS & INCIDENT MANAGEMENT TYPES
+// ==========================================
+
+export type IncidentType =
+  | 'Theft'
+  | 'Burglary'
+  | 'Suspicious activity'
+  | 'Trespassing'
+  | 'Property damage'
+  | 'Fight/disturbance'
+  | 'Fire'
+  | 'Medical emergency'
+  | 'Missing person'
+  | 'Vehicle-related incident'
+  | 'Power/electrical emergency'
+  | 'Gate/security breach'
+  | 'Other';
+
+export type IncidentStatus =
+  | 'New'
+  | 'Acknowledged'
+  | 'Investigating'
+  | 'Action Required'
+  | 'Resolved'
+  | 'Closed';
+
+export type IncidentPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+
+export interface IncidentEvidence {
+  id: string;
+  incident_id: string;
+  file_name: string;
+  file_type: 'image' | 'video' | 'document';
+  url: string;
+  size_bytes?: number;
+  uploaded_by: string;
+  uploaded_at: string;
+  notes?: string;
+}
+
+export interface IncidentTimelineEntry {
+  id: string;
+  incident_id: string;
+  timestamp: string;
+  title: string;
+  description: string;
+  performed_by: string;
+  performed_by_role?: string;
+  action_type: 
+    | 'REPORT_CREATED'
+    | 'ACKNOWLEDGED'
+    | 'OFFICER_ASSIGNED'
+    | 'INVESTIGATION_STARTED'
+    | 'EVIDENCE_ADDED'
+    | 'STATUS_CHANGED'
+    | 'PRIORITY_CHANGED'
+    | 'NOTE_ADDED'
+    | 'RESOLVED'
+    | 'CLOSED';
+}
+
+export interface Incident {
+  id: string;
+  incident_number: string; // e.g. "FOG-INC-2026-0001"
+  incident_type: IncidentType;
+  priority: IncidentPriority;
+  status: IncidentStatus;
+  
+  // Temporal & Spatial
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  location: string;
+  house_number?: string | null;
+  phase?: string;
+  
+  // Content
+  title?: string;
+  description: string;
+  people_involved?: string | null;
+  vehicle_details?: string | null;
+  additional_notes?: string | null;
+  
+  // Reporter
+  reporter_type: 'Resident' | 'Security Officer' | 'Visitor' | 'Staff' | 'Anonymous';
+  reported_by: string; // Full Name
+  reporter_phone?: string | null;
+  reporter_email?: string | null;
+  reporter_resident_number?: string | null;
+  is_emergency: boolean;
+  
+  // Assignment & Resolution
+  assigned_officer_id?: string | null;
+  assigned_officer_name?: string | null;
+  assigned_officer_phone?: string | null;
+  investigation_notes?: string | null;
+  actions_taken?: string | null;
+  resolution_summary?: string | null;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  
+  // Relational items
+  evidence: IncidentEvidence[];
+  timeline: IncidentTimelineEntry[];
+  
+  created_at: string;
+  updated_at: string;
+}
+
+export type OfficerStatus = 'On Duty' | 'Off Duty' | 'On Patrol' | 'Responding' | 'Unavailable';
+export type OfficerShift = 'Morning (06:00 - 14:00)' | 'Afternoon (14:00 - 22:00)' | 'Night (22:00 - 06:00)' | '24-Hour Special';
+
+export interface SecurityOfficer {
+  id: string;
+  officer_badge_id: string; // e.g. "FOG-SEC-01"
+  full_name: string;
+  phone_number: string;
+  email?: string | null;
+  rank: 'Chief Security Officer' | 'Security Supervisor' | 'Patrol Officer' | 'Gate Controller' | 'Response Guard';
+  shift: OfficerShift;
+  status: OfficerStatus;
+  assigned_area?: string;
+  avatar_url?: string;
+  current_location?: string;
+  active_incidents_count: number;
+  created_at: string;
+}
+
+export type SecurityAlertCategory =
+  | 'Security warning'
+  | 'Gate restriction'
+  | 'Suspicious activity warning'
+  | 'Emergency announcement'
+  | 'Missing person alert'
+  | 'Weather/environmental warning'
+  | 'Estate-wide security notice';
+
+export interface SecurityAlert {
+  id: string;
+  alert_code: string; // e.g. "FOG-ALT-2026-001"
+  title: string;
+  message: string;
+  category: SecurityAlertCategory;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  start_time: string;
+  expiry_time: string;
+  target_audience: 'All Residents' | 'Phase 1' | 'Phase 2' | 'Commercial Area' | 'Security Personnel';
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export type VisitorStatus = 'Expected' | 'Arrived' | 'Departed' | 'Denied' | 'Expired' | 'Cancelled';
+
+export interface VisitorPass {
+  id: string;
+  pass_code: string; // e.g. "FOG-VIS-9812"
+  visitor_name: string;
+  visitor_phone: string;
+  vehicle_number?: string | null;
+  vehicle_description?: string | null;
+  purpose_of_visit: string;
+  
+  // Host Resident
+  resident_id: string;
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  resident_phone: string;
+  
+  // Timing
+  expected_arrival: string; // ISO / YYYY-MM-DDTHH:mm
+  expected_departure?: string;
+  entry_time?: string | null;
+  exit_time?: string | null;
+  
+  status: VisitorStatus;
+  denial_reason?: string | null;
+  checked_in_by?: string | null; // Officer name/badge
+  checked_out_by?: string | null;
+  qr_code_data: string;
+  notes?: string | null;
+  created_at: string;
+}
+
+export type GateEntityType = 'Visitor' | 'Resident' | 'Contractor' | 'Delivery' | 'Staff' | 'Service Vehicle' | 'Security Patrol';
+
+export interface GateLogEntry {
+  id: string;
+  log_number: string; // e.g. "GL-20260924-001"
+  movement_type: 'Entry' | 'Exit';
+  entity_type: GateEntityType;
+  name: string;
+  phone_number?: string;
+  vehicle_number?: string;
+  house_number?: string;
+  destination: string;
+  pass_code?: string | null;
+  officer_badge: string;
+  officer_name: string;
+  timestamp: string;
+  notes?: string | null;
+}
+
+export type PatrolStatus = 'Scheduled' | 'In Progress' | 'Completed' | 'Aborted';
+
+export interface PatrolRecord {
+  id: string;
+  patrol_code: string; // e.g. "PTR-20260924-01"
+  officer_id: string;
+  officer_name: string;
+  officer_badge: string;
+  patrol_area: string; // e.g. "Phase 1 Perimeter & North Gate"
+  start_time: string;
+  end_time?: string | null;
+  status: PatrolStatus;
+  checkpoints_count: number;
+  checkpoints_completed: number;
+  issues_discovered: string[];
+  notes?: string;
+  created_at: string;
+}
+
+export interface SecurityOperationsSummary {
+  security_status: 'Normal' | 'Elevated Alert' | 'Emergency' | 'Restricted Access';
+  active_incidents_count: number;
+  open_incidents_count: number;
+  investigating_count: number;
+  resolved_incidents_count: number;
+  pending_reports_count: number;
+  critical_incidents_count: number;
+  active_alerts_count: number;
+  visitors_inside_count: number;
+  expected_visitors_today: number;
+  emergency_reports_count: number;
+  officers_on_duty_count: number;
+  active_patrols_count: number;
+}
+
 

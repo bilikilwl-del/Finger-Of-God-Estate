@@ -50,6 +50,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 }) => {
   const mainNavItems: { id: NavigationTab; label: string; icon: React.FC<{ className?: string }>; badge?: string | number; tag?: string }[] = [
     { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
+    { id: 'security_ops', label: 'Security Operations', icon: ShieldCheck, tag: 'Stage 10' },
     { id: 'residents', label: 'Resident Directory', icon: Users, badge: residentCount },
     { id: 'paid_residents', label: 'Paid Residents', icon: CheckCircle2 },
     { id: 'unpaid_residents', label: 'Unpaid Residents', icon: AlertCircle },
