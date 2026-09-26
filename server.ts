@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
-import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer';
+import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
 
 dotenv.config();
 
