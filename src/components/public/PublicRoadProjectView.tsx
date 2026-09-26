@@ -47,6 +47,7 @@ import {
 } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { PublicNavbar } from '../layout/PublicNavbar';
 import { RoadProjectPaystackModal } from '../payments/RoadProjectPaystackModal';
 import { useRoadProjectStream } from '../../hooks/useRoadProjectStream';
 
@@ -235,188 +236,22 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
-      {/* 1. Header / Navigation */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-18">
-            {/* Logo & Back Affordance */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onNavigateHome}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-emerald-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer border border-slate-200/90 shadow-2xs group"
-                title="Return to Main Estate Homepage"
-              >
-                <ArrowLeft className="w-3.5 h-3.5 text-emerald-700 group-hover:-translate-x-0.5 transition-transform" />
-                <span className="hidden sm:inline">Back to Home</span>
-                <span className="sm:hidden">Back</span>
-              </button>
-
-              <div 
-                className="flex items-center cursor-pointer select-none" 
-                onClick={onNavigateHome}
-                title="Finger of God Estate - Home"
-              >
-                <EstateLogo
-                  size="sm"
-                  variant="horizontal"
-                  theme="light"
-                  estateName={estateSettings.estate_name || 'Finger of God Estate'}
-                  subtitle="ESTATE MANAGEMENT • ASABA"
-                  hideSubtitleOnMobile={true}
-                />
-              </div>
-            </div>
-
-            {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-              <button 
-                onClick={onNavigateHome}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Home
-              </button>
-              <button 
-                onClick={onNavigateToSecurity}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Security</span>
-              </button>
-              {/* Road Project - Active Tab */}
-              <button 
-                className="px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 rounded-lg transition-colors cursor-pointer border border-amber-300/80 flex items-center gap-1.5 shadow-2xs"
-              >
-                <Coins className="w-3.5 h-3.5 text-amber-700" />
-                <span>Road Project</span>
-                <span className="px-1.5 py-0.2 bg-amber-600 text-white font-black text-[9px] rounded-full uppercase tracking-wider">
-                  Transparent
-                </span>
-              </button>
-              <button 
-                onClick={onNavigateToPortal}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Residents
-              </button>
-              <button 
-                onClick={() => onNavigateHomeSection ? onNavigateHomeSection('estate-info-section') : onNavigateHome()}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Estate Information
-              </button>
-              <button 
-                onClick={() => onNavigateHomeSection ? onNavigateHomeSection('levy-section') : onNavigateHome()}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Payments & Levies
-              </button>
-              <button 
-                onClick={onNavigateToAnnouncements}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Announcements
-              </button>
-              <button 
-                onClick={onNavigateToVerifyReceipt}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Verify Receipt
-              </button>
-            </nav>
-
-            {/* Right Action Buttons */}
-            <div className="hidden sm:flex items-center gap-2.5">
-              <button
-                onClick={() => setIsContributeModalOpen(true)}
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
-              >
-                <Coins className="w-3.5 h-3.5" />
-                <span>Contribute to Road</span>
-              </button>
-              <button
-                onClick={onOpenAdminLogin}
-                className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-                title="Admin Console"
-              >
-                <Lock className="w-3.5 h-3.5 text-slate-500" />
-                <span>Admin</span>
-              </button>
-            </div>
-
-            {/* Mobile menu trigger */}
-            <div className="flex lg:hidden items-center gap-2">
-              <button
-                onClick={() => setIsContributeModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-700 rounded-lg"
-              >
-                Contribute
-              </button>
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                aria-label="Toggle menu"
-              >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Navigation Dropdown */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-2 shadow-xl animate-in slide-in-from-top-2 duration-150">
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateHome(); }}
-              className="w-full text-left px-3 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-50 rounded-xl flex items-center gap-2 text-emerald-800 bg-emerald-50/60 border border-emerald-200"
-            >
-              <ArrowLeft className="w-4 h-4 text-emerald-700" />
-              <span>Back to Main Estate Homepage</span>
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToSecurity(); }}
-              className="w-full text-left px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 rounded-xl flex items-center gap-2"
-            >
-              <Shield className="w-4 h-4 text-emerald-600" />
-              <span>Security Department</span>
-            </button>
-            <button
-              className="w-full text-left px-3 py-2.5 text-sm font-bold text-amber-900 bg-amber-50 rounded-xl flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2">
-                <Coins className="w-4 h-4 text-amber-700" />
-                <span>Road Project (Transparent Ledger)</span>
-              </div>
-              <span className="text-[10px] font-black px-2 py-0.5 bg-amber-600 text-white rounded-full">ACTIVE</span>
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToPortal(); }}
-              className="w-full text-left px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 rounded-xl"
-            >
-              Resident Portal & Security Levy
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToAnnouncements(); }}
-              className="w-full text-left px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 rounded-xl"
-            >
-              Announcements & Notices
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToVerifyReceipt(); }}
-              className="w-full text-left px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 rounded-xl"
-            >
-              Verify Payment Receipt
-            </button>
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <button
-                onClick={() => { setMobileMenuOpen(false); setIsContributeModalOpen(true); }}
-                className="w-full py-2.5 bg-emerald-700 text-white font-bold text-xs rounded-xl text-center"
-              >
-                Contribute to Road Project
-              </button>
-            </div>
-          </div>
-        )}
-      </header>
+      {/* 1. Universal Estate Header */}
+      <PublicNavbar
+        currentTab="road_project"
+        estateSettings={estateSettings}
+        onNavigate={(tab) => {
+          if (tab === 'home') onNavigateHome();
+          else if (tab === 'security_public') onNavigateToSecurity();
+          else if (tab === 'public_announcements') onNavigateToAnnouncements();
+          else if (tab === 'verify_receipt') onNavigateToVerifyReceipt();
+          else if (tab === 'public_residents' || tab === 'resident_portal') onNavigateToPortal();
+          else if (tab === 'estate_levy') onNavigateHome();
+          else onNavigateHome();
+        }}
+        onOpenResidentLogin={onOpenResidentLogin || (() => {})}
+        onOpenAdminLogin={onOpenAdminLogin}
+      />
 
       {/* 2. Hero Section: Road Project Overview */}
       <section className="bg-gradient-to-b from-slate-900 via-slate-850 to-slate-900 text-white pt-12 pb-16 sm:pb-20 relative overflow-hidden">

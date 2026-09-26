@@ -29,6 +29,7 @@ import {
 import { EstateSettings, Announcement, SecurityAlert } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { PublicNavbar } from '../layout/PublicNavbar';
 
 interface PublicSecurityViewProps {
   estateSettings: EstateSettings;
@@ -230,211 +231,21 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
       {/* 1. Universal Estate Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-18">
-            {/* Logo - Takes user back to Main Estate Page */}
-            <div 
-              className="flex items-center cursor-pointer select-none" 
-              onClick={onNavigateHome}
-              title="Return to Finger of God Estate Main Page"
-            >
-              <EstateLogo
-                size="sm"
-                variant="horizontal"
-                theme="light"
-                estateName={estateSettings.estate_name || 'Finger of God Estate'}
-                subtitle="SECURITY DEPARTMENT • ASABA"
-                hideSubtitleOnMobile={true}
-              />
-            </div>
-
-            {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-              <button 
-                onClick={onNavigateHome}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Home
-              </button>
-              <button 
-                className="px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 rounded-lg cursor-default border border-emerald-200/60 flex items-center gap-1.5"
-              >
-                <Shield className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Security</span>
-              </button>
-              <button 
-                onClick={onNavigateToRoadProject}
-                className="px-3 py-1.5 text-xs font-semibold text-amber-900 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Coins className="w-3.5 h-3.5 text-amber-700" />
-                <span>Road Project</span>
-              </button>
-              <button 
-                onClick={onNavigateToPortal}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Residents
-              </button>
-              <button 
-                onClick={() => {
-                  onNavigateHome();
-                  setTimeout(() => {
-                    document.getElementById('estate-info-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Estate Information
-              </button>
-              <button 
-                onClick={onOpenPayLevy}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Payments & Levies
-              </button>
-              <button 
-                onClick={onNavigateToAnnouncements}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Announcements
-              </button>
-              <button 
-                onClick={() => {
-                  onNavigateHome();
-                  setTimeout(() => {
-                    document.getElementById('contact-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Contact
-              </button>
-            </nav>
-
-            {/* Desktop Action Buttons */}
-            <div className="hidden lg:flex items-center gap-2.5">
-              <button
-                onClick={onOpenResidentLogin}
-                className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer flex items-center gap-1.5"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-slate-500" />
-                <span>Resident Login</span>
-              </button>
-              <button
-                onClick={() => {
-                  const elem = document.getElementById('report-incident-section');
-                  elem?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Report Incident</span>
-              </button>
-            </div>
-
-            {/* Mobile / Tablet Buttons */}
-            <div className="flex lg:hidden items-center gap-2">
-              <button
-                onClick={() => {
-                  const elem = document.getElementById('report-incident-section');
-                  elem?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>Report</span>
-              </button>
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                aria-label="Toggle Navigation Menu"
-              >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Navigation Drawer */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-1.5 shadow-lg animate-in slide-in-from-top duration-150">
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateHome(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer flex items-center gap-2"
-            >
-              <ChevronLeft className="w-4 h-4 text-slate-500" />
-              <span>Back to Finger of God Estate Home</span>
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold text-emerald-800 bg-emerald-50 cursor-pointer flex items-center gap-2"
-            >
-              <Shield className="w-4 h-4 text-emerald-700" />
-              <span>Security Department (Current)</span>
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToRoadProject(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-amber-900 hover:bg-amber-50 cursor-pointer flex items-center justify-between"
-            >
-              <span className="flex items-center gap-2">
-                <Coins className="w-4 h-4 text-amber-700" />
-                <span>Road Project (Transparent Ledger)</span>
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                Live
-              </span>
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToPortal(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer"
-            >
-              Residents & Household Portal
-            </button>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onNavigateHome();
-                setTimeout(() => {
-                  document.getElementById('estate-info-section')?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-              }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer"
-            >
-              About Estate & Information
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onOpenPayLevy(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer"
-            >
-              Pay Monthly Security Levy
-            </button>
-            <button
-              onClick={() => { setMobileMenuOpen(false); onNavigateToAnnouncements(); }}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer"
-            >
-              Estate Announcements
-            </button>
-            <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { setMobileMenuOpen(false); onOpenResidentLogin(); }}
-                className="w-full py-2.5 text-center text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
-              >
-                Resident Login
-              </button>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  document.getElementById('report-incident-section')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full py-2.5 text-center text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl cursor-pointer"
-              >
-                Report Incident
-              </button>
-            </div>
-          </div>
-        )}
-      </header>
+      <PublicNavbar
+        currentTab="security_public"
+        estateSettings={estateSettings}
+        onNavigate={(tab) => {
+          if (tab === 'home') onNavigateHome();
+          else if (tab === 'road_project') onNavigateToRoadProject();
+          else if (tab === 'public_announcements') onNavigateToAnnouncements();
+          else if (tab === 'verify_receipt') onNavigateToVerifyReceipt();
+          else if (tab === 'public_residents' || tab === 'resident_portal') onNavigateToPortal();
+          else if (tab === 'estate_levy') onOpenPayLevy();
+          else onNavigateHome();
+        }}
+        onOpenResidentLogin={onOpenResidentLogin}
+        onOpenAdminLogin={onOpenAdminLogin}
+      />
 
       {/* 2. Breadcrumb Navigation Bar */}
       <div className="bg-slate-100/80 border-b border-slate-200 py-2 px-4 sm:px-6 lg:px-8 text-xs text-slate-600">

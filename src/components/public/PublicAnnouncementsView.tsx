@@ -18,6 +18,7 @@ import {
 import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { PublicNavbar } from '../layout/PublicNavbar';
 
 interface PublicAnnouncementsViewProps {
   estateSettings: EstateSettings;
@@ -72,68 +73,21 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-20">
-            <div className="flex items-center cursor-pointer" onClick={onNavigateHome}>
-              <EstateLogo
-                size="sm"
-                variant="horizontal"
-                theme="light"
-                estateName={estateSettings.estate_name || 'Finger of God Estate'}
-                subtitle="OFFICIAL NOTICES • ASABA"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={onNavigateHome}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Estate Home</span>
-              </button>
-              {onNavigateToSecurity && (
-                <button
-                  onClick={onNavigateToSecurity}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>Security</span>
-                </button>
-              )}
-              {onNavigateToRoadProject && (
-                <button
-                  onClick={onNavigateToRoadProject}
-                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors cursor-pointer border border-amber-200"
-                >
-                  <Coins className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Road Project</span>
-                </button>
-              )}
-              <button
-                onClick={onNavigateToVerifyReceipt}
-                className="hidden md:inline-flex px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                Verify Receipt
-              </button>
-              <button
-                onClick={onOpenResidentLogin}
-                className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
-              >
-                Resident Login
-              </button>
-              <button
-                onClick={onOpenPayLevy}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                Pay Levy
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* 1. Universal Estate Header */}
+      <PublicNavbar
+        currentTab="public_announcements"
+        estateSettings={estateSettings}
+        onNavigate={(tab) => {
+          if (tab === 'home') onNavigateHome();
+          else if (tab === 'security_public' && onNavigateToSecurity) onNavigateToSecurity();
+          else if (tab === 'road_project' && onNavigateToRoadProject) onNavigateToRoadProject();
+          else if (tab === 'verify_receipt') onNavigateToVerifyReceipt();
+          else if (tab === 'estate_levy') onOpenPayLevy();
+          else onNavigateHome();
+        }}
+        onOpenResidentLogin={onOpenResidentLogin}
+        onOpenAdminLogin={onOpenResidentLogin}
+      />
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full">
