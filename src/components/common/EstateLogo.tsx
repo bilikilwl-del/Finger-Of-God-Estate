@@ -43,7 +43,7 @@ export const EstateLogo: React.FC<EstateLogoProps> = ({
   size = 'md',
   theme = 'auto',
   estateName = 'Finger of God Estate',
-  subtitle = 'SECURITY MANAGEMENT • ASABA',
+  subtitle = 'ESTATE MANAGEMENT • ASABA',
   hideSubtitleOnMobile = false,
   className = '',
   onClick

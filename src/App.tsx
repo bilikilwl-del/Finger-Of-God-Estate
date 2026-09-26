@@ -42,6 +42,9 @@ import { StagePlaceholderView } from './components/placeholders/StagePlaceholder
 import { SupabaseSetupModal } from './components/setup/SupabaseSetupModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { PublicHomeView } from './components/public/PublicHomeView';
+import { PublicSecurityView } from './components/public/PublicSecurityView';
+import { PublicRoadProjectView } from './components/public/PublicRoadProjectView';
+import { RoadProjectAdminView } from './components/admin/RoadProjectAdminView';
 import { PublicAnnouncementsView } from './components/public/PublicAnnouncementsView';
 import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
 import { AnnouncementsView } from './components/admin/AnnouncementsView';
@@ -54,6 +57,12 @@ function getInitialNav(): { tab: NavigationTab; slug: string } {
   const path = window.location.pathname.toLowerCase();
   if (path === '/login' || path === '/activate' || path === '/resident-login') {
     return { tab: 'login', slug: '' };
+  }
+  if (path === '/security' || path === '/security-department' || path === '/security-office') {
+    return { tab: 'security_public', slug: '' };
+  }
+  if (path === '/road-project' || path === '/road' || path === '/road-ledger' || path === '/roadproject') {
+    return { tab: 'road_project', slug: '' };
   }
   if (path === '/gate' || path === '/gate-security' || path === '/access-control') {
     return { tab: 'gate_security', slug: '' };
@@ -89,10 +98,10 @@ export default function App() {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [estateSettings, setEstateSettings] = useState<EstateSettings>({
     id: 'default',
-    estate_name: 'Finger of God Estate Security Management',
-    estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate',
-    estate_state: 'Lagos',
-    estate_lga: 'Eti-Osa',
+    estate_name: 'Finger of God Estate',
+    estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    estate_state: 'Delta',
+    estate_lga: 'Oshimili South',
     monthly_security_levy: 5000,
     payment_due_day: 1,
     currency: 'NGN',
@@ -296,6 +305,8 @@ export default function App() {
 
         <PublicHomeView
           estateSettings={estateSettings}
+          onNavigateToSecurity={() => setCurrentTab('security_public')}
+          onNavigateToRoadProject={() => setCurrentTab('road_project')}
           onNavigateToAnnouncements={() => setCurrentTab('public_announcements')}
           onNavigateToAnnouncementDetail={(slug) => {
             setSelectedNoticeSlug(slug);
@@ -307,6 +318,141 @@ export default function App() {
             if (!active) setIsResidentLoginOpen(true);
             setCurrentTab('resident_portal');
           }}
+          onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
+          onOpenAdminLogin={() => {
+            if (!adminUser) setIsAuthModalOpen(true);
+            setCurrentTab('dashboard');
+          }}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
+          }}
+        />
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onAuthenticated={(user: any) => {
+            setAdminUser(user);
+            setIsAuthModalOpen(false);
+            showToast(`Logged in as ${user.full_name || user.email}`, 'success');
+            setCurrentTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'security_public') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <PublicSecurityView
+          estateSettings={estateSettings}
+          onNavigateHome={() => setCurrentTab('home')}
+          onNavigateToRoadProject={() => setCurrentTab('road_project')}
+          onNavigateToAnnouncements={() => setCurrentTab('public_announcements')}
+          onNavigateToAnnouncementDetail={(slug) => {
+            setSelectedNoticeSlug(slug);
+            setCurrentTab('announcement_detail');
+          }}
+          onNavigateToVerifyReceipt={() => setCurrentTab('verify_receipt')}
+          onNavigateToPortal={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+          onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
+          onOpenPayLevy={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+          onOpenAdminLogin={() => {
+            if (!adminUser) setIsAuthModalOpen(true);
+            setCurrentTab('dashboard');
+          }}
+        />
+
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            setCurrentTab('resident_portal');
+          }}
+        />
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onAuthenticated={(user: any) => {
+            setAdminUser(user);
+            setIsAuthModalOpen(false);
+            showToast(`Logged in as ${user.full_name || user.email}`, 'success');
+            setCurrentTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (currentTab === 'road_project') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div className={`px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2.5 max-w-md ${
+              toast.type === 'success' 
+                ? 'bg-slate-900 text-white border-slate-800' 
+                : toast.type === 'error'
+                ? 'bg-rose-900 text-white border-rose-800'
+                : 'bg-slate-800 text-slate-100 border-slate-700'
+            }`}>
+              {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+              {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+
+        <PublicRoadProjectView
+          estateSettings={estateSettings}
+          onNavigateHome={() => setCurrentTab('home')}
+          onNavigateToSecurity={() => setCurrentTab('security_public')}
+          onNavigateToAnnouncements={() => setCurrentTab('public_announcements')}
+          onNavigateToPortal={() => {
+            const active = currentResident || residentSessionService.getCurrentResident();
+            if (!active) setIsResidentLoginOpen(true);
+            setCurrentTab('resident_portal');
+          }}
+          onNavigateToVerifyReceipt={() => setCurrentTab('verify_receipt')}
           onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
           onOpenAdminLogin={() => {
             if (!adminUser) setIsAuthModalOpen(true);
@@ -401,6 +547,7 @@ export default function App() {
             setCurrentTab('announcement_detail');
           }}
           onNavigateHome={() => setCurrentTab('home')}
+          onNavigateToSecurity={() => setCurrentTab('security_public')}
           onNavigateToVerifyReceipt={() => setCurrentTab('verify_receipt')}
           onOpenResidentLogin={() => setIsResidentLoginOpen(true)}
           onOpenPayLevy={() => {
@@ -723,6 +870,13 @@ export default function App() {
                     setCurrentTab('residents');
                   }
                 }}
+              />
+            )}
+
+            {currentTab === 'road_project_admin' && (
+              <RoadProjectAdminView
+                estateSettings={estateSettings}
+                onNavigateToDashboard={() => setCurrentTab('dashboard')}
               />
             )}
 

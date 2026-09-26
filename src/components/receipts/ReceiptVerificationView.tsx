@@ -80,7 +80,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
           variant="stacked"
           theme="light"
           estateName="Finger of God Estate"
-          subtitle="OFFICIAL SECURITY LEDGER • ASABA"
+          subtitle="ESTATE MANAGEMENT • ASABA"
         />
         <div className="space-y-1 pt-2">
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">

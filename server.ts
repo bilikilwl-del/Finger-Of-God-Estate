@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
+import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer';
 
 dotenv.config();
 
@@ -814,6 +815,13 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
       const reference = data.reference;
 
       if (!reference) {
+        return res.sendStatus(200);
+      }
+
+      // Check if this payment belongs to the Road Project infrastructure fund
+      if (reference.startsWith('FOG-RD-') || data.metadata?.project === 'road_project') {
+        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Project ledger...`);
+        processVerifiedRoadPaystackEvent(data);
         return res.sendStatus(200);
       }
 
@@ -3529,6 +3537,11 @@ app.post('/api/deliveries', (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Failed to record delivery' });
   }
 });
+
+// -------------------------------------------------------------
+// 6.5. ROAD PROJECT FINANCIAL DASHBOARD & VERIFIED LEDGER API
+// -------------------------------------------------------------
+app.use('/api/road-project', roadProjectRouter);
 
 // -------------------------------------------------------------
 // 7. HEALTH CHECK

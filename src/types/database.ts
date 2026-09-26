@@ -359,7 +359,9 @@ export interface ActivityLog {
     | 'WALK_IN_APPROVED'
     | 'WALK_IN_DENIED'
     | 'DELIVERY_LOGGED'
-    | 'CONTRACTOR_LOGGED';
+    | 'CONTRACTOR_LOGGED'
+    | 'ROAD_TRANSACTION_RECORDED'
+    | 'ROAD_TRANSACTION_VOIDED';
   entity_type: 
     | 'resident' 
     | 'estate_settings' 
@@ -379,7 +381,8 @@ export interface ActivityLog {
     | 'vehicle'
     | 'watchlist'
     | 'contractor'
-    | 'delivery';
+    | 'delivery'
+    | 'road_project';
   entity_id?: string | null;
   description: string;
   metadata?: Record<string, unknown>;
@@ -388,6 +391,10 @@ export interface ActivityLog {
 
 export type NavigationTab = 
   | 'home'
+  | 'security_public'
+  | 'road_project'
+  | 'estate_info'
+  | 'contact'
   | 'public_announcements'
   | 'announcement_detail'
   | 'login'
@@ -395,6 +402,7 @@ export type NavigationTab =
   | 'gate_security'
   | 'residents'
   | 'security_ops'
+  | 'road_project_admin'
   | 'payments'
   | 'paid_residents'
   | 'unpaid_residents'
@@ -953,6 +961,111 @@ export interface ResidentAccessVerificationResult {
   message: string;
   warning?: string | null;
 }
+
+// ==========================================
+// ROAD PROJECT TRANSPARENT FINANCIAL LEDGER TYPES
+// ==========================================
+
+export type RoadTransactionType = 'CREDIT' | 'DEBIT';
+
+export type RoadTransactionSource = 
+  | 'Paystack' 
+  | 'Bank Transfer' 
+  | 'Bank API' 
+  | 'Admin-authorized expenditure';
+
+export type RoadProjectCategory =
+  | 'Building Contribution'
+  | 'Landlord Levy'
+  | 'Special Donation'
+  | 'Commercial Store Levy'
+  | 'Drainage Construction'
+  | 'Interlocking Paving'
+  | 'Earthwork & Grading'
+  | 'Stone Base & Aggregates'
+  | 'Heavy Equipment & Diesel'
+  | 'Culvert & Crossing Slab'
+  | 'Project Supervision & Testing'
+  | 'Logistics & Site Security';
+
+export interface RoadProjectTransaction {
+  id: string;
+  reference: string; // e.g. "FOG-RD-2026-001" or Paystack / Bank ref
+  date: string; // e.g. "2026-10-05" or "05 Oct 2026"
+  type: RoadTransactionType; // 'CREDIT' or 'DEBIT'
+  source: RoadTransactionSource; // 'Paystack' | 'Bank Transfer' | 'Bank API' | 'Admin-authorized expenditure'
+  description: string; // e.g. "Building 024 contribution" or "Road materials"
+  category: RoadProjectCategory;
+  amount: number;
+  running_balance: number; // Dynamically computed: previous_balance + (CREDIT ? amount : -amount)
+  payer_or_vendor: string; // Protected label, e.g. "Building 024 (Plot 14B)" or "Western Interlock Ltd"
+  building_number?: string; // Optional building identifier, e.g. "024", "Plot 14B"
+  approved_by: string; // e.g. "Paystack Verified" or "Road Committee Chairman"
+  receipt_or_invoice_ref?: string;
+  provider_transaction_id?: string; // Provider's unique transaction ID (idempotency key)
+  notes?: string;
+  verified_at: string;
+  status: 'VERIFIED' | 'PENDING_AUDIT';
+}
+
+export interface RoadProjectMilestone {
+  id: string;
+  title: string;
+  description: string;
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'UPCOMING';
+  progress_percentage: number;
+  target_date: string;
+  completion_date?: string;
+  estimated_cost: number;
+  actual_cost?: number;
+}
+
+export interface RoadProjectSummary {
+  project_name: string;
+  target_budget: number;
+  total_collected: number; // Sum of CREDITS
+  total_spent: number; // Sum of DEBITS
+  current_balance: number; // total_collected - total_spent (strictly computed)
+  outstanding_contributions: number; // target_budget - total_collected
+  collection_percentage: number;
+  total_transactions_count: number;
+  credits_count: number;
+  debits_count: number;
+  last_updated: string;
+  sync_status?: {
+    paystack: string;
+    bank_sync: string;
+    last_sync_time?: string;
+    active_sse_connections?: number;
+  };
+}
+
+export interface RoadBankReconciliationItem {
+  id: string;
+  source: 'Paystack' | 'Bank Transfer' | 'Bank API';
+  provider_reference: string;
+  provider_transaction_id?: string;
+  date: string;
+  amount: number;
+  payer_narration: string;
+  detected_building?: string | null;
+  matched_transaction_ref?: string | null;
+  matched_transaction_id?: string | null;
+  status: 'MATCHED' | 'UNMATCHED' | 'DUPLICATE';
+  received_at: string;
+  notes?: string;
+}
+
+export interface RoadBuildingContribution {
+  building_number: string;
+  compound_name: string;
+  total_paid: number;
+  target_assessment: number;
+  status: 'FULL' | 'PARTIAL' | 'UNPAID';
+  last_payment_date?: string;
+  transaction_count: number;
+}
+
 
 
 

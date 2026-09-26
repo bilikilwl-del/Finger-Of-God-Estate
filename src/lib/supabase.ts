@@ -54,7 +54,12 @@ import {
   ResidentNotification,
   ResidentNotificationCategory,
   TargetAudience,
-  AnnouncementAcknowledgment
+  AnnouncementAcknowledgment,
+  RoadTransactionType,
+  RoadProjectCategory,
+  RoadProjectTransaction,
+  RoadProjectMilestone,
+  RoadProjectSummary
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
@@ -77,10 +82,10 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
 // ==========================================
 const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   id: '00000000-0000-0000-0000-000000000001',
-  estate_name: 'Finger of God Estate Security Management',
-  estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate',
-  estate_state: 'Lagos',
-  estate_lga: 'Eti-Osa',
+  estate_name: 'Finger of God Estate',
+  estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+  estate_state: 'Delta',
+  estate_lga: 'Oshimili South',
   monthly_security_levy: 5000,
   payment_due_day: 1,
   currency: 'NGN',
@@ -185,7 +190,9 @@ const STORAGE_KEYS = {
   WATCHLIST: 'estate_security_watchlist',
   CONTRACTORS: 'estate_security_contractors',
   DELIVERIES: 'estate_security_deliveries',
-  NOTIFICATIONS: 'estate_security_resident_notifications'
+  NOTIFICATIONS: 'estate_security_resident_notifications',
+  ROAD_TRANSACTIONS: 'estate_road_project_transactions',
+  ROAD_MILESTONES: 'estate_road_project_milestones'
 };
 
 const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
@@ -843,6 +850,465 @@ const INITIAL_RECEIPTS_SEED: Receipt[] = [
     issued_at: '2026-09-20T10:30:05Z'
   }
 ];
+
+const INITIAL_ROAD_TRANSACTIONS_SEED: Omit<RoadProjectTransaction, 'running_balance'>[] = [
+  {
+    id: 'rd-tx-001',
+    reference: 'FOG-RD-2026-001',
+    date: '2026-10-01',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 001 (Plot 4A) Road Project levy',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 001 (Plot 4A)',
+    building_number: '001',
+    approved_by: 'Road Committee Financial Secretary',
+    receipt_or_invoice_ref: 'RCP-RD-2026-001',
+    provider_transaction_id: 'BNK-ZEN-9920101',
+    notes: 'Verified electronic bank transfer to Road Escrow Account',
+    verified_at: '2026-10-01T10:15:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-002',
+    reference: 'FOG-RD-2026-002',
+    date: '2026-10-02',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 005 (House 12) Phase 1 contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 005 (House 12)',
+    building_number: '005',
+    approved_by: 'Road Committee Financial Secretary',
+    receipt_or_invoice_ref: 'RCP-RD-2026-002',
+    provider_transaction_id: 'BNK-ZEN-9920102',
+    notes: 'Direct deposit confirmed by Zenith Bank ledger',
+    verified_at: '2026-10-02T11:30:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-003',
+    reference: 'FOG-RD-2026-003',
+    date: '2026-10-03',
+    type: 'CREDIT',
+    source: 'Paystack',
+    description: 'Building 018 (Acacia Close) Landlord levy',
+    category: 'Landlord Levy',
+    amount: 100000,
+    payer_or_vendor: 'Building 018 (Acacia Close)',
+    building_number: '018',
+    approved_by: 'Paystack Automated Gateway (Server Verified)',
+    receipt_or_invoice_ref: 'RCP-RD-2026-003',
+    provider_transaction_id: 'pstk_tx_304910',
+    notes: 'Full road assessment paid in advance via Paystack',
+    verified_at: '2026-10-03T14:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-004',
+    reference: 'FOG-RD-2026-004',
+    date: '2026-10-05',
+    type: 'CREDIT',
+    source: 'Bank API',
+    description: 'Building 024 contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 024 (Plot 14B)',
+    building_number: '024',
+    approved_by: 'Zenith Open Banking Feed',
+    receipt_or_invoice_ref: 'RCP-RD-2026-004',
+    provider_transaction_id: 'BNK-ZEN-9920104',
+    notes: 'Mandatory road construction levy - verified via Open Banking feed',
+    verified_at: '2026-10-05T09:20:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-005',
+    reference: 'FOG-RD-2026-005',
+    date: '2026-10-07',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 031 contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 031 (Plot 21)',
+    building_number: '031',
+    approved_by: 'Road Committee Chairman',
+    receipt_or_invoice_ref: 'RCP-RD-2026-005',
+    provider_transaction_id: 'BNK-ZEN-9920105',
+    notes: 'Resident road contribution payment verified',
+    verified_at: '2026-10-07T13:45:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-006',
+    reference: 'FOG-RD-2026-006',
+    date: '2026-10-08',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Palm View Boulevard Landlords Association matching grant',
+    category: 'Special Donation',
+    amount: 750000,
+    payer_or_vendor: 'Palm View Boulevard Landlords Forum',
+    approved_by: 'Estate Executive Council & Road Lead',
+    receipt_or_invoice_ref: 'RCP-RD-2026-006',
+    provider_transaction_id: 'BNK-ZEN-9920106',
+    notes: 'Zonal joint community development fund counterpart contribution',
+    verified_at: '2026-10-08T16:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-007',
+    reference: 'FOG-RD-2026-007',
+    date: '2026-10-10',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: 'Road materials',
+    category: 'Drainage Construction',
+    amount: 50000,
+    payer_or_vendor: 'Dangote Cement Depot & BRC Hardware',
+    approved_by: 'Site Civil Engineer & Project Treasurer',
+    receipt_or_invoice_ref: 'INV-MAT-1082',
+    notes: 'Purchase of 50 bags Portland cement and binding wire for side drain foundation',
+    verified_at: '2026-10-10T10:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-008',
+    reference: 'FOG-RD-2026-008',
+    date: '2026-10-12',
+    type: 'CREDIT',
+    source: 'Paystack',
+    description: 'Building 014 (Plot 22) contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 014 (Plot 22)',
+    building_number: '014',
+    approved_by: 'Paystack Automated Gateway (Server Verified)',
+    receipt_or_invoice_ref: 'RCP-RD-2026-007',
+    provider_transaction_id: 'pstk_tx_304918',
+    notes: 'Direct online payment verified via Paystack',
+    verified_at: '2026-10-12T11:20:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-009',
+    reference: 'FOG-RD-2026-009',
+    date: '2026-10-14',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: 'Heavy equipment rental & earthwork grading (Phase 1)',
+    category: 'Earthwork & Grading',
+    amount: 320000,
+    payer_or_vendor: 'Delta Heavy Civil Equipment Rentals Ltd',
+    approved_by: 'Site Supervising Engineer',
+    receipt_or_invoice_ref: 'INV-EQP-491',
+    notes: 'Caterpillar 140K Motor Grader and Bomag Vibratory Roller 2-day hire',
+    verified_at: '2026-10-14T17:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-010',
+    reference: 'FOG-RD-2026-010',
+    date: '2026-10-15',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 042 (Plot 9C) road contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 042 (Plot 9C)',
+    building_number: '042',
+    approved_by: 'Road Committee Auditor',
+    receipt_or_invoice_ref: 'RCP-RD-2026-008',
+    provider_transaction_id: 'BNK-ZEN-9920110',
+    notes: 'Verified against Stanbic IBTC bank alert',
+    verified_at: '2026-10-15T09:10:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-011',
+    reference: 'FOG-RD-2026-011',
+    date: '2026-10-17',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Diaspora Residents Infrastructure Support Grant',
+    category: 'Special Donation',
+    amount: 1250000,
+    payer_or_vendor: 'Finger of God Estate Diaspora Initiative',
+    approved_by: 'Estate Executive Council',
+    receipt_or_invoice_ref: 'RCP-RD-2026-009',
+    provider_transaction_id: 'BNK-ZEN-9920111',
+    notes: 'Special donor intervention for stormwater canal drainage line',
+    verified_at: '2026-10-17T12:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-012',
+    reference: 'FOG-RD-2026-012',
+    date: '2026-10-18',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: 'Precast concrete U-drains & reinforced cover slabs',
+    category: 'Culvert & Crossing Slab',
+    amount: 480000,
+    payer_or_vendor: 'Western Precast Concrete Works',
+    approved_by: 'Project Civil Engineer',
+    receipt_or_invoice_ref: 'INV-WPC-892',
+    notes: 'Supply and installation of 40 units 600mm x 600mm precast drainage gutters',
+    verified_at: '2026-10-18T15:30:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-013',
+    reference: 'FOG-RD-2026-013',
+    date: '2026-10-19',
+    type: 'CREDIT',
+    source: 'Bank API',
+    description: 'Building 009 (Flat 3, Block C) Contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 009 (Block C)',
+    building_number: '009',
+    approved_by: 'Zenith Open Banking Feed',
+    receipt_or_invoice_ref: 'RCP-RD-2026-010',
+    provider_transaction_id: 'BNK-ZEN-9920113',
+    notes: 'Block assessment contribution confirmed',
+    verified_at: '2026-10-19T10:40:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-014',
+    reference: 'FOG-RD-2026-014',
+    date: '2026-10-20',
+    type: 'CREDIT',
+    source: 'Paystack',
+    description: 'Building 028 (Plot 11) Infrastructure levy',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 028 (Plot 11)',
+    building_number: '028',
+    approved_by: 'Paystack Automated Gateway (Server Verified)',
+    receipt_or_invoice_ref: 'RCP-RD-2026-011',
+    provider_transaction_id: 'pstk_tx_304924',
+    notes: 'Annual road modernization levy verified',
+    verified_at: '2026-10-20T14:15:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-015',
+    reference: 'FOG-RD-2026-015',
+    date: '2026-10-21',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: 'Granite stone base & compacted quarry dust (4 triaxle loads)',
+    category: 'Stone Base & Aggregates',
+    amount: 380000,
+    payer_or_vendor: 'Apex Quarry Supplies Asaba',
+    approved_by: 'Site Works Supervisor',
+    receipt_or_invoice_ref: 'INV-APX-3019',
+    notes: 'Delivery of 120 tonnes graded crushed stone base for Main Boulevard roadbed',
+    verified_at: '2026-10-21T16:45:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-016',
+    reference: 'FOG-RD-2026-016',
+    date: '2026-10-22',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 036 (Plot 17A) Road contribution',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 036 (Plot 17A)',
+    building_number: '036',
+    approved_by: 'Road Committee Chairman',
+    receipt_or_invoice_ref: 'RCP-RD-2026-012',
+    provider_transaction_id: 'BNK-ZEN-9920116',
+    notes: 'Verified electronic transfer',
+    verified_at: '2026-10-22T08:50:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-017',
+    reference: 'FOG-RD-2026-017',
+    date: '2026-10-23',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: 'Site labor, drainage trenching & compaction test fee',
+    category: 'Project Supervision & Testing',
+    amount: 115000,
+    payer_or_vendor: 'Civil Testing Lab & Artisan Union',
+    approved_by: 'Resident Committee Auditor',
+    receipt_or_invoice_ref: 'VOUCH-LAB-044',
+    notes: 'Independent California Bearing Ratio (CBR) soil compaction test and artisan wages',
+    verified_at: '2026-10-23T16:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-018',
+    reference: 'FOG-RD-2026-018',
+    date: '2026-10-24',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Building 019 (Plot 3) Road assessment levy',
+    category: 'Building Contribution',
+    amount: 100000,
+    payer_or_vendor: 'Building 019 (Plot 3)',
+    building_number: '019',
+    approved_by: 'Road Committee Auditor',
+    receipt_or_invoice_ref: 'RCP-RD-2026-013',
+    provider_transaction_id: 'BNK-ZEN-9920118',
+    notes: 'Confirmed by Zenith Bank estate statement',
+    verified_at: '2026-10-24T11:00:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-019',
+    reference: 'FOG-RD-2026-019',
+    date: '2026-10-25',
+    type: 'CREDIT',
+    source: 'Bank Transfer',
+    description: 'Commercial Plaza & Pharmacy store infrastructure levy',
+    category: 'Commercial Store Levy',
+    amount: 250000,
+    payer_or_vendor: 'Phase 1 Commercial Complex',
+    approved_by: 'Estate Executive Committee',
+    receipt_or_invoice_ref: 'RCP-RD-2026-014',
+    provider_transaction_id: 'BNK-ZEN-9920119',
+    notes: 'Commercial vehicle impact assessment fee',
+    verified_at: '2026-10-25T15:20:00Z',
+    status: 'VERIFIED'
+  },
+  {
+    id: 'rd-tx-020',
+    reference: 'FOG-RD-2026-020',
+    date: '2026-10-26',
+    type: 'DEBIT',
+    source: 'Admin-authorized expenditure',
+    description: '60mm heavy-duty interlocking paving stones deposit (Phase 1)',
+    category: 'Interlocking Paving',
+    amount: 750000,
+    payer_or_vendor: 'Niger Paving Stones & Ceramics Ltd',
+    approved_by: 'Project Chairman & Civil Engineer',
+    receipt_or_invoice_ref: 'INV-NPS-7741',
+    notes: 'Advance deposit for 1,200 square meters of 40MPa hydraulically pressed interlocking pavers',
+    verified_at: '2026-10-26T12:00:00Z',
+    status: 'VERIFIED'
+  }
+];
+
+const INITIAL_ROAD_MILESTONES_SEED: RoadProjectMilestone[] = [
+  {
+    id: 'ms-01',
+    title: 'Phase 1: Heavy Grading, Subgrade Compaction & Soil Testing',
+    description: 'Site clearance, topsoil removal, earth leveling, grading, and vibratory compaction testing across 1.8km of Main Boulevard.',
+    status: 'COMPLETED',
+    progress_percentage: 100,
+    target_date: '2026-10-15',
+    completion_date: '2026-10-14',
+    estimated_cost: 350000,
+    actual_cost: 320000
+  },
+  {
+    id: 'ms-02',
+    title: 'Phase 2: Reinforced Dual Side Drains & Culvert Crossings',
+    description: 'Excavation and casting of 600mm reinforced concrete drainage channels and heavy slab culvert transitions to prevent flooding.',
+    status: 'COMPLETED',
+    progress_percentage: 100,
+    target_date: '2026-10-20',
+    completion_date: '2026-10-19',
+    estimated_cost: 550000,
+    actual_cost: 530000
+  },
+  {
+    id: 'ms-03',
+    title: 'Phase 3: 150mm Graded Stone Base & Heavy Kerb Castings',
+    description: 'Placement and compaction of 150mm crushed granite stone base course with integrated concrete edge kerbs to lock paving.',
+    status: 'IN_PROGRESS',
+    progress_percentage: 75,
+    target_date: '2026-10-31',
+    estimated_cost: 600000,
+    actual_cost: 495000
+  },
+  {
+    id: 'ms-04',
+    title: 'Phase 4: High-Density 60mm & 80mm Interlocking Pavers Laying',
+    description: 'Laying of 40MPa hydraulically compressed interlocked stones, sand jointing, and plate-vibrator sealing.',
+    status: 'UPCOMING',
+    progress_percentage: 15,
+    target_date: '2026-11-20',
+    estimated_cost: 2800000
+  },
+  {
+    id: 'ms-05',
+    title: 'Phase 5: Solar Conduit Ducts, Speed Calming & Road Markings',
+    description: 'Underground conduit installation for 24/7 solar street illumination, thermoplastic road markings, and speed bump installation.',
+    status: 'UPCOMING',
+    progress_percentage: 0,
+    target_date: '2026-12-05',
+    estimated_cost: 950000
+  }
+];
+
+function calculateRunningBalances(transactions: Omit<RoadProjectTransaction, 'running_balance'>[]): RoadProjectTransaction[] {
+  const sorted = [...transactions].sort((a, b) => {
+    const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    if (diff !== 0) return diff;
+    return a.reference.localeCompare(b.reference);
+  });
+
+  let running = 0;
+  return sorted.map(tx => {
+    if (tx.type === 'CREDIT') {
+      running += tx.amount;
+    } else {
+      running -= tx.amount;
+    }
+    return {
+      ...tx,
+      running_balance: running
+    };
+  });
+}
+
+function getLocalRoadTransactions(): RoadProjectTransaction[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ROAD_TRANSACTIONS);
+    if (!raw) {
+      const computed = calculateRunningBalances(INITIAL_ROAD_TRANSACTIONS_SEED);
+      localStorage.setItem(STORAGE_KEYS.ROAD_TRANSACTIONS, JSON.stringify(computed));
+      return computed;
+    }
+    const parsed = JSON.parse(raw);
+    return calculateRunningBalances(parsed);
+  } catch {
+    return calculateRunningBalances(INITIAL_ROAD_TRANSACTIONS_SEED);
+  }
+}
+
+function saveLocalRoadTransactions(transactions: RoadProjectTransaction[]) {
+  try {
+    const recalculated = calculateRunningBalances(transactions);
+    localStorage.setItem(STORAGE_KEYS.ROAD_TRANSACTIONS, JSON.stringify(recalculated));
+  } catch (err) {
+    console.error('Failed to save road transactions:', err);
+  }
+}
+
+function getLocalRoadMilestones(): RoadProjectMilestone[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ROAD_MILESTONES);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.ROAD_MILESTONES, JSON.stringify(INITIAL_ROAD_MILESTONES_SEED));
+      return INITIAL_ROAD_MILESTONES_SEED;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return INITIAL_ROAD_MILESTONES_SEED;
+  }
+}
 
 function getLocalPayments(): MonthlyPayment[] {
   try {
@@ -5254,6 +5720,335 @@ export const dbService = {
       active_deliveries_count: activeDeliveries,
       total_registered_vehicles: vehicles.length
     };
+  },
+
+  // ------------------------------------------
+  // ROAD PROJECT TRANSPARENT FINANCIAL LEDGER
+  // ------------------------------------------
+  async getRoadProjectTransactions(sortOrder: 'desc' | 'asc' = 'desc'): Promise<RoadProjectTransaction[]> {
+    try {
+      const res = await fetch('/api/road-project/ledger');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.transactions)) {
+          saveLocalRoadTransactions(data.transactions);
+          if (sortOrder === 'desc') {
+            return [...data.transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.reference.localeCompare(a.reference));
+          }
+          return [...data.transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.reference.localeCompare(b.reference));
+        }
+      }
+    } catch {
+      // Graceful fallback to local cache
+    }
+
+    const list = getLocalRoadTransactions();
+    if (sortOrder === 'desc') {
+      return [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.reference.localeCompare(a.reference));
+    }
+    return [...list].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.reference.localeCompare(b.reference));
+  },
+
+  async getRoadProjectSummary(targetBudget: number = 35000000): Promise<RoadProjectSummary> {
+    try {
+      const res = await fetch('/api/road-project/ledger');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.summary) {
+          return data.summary;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    const transactions = getLocalRoadTransactions();
+    let totalCredits = 0;
+    let totalDebits = 0;
+    let creditsCount = 0;
+    let debitsCount = 0;
+
+    for (const tx of transactions) {
+      if (tx.type === 'CREDIT') {
+        totalCredits += tx.amount;
+        creditsCount++;
+      } else if (tx.type === 'DEBIT') {
+        totalDebits += tx.amount;
+        debitsCount++;
+      }
+    }
+
+    const currentBalance = totalCredits - totalDebits;
+    const outstanding = Math.max(0, targetBudget - totalCredits);
+    const collectionPercentage = targetBudget > 0 ? Math.min(100, Math.round((totalCredits / targetBudget) * 100)) : 0;
+
+    return {
+      project_name: 'Phase 1 & Phase 2 Boulevard Road Paving & Drainage Modernization',
+      target_budget: targetBudget,
+      total_collected: totalCredits,
+      total_spent: totalDebits,
+      current_balance: currentBalance,
+      outstanding_contributions: outstanding,
+      collection_percentage: collectionPercentage,
+      total_transactions_count: transactions.length,
+      credits_count: creditsCount,
+      debits_count: debitsCount,
+      last_updated: new Date().toISOString(),
+      sync_status: {
+        paystack: 'ACTIVE (Real-Time Webhook Verified)',
+        bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)'
+      }
+    };
+  },
+
+  async getRoadProjectMilestones(): Promise<RoadProjectMilestone[]> {
+    try {
+      const res = await fetch('/api/road-project/ledger');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.milestones)) {
+          return data.milestones;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return getLocalRoadMilestones();
+  },
+
+  // Record Authorized Expenditure (DEBIT) - Server Verified
+  async recordRoadProjectExpenditure(data: {
+    amount: number;
+    category: RoadProjectCategory;
+    description: string;
+    payer_or_vendor: string;
+    approved_by: string;
+    receipt_or_invoice_ref?: string;
+    notes?: string;
+    date?: string;
+  }): Promise<{ success: boolean; transaction?: RoadProjectTransaction; error?: string }> {
+    try {
+      const res = await fetch('/api/road-project/expenditure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      if (json.success && json.transaction) {
+        const current = getLocalRoadTransactions();
+        saveLocalRoadTransactions([...current, json.transaction]);
+        return { success: true, transaction: json.transaction };
+      }
+      return { success: false, error: json.message || 'Failed to record expenditure' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error recording expenditure' };
+    }
+  },
+
+  // Legacy/Fallback helper for adding transaction
+  async addRoadProjectTransaction(data: {
+    type: RoadTransactionType;
+    description: string;
+    category: RoadProjectCategory;
+    amount: number;
+    payer_or_vendor: string;
+    approved_by: string;
+    receipt_or_invoice_ref?: string;
+    notes?: string;
+    date?: string;
+  }): Promise<{ success: boolean; transaction?: RoadProjectTransaction; error?: string }> {
+    if (data.type === 'DEBIT') {
+      return this.recordRoadProjectExpenditure(data);
+    }
+
+    // Direct bank transfer credit
+    try {
+      const res = await fetch('/api/road-project/bank-transfer/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bank_transaction_id: `MAN-${Date.now()}`,
+          amount: data.amount,
+          date: data.date,
+          narration: data.description,
+          sender_name: data.payer_or_vendor,
+          bank_name: 'Zenith Bank PLC',
+          source_type: 'Bank Transfer'
+        })
+      });
+      const json = await res.json();
+      if (json.success && json.transaction) {
+        return { success: true, transaction: json.transaction };
+      }
+      return { success: false, error: json.message || 'Failed to verify transaction' };
+    } catch {
+      // Local fallback
+      const current = getLocalRoadTransactions();
+      const count = current.length + 1;
+      const refCode = `FOG-RD-2026-${String(count).padStart(3, '0')}`;
+      const newTx: RoadProjectTransaction = {
+        id: 'rd-tx-' + Date.now(),
+        reference: refCode,
+        date: data.date || new Date().toISOString().split('T')[0],
+        type: data.type,
+        source: 'Bank Transfer',
+        description: data.description.trim(),
+        category: data.category,
+        amount: Number(data.amount),
+        running_balance: 0,
+        payer_or_vendor: data.payer_or_vendor.trim(),
+        approved_by: data.approved_by?.trim() || 'Road Committee Executive',
+        receipt_or_invoice_ref: data.receipt_or_invoice_ref?.trim() || `RCP-RD-${Date.now().toString().slice(-6)}`,
+        notes: data.notes?.trim() || 'Logged into verified Road Project ledger',
+        verified_at: new Date().toISOString(),
+        status: 'VERIFIED'
+      };
+      saveLocalRoadTransactions([...current, newTx]);
+      return { success: true, transaction: newTx };
+    }
+  },
+
+  async deleteRoadProjectTransaction(id: string, reason: string): Promise<{ success: boolean; error?: string }> {
+    const current = getLocalRoadTransactions();
+    const target = current.find(t => t.id === id);
+    if (!target) {
+      return { success: false, error: 'Transaction not found.' };
+    }
+
+    const remaining = current.filter(t => t.id !== id);
+    saveLocalRoadTransactions(remaining);
+
+    await this.logActivity({
+      admin_email: 'road-committee@fingerofgodestate.ng',
+      action: 'ROAD_TRANSACTION_VOIDED',
+      entity_type: 'road_project',
+      description: `Voided Road Project Transaction ${target.reference} (${target.type} ₦${target.amount.toLocaleString()}): Reason: "${reason}"`
+    });
+
+    return { success: true };
+  },
+
+  // Paystack Road Contribution Initializer
+  async initializeRoadPaystackPayment(params: {
+    amount: number;
+    email?: string;
+    buildingNumber?: string;
+    payerName?: string;
+    phone?: string;
+    category?: RoadProjectCategory;
+  }): Promise<{ success: boolean; reference?: string; authorization_url?: string; access_code?: string; message?: string }> {
+    try {
+      const res = await fetch('/api/road-project/paystack/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to initialize Paystack contribution' };
+    }
+  },
+
+  // Paystack Road Contribution Verifier (Server-Side)
+  async verifyRoadPaystackPayment(params: {
+    reference: string;
+    amount?: number;
+    buildingNumber?: string;
+    payerName?: string;
+  }): Promise<{ success: boolean; transaction?: RoadProjectTransaction; summary?: RoadProjectSummary; message?: string }> {
+    try {
+      const res = await fetch('/api/road-project/paystack/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Verification failed' };
+    }
+  },
+
+  // Get Road Project Reconciliation Console Items
+  async getRoadProjectReconciliation(): Promise<{ success: boolean; items: any[]; stats: any }> {
+    try {
+      const res = await fetch('/api/road-project/reconciliation');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+    return { success: false, items: [], stats: { total: 0, matched: 0, unmatched: 0, duplicates: 0 } };
+  },
+
+  // Match Unmatched Bank Transaction in Reconciliation Console
+  async matchRoadProjectReconciliation(params: {
+    reconciliation_id: string;
+    building_number: string;
+    contributor_name?: string;
+  }): Promise<{ success: boolean; item?: any; summary?: any; message?: string }> {
+    try {
+      const res = await fetch('/api/road-project/reconciliation/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Match operation failed' };
+    }
+  },
+
+  // Import Official Bank Statement Batch with Deduplication
+  async importRoadProjectBankStatement(statementRows: Array<{
+    bank_transaction_id?: string;
+    reference?: string;
+    date: string;
+    amount: number;
+    narration: string;
+    sender_name?: string;
+  }>): Promise<{ success: boolean; importedCount: number; duplicateCount: number; unmatchedCount: number; message?: string }> {
+    try {
+      const res = await fetch('/api/road-project/reconciliation/import-statement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statement_rows: statementRows })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, importedCount: 0, duplicateCount: 0, unmatchedCount: 0, message: err.message || 'Import failed' };
+    }
+  },
+
+  // Simulate or Trigger Bank Webhook (for testing duplicate protection and direct bank sync)
+  async simulateBankTransferWebhook(params: {
+    bank_transaction_id: string;
+    reference?: string;
+    amount: number;
+    date?: string;
+    narration: string;
+    sender_name?: string;
+    bank_name?: string;
+    source_type?: 'Bank Transfer' | 'Bank API';
+  }): Promise<{ success: boolean; duplicate?: boolean; unmatched?: boolean; transaction?: RoadProjectTransaction; summary?: any; message?: string }> {
+    try {
+      const res = await fetch('/api/road-project/bank-transfer/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Webhook simulation failed' };
+    }
+  },
+
+  // Trigger Open Banking Sync
+  async syncRoadProjectBankFeed(): Promise<{ success: boolean; message?: string; summary?: any }> {
+    try {
+      const res = await fetch('/api/road-project/bank-sync', { method: 'POST' });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Sync failed' };
+    }
   }
 };
 

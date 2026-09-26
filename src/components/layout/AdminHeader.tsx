@@ -34,6 +34,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
       case 'paid_residents': return 'Paid Residents Directory';
       case 'unpaid_residents': return 'Unpaid Residents & Arrears';
       case 'payments': return 'Paystack Payment Transactions';
+      case 'road_project_admin': return 'Road Project Financial Ledger & Transparency';
       case 'outstanding': return 'Outstanding Levies & Balances';
       case 'reports': return 'Financial Reports & Collection Summaries';
       case 'sms': return 'SMS Reminders & Broadcasts';

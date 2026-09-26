@@ -18,7 +18,8 @@ import {
   UserCheck,
   FileCheck,
   Globe,
-  DoorOpen
+  DoorOpen,
+  Coins
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { isSupabaseConfigured } from '../../lib/supabase';
@@ -58,6 +59,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'unpaid_residents', label: 'Unpaid Residents', icon: AlertCircle },
     { id: 'outstanding', label: 'Outstanding Levies', icon: AlertCircle },
     { id: 'payments', label: 'Paystack Transactions', icon: CreditCard, tag: 'Gateway' },
+    { id: 'road_project_admin', label: 'Road Project Ledger', icon: Coins, tag: 'Capital' },
     { id: 'reports', label: 'Financial Reports', icon: FileText, tag: 'Export' },
     { id: 'sms', label: 'SMS Reminders', icon: MessageSquare, tag: 'Auto SMS' },
     { id: 'announcements', label: 'Announcements & Notices', icon: Bell, tag: 'Stage 8' }
@@ -162,10 +164,31 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           >
             <div className="flex items-center gap-3">
               <Globe className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>Public Homepage</span>
+              <span>Estate Homepage</span>
             </div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
-              Stage 8
+              Main
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              onSelectTab('security_public');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'security_public'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>Security Department</span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Public
             </span>
           </button>
 

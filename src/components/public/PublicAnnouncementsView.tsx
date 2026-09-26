@@ -22,6 +22,7 @@ interface PublicAnnouncementsViewProps {
   estateSettings: EstateSettings;
   onSelectAnnouncement: (slug: string) => void;
   onNavigateHome: () => void;
+  onNavigateToSecurity?: () => void;
   onNavigateToVerifyReceipt: () => void;
   onOpenResidentLogin: () => void;
   onOpenPayLevy: () => void;
@@ -41,6 +42,7 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
   estateSettings,
   onSelectAnnouncement,
   onNavigateHome,
+  onNavigateToSecurity,
   onNavigateToVerifyReceipt,
   onOpenResidentLogin,
   onOpenPayLevy
@@ -87,8 +89,17 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span>Back to Home</span>
+                <span>Estate Home</span>
               </button>
+              {onNavigateToSecurity && (
+                <button
+                  onClick={onNavigateToSecurity}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Security</span>
+                </button>
+              )}
               <button
                 onClick={onNavigateToVerifyReceipt}
                 className="hidden md:inline-flex px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
