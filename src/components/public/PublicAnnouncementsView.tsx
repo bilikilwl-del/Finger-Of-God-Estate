@@ -12,7 +12,8 @@ import {
   Filter,
   CheckCircle2,
   Lock,
-  ExternalLink
+  ExternalLink,
+  Coins
 } from 'lucide-react';
 import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
@@ -23,6 +24,7 @@ interface PublicAnnouncementsViewProps {
   onSelectAnnouncement: (slug: string) => void;
   onNavigateHome: () => void;
   onNavigateToSecurity?: () => void;
+  onNavigateToRoadProject?: () => void;
   onNavigateToVerifyReceipt: () => void;
   onOpenResidentLogin: () => void;
   onOpenPayLevy: () => void;
@@ -43,6 +45,7 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
   onSelectAnnouncement,
   onNavigateHome,
   onNavigateToSecurity,
+  onNavigateToRoadProject,
   onNavigateToVerifyReceipt,
   onOpenResidentLogin,
   onOpenPayLevy
@@ -98,6 +101,15 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                 >
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   <span>Security</span>
+                </button>
+              )}
+              {onNavigateToRoadProject && (
+                <button
+                  onClick={onNavigateToRoadProject}
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors cursor-pointer border border-amber-200"
+                >
+                  <Coins className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Road Project</span>
                 </button>
               )}
               <button
@@ -283,6 +295,16 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
             <button onClick={onNavigateHome} className="hover:text-slate-900 cursor-pointer">
               Home
             </button>
+            {onNavigateToSecurity && (
+              <button onClick={onNavigateToSecurity} className="hover:text-slate-900 cursor-pointer">
+                Security
+              </button>
+            )}
+            {onNavigateToRoadProject && (
+              <button onClick={onNavigateToRoadProject} className="text-amber-800 font-semibold hover:text-amber-900 cursor-pointer">
+                Road Project
+              </button>
+            )}
             <button onClick={onNavigateToVerifyReceipt} className="hover:text-slate-900 cursor-pointer">
               Verify Receipt
             </button>

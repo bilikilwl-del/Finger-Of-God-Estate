@@ -30,6 +30,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const getBreadcrumbTitle = (tab: NavigationTab) => {
     switch (tab) {
       case 'dashboard': return 'Financial Management & Admin Overview';
+      case 'gate_security': return 'Gate Security Desk & Vehicle Access Control';
+      case 'security_ops': return 'Security Patrol & Incident Operations';
       case 'residents': return 'Resident Management Directory';
       case 'paid_residents': return 'Paid Residents Directory';
       case 'unpaid_residents': return 'Unpaid Residents & Arrears';

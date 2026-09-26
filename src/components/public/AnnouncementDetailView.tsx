@@ -11,7 +11,8 @@ import {
   CreditCard,
   CheckCircle2,
   ExternalLink,
-  Paperclip
+  Paperclip,
+  Coins
 } from 'lucide-react';
 import { Announcement, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
@@ -22,6 +23,9 @@ interface AnnouncementDetailViewProps {
   estateSettings: EstateSettings;
   onBackToAnnouncements: () => void;
   onNavigateHome: () => void;
+  onNavigateToRoadProject?: () => void;
+  onNavigateToSecurity?: () => void;
+  onNavigateToVerifyReceipt?: () => void;
   onOpenPayLevy: () => void;
   onOpenResidentLogin: () => void;
 }
@@ -31,6 +35,9 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
   estateSettings,
   onBackToAnnouncements,
   onNavigateHome,
+  onNavigateToRoadProject,
+  onNavigateToSecurity,
+  onNavigateToVerifyReceipt,
   onOpenPayLevy,
   onOpenResidentLogin
 }) => {
@@ -280,9 +287,24 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
             <button onClick={onNavigateHome} className="hover:text-slate-900 cursor-pointer">
               Home
             </button>
+            {onNavigateToSecurity && (
+              <button onClick={onNavigateToSecurity} className="hover:text-slate-900 cursor-pointer">
+                Security
+              </button>
+            )}
+            {onNavigateToRoadProject && (
+              <button onClick={onNavigateToRoadProject} className="text-amber-800 font-semibold hover:text-amber-900 cursor-pointer">
+                Road Project
+              </button>
+            )}
             <button onClick={onBackToAnnouncements} className="hover:text-slate-900 cursor-pointer">
               Announcements
             </button>
+            {onNavigateToVerifyReceipt && (
+              <button onClick={onNavigateToVerifyReceipt} className="hover:text-slate-900 cursor-pointer">
+                Verify Receipt
+              </button>
+            )}
             <button onClick={onOpenResidentLogin} className="hover:text-slate-900 cursor-pointer">
               Resident Login
             </button>

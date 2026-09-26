@@ -26,7 +26,9 @@ import {
   Receipt,
   Check,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Coins,
+  DoorOpen
 } from 'lucide-react';
 import { Resident, EstateSettings, ActivityLog, NavigationTab, MonthlyFinancialSummary, GlobalPaymentSearchResult } from '../../types/database';
 import { dbService } from '../../lib/supabase';
@@ -434,10 +436,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           <span className="text-xs text-slate-400">Direct Navigation</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <button
             onClick={() => onNavigate('paid_residents')}
-            className="p-3 bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <CheckCircle2 className="w-5 h-5 text-emerald-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700">Paid Residents</div>
@@ -446,7 +448,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <button
             onClick={() => onNavigate('unpaid_residents')}
-            className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <AlertCircle className="w-5 h-5 text-amber-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-amber-700">Unpaid Residents</div>
@@ -455,7 +457,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <button
             onClick={() => onNavigate('outstanding')}
-            className="p-3 bg-rose-50/70 hover:bg-rose-100/70 border border-rose-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-rose-50/70 hover:bg-rose-100/70 border border-rose-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <AlertTriangle className="w-5 h-5 text-rose-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-rose-700">Outstanding Levies</div>
@@ -464,7 +466,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <button
             onClick={() => onNavigate('payments')}
-            className="p-3 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <CreditCard className="w-5 h-5 text-blue-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-blue-700">Transactions</div>
@@ -472,8 +474,26 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </button>
 
           <button
+            onClick={() => onNavigate('road_project_admin')}
+            className="p-3 bg-amber-50/80 hover:bg-amber-100/80 border border-amber-300 rounded-xl text-left transition-colors group cursor-pointer"
+          >
+            <Coins className="w-5 h-5 text-amber-700 mb-2" />
+            <div className="text-xs font-bold text-slate-900 group-hover:text-amber-700">Road Ledger</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Capital Modernization</div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('gate_security')}
+            className="p-3 bg-teal-50/70 hover:bg-teal-100/70 border border-teal-200 rounded-xl text-left transition-colors group cursor-pointer"
+          >
+            <DoorOpen className="w-5 h-5 text-teal-700 mb-2" />
+            <div className="text-xs font-bold text-slate-900 group-hover:text-teal-700">Gate Access</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Visitor & Barriers</div>
+          </button>
+
+          <button
             onClick={() => onNavigate('reports')}
-            className="p-3 bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <FileSpreadsheet className="w-5 h-5 text-purple-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-purple-700">Financial Reports</div>
@@ -482,7 +502,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
           <button
             onClick={() => onNavigate('sms')}
-            className="p-3 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 rounded-xl text-left transition-colors group"
+            className="p-3 bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200 rounded-xl text-left transition-colors group cursor-pointer"
           >
             <MessageSquare className="w-5 h-5 text-indigo-700 mb-2" />
             <div className="text-xs font-bold text-slate-900 group-hover:text-indigo-700">SMS Reminders</div>

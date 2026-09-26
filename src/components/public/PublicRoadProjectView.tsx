@@ -59,6 +59,7 @@ interface PublicRoadProjectViewProps {
   onNavigateToVerifyReceipt: () => void;
   onOpenResidentLogin: () => void;
   onOpenAdminLogin: () => void;
+  onNavigateHomeSection?: (sectionId: string) => void;
 }
 
 export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
@@ -69,7 +70,8 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
   onNavigateToPortal,
   onNavigateToVerifyReceipt,
   onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenAdminLogin,
+  onNavigateHomeSection
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [transactions, setTransactions] = useState<RoadProjectTransaction[]>([]);
@@ -297,13 +299,13 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                 Residents
               </button>
               <button 
-                onClick={onNavigateHome}
+                onClick={() => onNavigateHomeSection ? onNavigateHomeSection('estate-info-section') : onNavigateHome()}
                 className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
                 Estate Information
               </button>
               <button 
-                onClick={onNavigateToPortal}
+                onClick={() => onNavigateHomeSection ? onNavigateHomeSection('levy-section') : onNavigateHome()}
                 className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
                 Payments & Levies
@@ -313,6 +315,12 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                 className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               >
                 Announcements
+              </button>
+              <button 
+                onClick={onNavigateToVerifyReceipt}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Verify Receipt
               </button>
             </nav>
 
@@ -1594,6 +1602,9 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             </button>
             <button onClick={onNavigateToAnnouncements} className="hover:text-white transition-colors cursor-pointer">
               Announcements
+            </button>
+            <button onClick={onNavigateToVerifyReceipt} className="hover:text-white transition-colors cursor-pointer">
+              Verify Receipt
             </button>
             <button onClick={onOpenAdminLogin} className="hover:text-white transition-colors cursor-pointer">
               Admin Console

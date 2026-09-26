@@ -215,6 +215,48 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
           <button
             onClick={() => {
+              onSelectTab('road_project');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'road_project'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-amber-300 hover:bg-slate-800/80 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <Coins className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>Road Project Ledger</span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Public
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
+              onSelectTab('public_announcements');
+              onCloseMobile();
+            }}
+            className={`
+              w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer
+              ${currentTab === 'public_announcements'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <Bell className="w-4 h-4 shrink-0 text-blue-400" />
+              <span>Public Bulletins</span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              Notices
+            </span>
+          </button>
+
+          <button
+            onClick={() => {
               onSelectTab('verify_receipt');
               onCloseMobile();
             }}

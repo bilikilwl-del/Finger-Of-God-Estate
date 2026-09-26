@@ -978,6 +978,11 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                   </button>
                 </li>
                 <li>
+                  <button onClick={onNavigateToRoadProject} className="text-amber-400 font-semibold hover:text-amber-300 transition-colors cursor-pointer">
+                    Road Project (Transparent Ledger)
+                  </button>
+                </li>
+                <li>
                   <button onClick={onNavigateToPortal} className="hover:text-white transition-colors cursor-pointer">
                     Resident Portal
                   </button>
@@ -990,6 +995,11 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                 <li>
                   <button onClick={onNavigateToVerifyReceipt} className="hover:text-white transition-colors cursor-pointer">
                     Verify Digital Receipt
+                  </button>
+                </li>
+                <li>
+                  <button onClick={onOpenAdminLogin} className="hover:text-white transition-colors cursor-pointer">
+                    Admin Console
                   </button>
                 </li>
               </ul>

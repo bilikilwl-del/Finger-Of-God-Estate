@@ -393,8 +393,13 @@ export type NavigationTab =
   | 'home'
   | 'security_public'
   | 'road_project'
-  | 'estate_info'
+  | 'light_project'
+  | 'estate_levy'
+  | 'projects_overview'
+  | 'documents'
   | 'contact'
+  | 'public_residents'
+  | 'estate_info'
   | 'public_announcements'
   | 'announcement_detail'
   | 'login'
@@ -1064,6 +1069,53 @@ export interface RoadBuildingContribution {
   status: 'FULL' | 'PARTIAL' | 'UNPAID';
   last_payment_date?: string;
   transaction_count: number;
+}
+
+export interface LightProjectTransaction {
+  id: string;
+  reference: string;
+  date: string;
+  type: 'CREDIT' | 'DEBIT';
+  category: 'Monthly Power Levy' | 'Transformer Maintenance' | 'Solar Streetlight Fund' | 'Cabling & Feeder Line' | 'Diesel & Generator' | 'Technical Service' | 'Special Assessment';
+  description: string;
+  amount: number;
+  running_balance: number;
+  payer_or_vendor: string;
+  building_number?: string;
+  approved_by: string;
+  verified_at: string;
+  status: 'VERIFIED' | 'PENDING_AUDIT';
+}
+
+export interface LightProjectSummary {
+  project_name: string;
+  target_budget: number;
+  total_collected: number;
+  total_spent: number;
+  current_balance: number;
+  outstanding_contributions: number;
+  collection_percentage: number;
+  total_transactions_count: number;
+  credits_count: number;
+  debits_count: number;
+  last_serviced_date: string;
+  transformer_capacity: string;
+  solar_lights_count: number;
+  last_updated: string;
+}
+
+export interface EstateDocument {
+  id: string;
+  title: string;
+  category: 'Governance' | 'Building Guidelines' | 'Security & Access' | 'Financial & Audits' | 'Forms & Applications';
+  description: string;
+  file_name: string;
+  file_size: string;
+  version: string;
+  date_published: string;
+  effective_date: string;
+  download_url?: string;
+  badge?: string;
 }
 
 

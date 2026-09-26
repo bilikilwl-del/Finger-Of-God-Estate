@@ -26,13 +26,17 @@ interface ReceiptVerificationViewProps {
   onNavigateToPortal?: () => void;
   onNavigateToAdmin?: () => void;
   onNavigateToHome?: () => void;
+  onNavigateToRoadProject?: () => void;
+  onNavigateToSecurity?: () => void;
 }
 
 export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = ({
   initialReceiptNumber = '',
   onNavigateToPortal,
   onNavigateToAdmin,
-  onNavigateToHome
+  onNavigateToHome,
+  onNavigateToRoadProject,
+  onNavigateToSecurity
 }) => {
   const [receiptNumber, setReceiptNumber] = useState(initialReceiptNumber);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -341,13 +345,29 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
         <div>
           Finger of God Estate Security Management • Official Verification Service
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {onNavigateToHome && (
             <button
               onClick={onNavigateToHome}
               className="text-slate-600 font-semibold hover:text-slate-900 cursor-pointer"
             >
               Public Home
+            </button>
+          )}
+          {onNavigateToSecurity && (
+            <button
+              onClick={onNavigateToSecurity}
+              className="text-slate-600 font-semibold hover:text-slate-900 cursor-pointer"
+            >
+              Security Desk
+            </button>
+          )}
+          {onNavigateToRoadProject && (
+            <button
+              onClick={onNavigateToRoadProject}
+              className="text-amber-800 font-semibold hover:text-amber-900 cursor-pointer"
+            >
+              Road Project
             </button>
           )}
           {onNavigateToPortal && (

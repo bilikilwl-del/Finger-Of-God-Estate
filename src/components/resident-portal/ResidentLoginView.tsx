@@ -24,6 +24,7 @@ interface ResidentLoginViewProps {
   estateSettings?: EstateSettings;
   isModal?: boolean;
   onCloseModal?: () => void;
+  initialTab?: 'login' | 'activate' | 'forgot';
 }
 
 export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
@@ -31,10 +32,17 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   onNavigateToHome,
   estateSettings,
   isModal = false,
-  onCloseModal
+  onCloseModal,
+  initialTab = 'login'
 }) => {
   // Tabs: 'login' | 'activate' | 'forgot' | 'quick'
-  const [activeTab, setActiveTab] = useState<'login' | 'activate' | 'forgot'>('login');
+  const [activeTab, setActiveTab] = useState<'login' | 'activate' | 'forgot'>(initialTab);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Login Form State
   const [loginEmail, setLoginEmail] = useState('');

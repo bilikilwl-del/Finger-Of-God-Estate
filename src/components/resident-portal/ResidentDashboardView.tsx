@@ -78,6 +78,8 @@ interface ResidentDashboardViewProps {
   onNavigateToVerifyReceipt?: (receiptNumber?: string) => void;
   onNavigateToAdmin?: () => void;
   onNavigateToHome?: () => void;
+  onNavigateToRoadProject?: () => void;
+  onNavigateToSecurity?: () => void;
   estateSettings?: EstateSettings;
 }
 
@@ -88,6 +90,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   onNavigateToVerifyReceipt,
   onNavigateToAdmin,
   onNavigateToHome,
+  onNavigateToRoadProject,
+  onNavigateToSecurity,
   estateSettings
 }) => {
   const [dashboardData, setDashboardData] = useState<ResidentDashboardData | null>(null);
@@ -441,13 +445,29 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
             />
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <button
               onClick={onSwitchResident}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition-colors cursor-pointer border border-slate-700"
             >
               Switch Profile
             </button>
+            {onNavigateToRoadProject && (
+              <button
+                onClick={onNavigateToRoadProject}
+                className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold transition-colors cursor-pointer border border-amber-500/40"
+              >
+                Road Project
+              </button>
+            )}
+            {onNavigateToSecurity && (
+              <button
+                onClick={onNavigateToSecurity}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer border border-slate-700"
+              >
+                Security Desk
+              </button>
+            )}
             {onNavigateToVerifyReceipt && (
               <button
                 onClick={() => onNavigateToVerifyReceipt()}

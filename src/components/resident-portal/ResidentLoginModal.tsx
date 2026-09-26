@@ -7,13 +7,15 @@ interface ResidentLoginModalProps {
   onClose: () => void;
   onSuccess: (resident: Resident) => void;
   estateSettings?: EstateSettings;
+  initialTab?: 'login' | 'activate' | 'forgot';
 }
 
 export const ResidentLoginModal: React.FC<ResidentLoginModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  estateSettings
+  estateSettings,
+  initialTab = 'login'
 }) => {
   if (!isOpen) return null;
 
@@ -23,6 +25,7 @@ export const ResidentLoginModal: React.FC<ResidentLoginModalProps> = ({
       onCloseModal={onClose}
       onSuccess={onSuccess}
       estateSettings={estateSettings}
+      initialTab={initialTab}
     />
   );
 };
