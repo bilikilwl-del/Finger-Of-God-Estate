@@ -511,21 +511,28 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
             
             <div className="flex items-start sm:items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-800 border-2 border-emerald-300 flex items-center justify-center font-mono font-black text-xl shadow-xs shrink-0">
-                #{currentResident.resident_number}
+              <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-900 border-2 border-emerald-300 flex flex-col items-center justify-center font-mono shadow-xs shrink-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ESTATE</span>
+                <span className="text-xl font-black">#{currentResident.resident_number}</span>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-display">
-                    {currentResident.full_name}
-                  </h1>
+                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                    Welcome back,
+                  </span>
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                     currentResident.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
                   }`}>
                     {currentResident.status} Resident
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 font-medium">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-display">
+                  {currentResident.full_name}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 font-medium pt-0.5">
+                  <span className="inline-flex items-center gap-1.5 font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Estate Number: {currentResident.resident_number}
+                  </span>
                   <span className="flex items-center gap-1.5">
                     <Home className="w-3.5 h-3.5 text-slate-400" />
                     <span>{currentResident.house_number}</span>

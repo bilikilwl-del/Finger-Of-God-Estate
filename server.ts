@@ -1185,6 +1185,250 @@ app.post('/api/resident/login', (req: Request, res: Response) => {
   }
 });
 
+// OTP STORAGE & SECURITY THROTTLING FOR RESIDENT PORTAL
+interface ServerResidentOtpRecord {
+  resident_number: string;
+  phone_number: string;
+  otp_code: string;
+  expires_at: number;
+  attempts: number;
+  resend_after: number;
+  created_at: number;
+}
+const residentOtpStore = new Map<string, ServerResidentOtpRecord>();
+const residentLoginAttempts = new Map<string, { count: number; locked_until: number }>();
+
+// RESIDENT PORTAL: SEND OTP ENDPOINT
+app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
+  try {
+    const { residentNumber, phoneNumber } = req.body;
+
+    if (!residentNumber || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Those details could not be verified. Please check your estate number and registered phone number.'
+      });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const lockInfo = residentLoginAttempts.get(cleanNum);
+    const now = Date.now();
+
+    if (lockInfo && lockInfo.locked_until > now) {
+      const waitSeconds = Math.ceil((lockInfo.locked_until - now) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Too many attempts. Please wait ${waitSeconds} seconds before trying again.`,
+        locked: true,
+        waitSeconds
+      });
+    }
+
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident || resident.status !== 'Active') {
+      // Record failed attempt for throttling without revealing user existence
+      const current = residentLoginAttempts.get(cleanNum) || { count: 0, locked_until: 0 };
+      current.count += 1;
+      if (current.count >= 5) {
+        current.locked_until = now + 5 * 60 * 1000; // Lock for 5 mins
+      }
+      residentLoginAttempts.set(cleanNum, current);
+
+      return res.status(400).json({
+        success: false,
+        message: 'Those details could not be verified. Please check your estate number and registered phone number.'
+      });
+    }
+
+    // Verify phone match securely
+    const inputDigits = String(phoneNumber).replace(/\D/g, '');
+    const regDigits = String(resident.phone_number).replace(/\D/g, '');
+    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+
+    const isMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
+                    (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
+                    (inputDigits.length > 0 && inputDigits === regDigits);
+
+    if (!isMatch) {
+      const current = residentLoginAttempts.get(cleanNum) || { count: 0, locked_until: 0 };
+      current.count += 1;
+      if (current.count >= 5) {
+        current.locked_until = now + 5 * 60 * 1000;
+      }
+      residentLoginAttempts.set(cleanNum, current);
+
+      return res.status(400).json({
+        success: false,
+        message: 'Those details could not be verified. Please check your estate number and registered phone number.'
+      });
+    }
+
+    // Check resend cooldown
+    const existingOtp = residentOtpStore.get(cleanNum);
+    if (existingOtp && existingOtp.resend_after > now) {
+      const wait = Math.ceil((existingOtp.resend_after - now) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${wait}s before requesting another verification code.`,
+        cooldownSeconds: wait
+      });
+    }
+
+    // Generate 6-digit numeric OTP code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
+    const resendAfter = now + 45 * 1000; // 45 seconds cooldown
+
+    residentOtpStore.set(cleanNum, {
+      resident_number: cleanNum,
+      phone_number: resident.phone_number,
+      otp_code: otpCode,
+      expires_at: expiresAt,
+      attempts: 0,
+      resend_after: resendAfter,
+      created_at: now
+    });
+
+    // Mask phone for user confirmation display (e.g., 080***4567)
+    const rawPhone = resident.phone_number;
+    const maskedPhone = rawPhone.length >= 8 
+      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+      : 'registered phone number';
+
+    // Dispatch real SMS if configured
+    const messageBody = `Finger of God Estate: Your Resident Portal OTP is ${otpCode}. Valid for 10 minutes. Do not share this code. Resident No: ${cleanNum}.`;
+    dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION').catch(e => {
+      console.warn('[OTP SMS Dispatch Notice]', e);
+    });
+
+    // Reset failed login count on successful code dispatch
+    residentLoginAttempts.delete(cleanNum);
+
+    return res.json({
+      success: true,
+      message: `A 6-digit verification code has been dispatched to ${maskedPhone}.`,
+      maskedPhone,
+      residentName: resident.full_name,
+      expiresInSeconds: 600,
+      cooldownSeconds: 45,
+      // For development/demo environment testing, include simulated code hint safely
+      isDevDemo: !isSmsConfigured(),
+      demoOtp: !isSmsConfigured() ? otpCode : undefined
+    });
+  } catch (err: any) {
+    console.error('Send OTP error:', err);
+    res.status(500).json({
+      success: false,
+      message: "We couldn't complete the request. Please check your internet connection and try again."
+    });
+  }
+});
+
+// RESIDENT PORTAL: VERIFY OTP ENDPOINT
+app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, phoneNumber, otp, rememberDevice } = req.body;
+
+    if (!residentNumber || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter the 6-digit verification code.'
+      });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const cleanOtp = String(otp).trim().replace(/\D/g, '');
+    const now = Date.now();
+
+    const otpRecord = residentOtpStore.get(cleanNum);
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'This verification code has expired. Please request a new code.'
+      });
+    }
+
+    if (otpRecord.expires_at < now) {
+      residentOtpStore.delete(cleanNum);
+      return res.status(400).json({
+        success: false,
+        message: 'This verification code has expired. Please request a new code.'
+      });
+    }
+
+    if (otpRecord.attempts >= 5) {
+      residentOtpStore.delete(cleanNum);
+      return res.status(429).json({
+        success: false,
+        message: 'Too many attempts. Please wait a moment and request a new code.'
+      });
+    }
+
+    if (otpRecord.otp_code !== cleanOtp) {
+      otpRecord.attempts += 1;
+      residentOtpStore.set(cleanNum, otpRecord);
+      const remaining = 5 - otpRecord.attempts;
+
+      return res.status(400).json({
+        success: false,
+        message: remaining > 0 
+          ? `Incorrect verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Too many attempts. Please request a new code.'
+      });
+    }
+
+    // OTP Verified successfully! Clean up OTP record
+    residentOtpStore.delete(cleanNum);
+
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: 'Those details could not be verified. Please check your information.'
+      });
+    }
+
+    // Issue session token
+    const tokenValidityMs = rememberDevice ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const sessionToken = `fog_res_${crypto.randomBytes(24).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, {
+      resident_number: cleanNum,
+      created_at: now
+    });
+
+    return res.json({
+      success: true,
+      message: `Welcome back, ${resident.full_name}!`,
+      token: sessionToken,
+      rememberDevice: Boolean(rememberDevice),
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: !!resident.account_activated,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Lagos',
+        lga: resident.lga || 'Eti-Osa',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({
+      success: false,
+      message: "We couldn't complete the request. Please check your internet connection and try again."
+    });
+  }
+});
+
 // STAGE 9: RESIDENT SELF-SERVICE PROFILE UPDATE
 app.put('/api/resident/profile', (req: Request, res: Response) => {
   try {

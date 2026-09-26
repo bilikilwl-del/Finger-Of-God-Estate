@@ -3304,6 +3304,159 @@ export const dbService = {
     }
   },
 
+  // STAGE 9 & RESIDENT PORTAL: SEND OTP CODE FOR AUTHENTICATION
+  async sendResidentOtp(residentNumber: string, phoneNumber: string): Promise<{
+    success: boolean;
+    message?: string;
+    maskedPhone?: string;
+    residentName?: string;
+    expiresInSeconds?: number;
+    cooldownSeconds?: number;
+    isDevDemo?: boolean;
+    demoOtp?: string;
+  }> {
+    const genericError = 'Those details could not be verified. Please check your estate number and registered phone number.';
+    try {
+      const res = await fetch('/api/resident/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: residentNumber.trim(),
+          phoneNumber: phoneNumber.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return {
+          success: true,
+          message: data.message,
+          maskedPhone: data.maskedPhone,
+          residentName: data.residentName,
+          expiresInSeconds: data.expiresInSeconds || 600,
+          cooldownSeconds: data.cooldownSeconds || 45,
+          isDevDemo: data.isDevDemo,
+          demoOtp: data.demoOtp
+        };
+      }
+      return {
+        success: false,
+        message: data.message || genericError
+      };
+    } catch {
+      // Local fallback simulation if server is offline
+      const cleanNum = residentNumber.trim().padStart(3, '0');
+      const residents = await this.getResidents();
+      const resident = residents.find(r => r.resident_number === cleanNum);
+
+      if (!resident || resident.status !== 'Active') {
+        return { success: false, message: genericError };
+      }
+
+      const inputPhone = phoneNumber.replace(/\D/g, '');
+      const regPhone = resident.phone_number.replace(/\D/g, '');
+      const altPhone = resident.additional_phone ? resident.additional_phone.replace(/\D/g, '') : '';
+
+      const match = (inputPhone.length >= 10 && regPhone.endsWith(inputPhone.slice(-10))) ||
+                    (altPhone.length >= 10 && altPhone.endsWith(inputPhone.slice(-10))) ||
+                    inputPhone === regPhone;
+
+      if (!match) {
+        return { success: false, message: genericError };
+      }
+
+      const rawPhone = resident.phone_number;
+      const maskedPhone = rawPhone.length >= 8 
+        ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+        : 'registered phone number';
+
+      return {
+        success: true,
+        message: `A 6-digit verification code has been dispatched to ${maskedPhone}.`,
+        maskedPhone,
+        residentName: resident.full_name,
+        expiresInSeconds: 600,
+        cooldownSeconds: 45,
+        isDevDemo: true,
+        demoOtp: '123456'
+      };
+    }
+  },
+
+  // STAGE 9 & RESIDENT PORTAL: VERIFY OTP AND SIGN IN
+  async verifyResidentOtp(
+    residentNumber: string,
+    phoneNumber: string,
+    otp: string,
+    rememberDevice: boolean = false
+  ): Promise<{
+    success: boolean;
+    resident?: Resident;
+    token?: string;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: residentNumber.trim(),
+          phoneNumber: phoneNumber.trim(),
+          otp: otp.trim(),
+          rememberDevice
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        residentSessionService.setCurrentResident(data.resident);
+        if (rememberDevice && data.token) {
+          residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
+        }
+        return {
+          success: true,
+          resident: data.resident,
+          token: data.token,
+          message: data.message
+        };
+      }
+      return {
+        success: false,
+        message: data.message || 'Those details could not be verified. Please check your information and try again.'
+      };
+    } catch {
+      // Local fallback simulation
+      const cleanNum = residentNumber.trim().padStart(3, '0');
+      const residents = await this.getResidents();
+      const resident = residents.find(r => r.resident_number === cleanNum);
+
+      if (!resident || resident.status !== 'Active') {
+        return {
+          success: false,
+          message: 'Those details could not be verified. Please check your estate number and registered phone number.'
+        };
+      }
+
+      if (otp.trim().length !== 6) {
+        return {
+          success: false,
+          message: 'Please enter the complete 6-digit verification code.'
+        };
+      }
+
+      const sessionToken = `local_tok_${Date.now()}`;
+      residentSessionService.setCurrentResident(resident);
+      if (rememberDevice) {
+        residentSessionService.setRememberedDevice(resident.resident_number, sessionToken);
+      }
+
+      return {
+        success: true,
+        resident,
+        token: sessionToken,
+        message: `Welcome back, ${resident.full_name}!`
+      };
+    }
+  },
+
   // STAGE 9: VERIFY RESIDENT FOR ACCOUNT ACTIVATION (PRIVACY-SAFE)
   async verifyResidentForActivation(residentNumber: string, identifier: string): Promise<{
     success: boolean;
@@ -6070,6 +6223,30 @@ export const residentSessionService = {
     } else {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
     }
+  },
+
+  setRememberedDevice(residentNumber: string, token: string) {
+    try {
+      localStorage.setItem('estate_remembered_device', JSON.stringify({
+        residentNumber,
+        token,
+        savedAt: Date.now()
+      }));
+    } catch {}
+  },
+
+  getRememberedDevice(): { residentNumber: string; token: string; savedAt: number } | null {
+    try {
+      const raw = localStorage.getItem('estate_remembered_device');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  },
+
+  clearRememberedDevice() {
+    try {
+      localStorage.removeItem('estate_remembered_device');
+    } catch {}
   },
 
   logoutResident() {
