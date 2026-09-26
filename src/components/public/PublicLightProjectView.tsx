@@ -36,6 +36,7 @@ import {
 } from '../../types/database';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 
 interface PublicLightProjectViewProps {
@@ -43,7 +44,6 @@ interface PublicLightProjectViewProps {
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 const INITIAL_LIGHT_TRANSACTIONS: LightProjectTransaction[] = [
@@ -140,8 +140,7 @@ export const PublicLightProjectView: React.FC<PublicLightProjectViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const [transactions, setTransactions] = useState<LightProjectTransaction[]>(INITIAL_LIGHT_TRANSACTIONS);
   const [filterType, setFilterType] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
@@ -183,13 +182,20 @@ export const PublicLightProjectView: React.FC<PublicLightProjectViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Solar Street Lighting & Power Infrastructure — Finger of God Estate"
+        description="Public ledger, solar streetlight installations, and 500kVA dedicated transformer maintenance fund for Finger of God Estate, Asaba."
+        keywords={['Solar Street Lighting', 'Power Committee', 'Finger of God Estate', 'Transformer Substation', 'Estate Infrastructure', 'Asaba Delta State']}
+        canonicalPath="/#light-project"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="light_project"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -488,7 +494,6 @@ export const PublicLightProjectView: React.FC<PublicLightProjectViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
 

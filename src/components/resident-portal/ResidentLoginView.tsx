@@ -22,6 +22,7 @@ import {
 import { dbService, authService, residentSessionService } from '../../lib/supabase';
 import { Resident, EstateSettings } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
+import { SEOHead } from '../common/SEOHead';
 
 interface ResidentLoginViewProps {
   onSuccess: (resident: Resident) => void;
@@ -457,6 +458,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
   const containerContent = (
     <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden mx-auto transition-all">
+      {!isModal && (
+        <SEOHead
+          title="Resident Portal Login & Account Activation — Finger of God Estate"
+          description="Log in to your Finger of God Estate resident portal to manage security passes, pay monthly security levies, and access resident resources."
+          keywords={['Resident Login', 'Account Activation', 'Finger of God Estate Resident Portal', 'Estate Dues']}
+          canonicalPath="/#resident-portal"
+          ogType="website"
+        />
+      )}
+
       {/* Brand Card Header */}
       <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white p-6 sm:p-7 relative border-b border-slate-800">
         {isModal && onCloseModal && (

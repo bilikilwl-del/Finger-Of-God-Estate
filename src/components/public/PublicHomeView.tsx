@@ -35,6 +35,7 @@ import {
 } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { SEOHead } from '../common/SEOHead';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
@@ -42,21 +43,17 @@ import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 interface PublicHomeViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
-  adminUser?: any;
   onNavigate: (tab: NavigationTab) => void;
   onNavigateToAnnouncementDetail: (slug: string) => void;
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
   estateSettings,
   currentResident,
-  adminUser,
   onNavigate,
   onNavigateToAnnouncementDetail,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
@@ -180,7 +177,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       tagline: 'Accounts & Household',
       description: 'Manage your building account, check payment status, register vehicles, and generate visitor gate passes.',
       icon: Users,
-      tab: 'public_residents' as NavigationTab,
+      tab: 'resident_portal' as NavigationTab,
       badge: 'Resident Hub',
       badgeColor: 'bg-blue-100 text-blue-800'
     },
@@ -218,6 +215,14 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Finger of God Estate — Asaba, Delta State | Official Residential Portal"
+        description="Official residential platform for Finger of God Estate, Asaba. Access 24/7 security management, road paving projects, resident portal, and monthly dues."
+        keywords={['Finger of God Estate', 'Asaba Delta State', 'Estate Security', 'Resident Portal', 'Paystack Levy Payments', 'Road Paving Project']}
+        canonicalPath="/"
+        ogType="website"
+      />
+
       {/* 1. Header Navigation Bar */}
       <PublicNavbar
         currentTab="home"
@@ -225,7 +230,6 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
         unreadAnnouncementsCount={announcements.length}
       />
 
@@ -367,14 +371,6 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                 >
                   <CreditCard className="w-4 h-4 text-emerald-700" />
                   <span>Security Payment</span>
-                </button>
-
-                <button
-                  onClick={onOpenAdminLogin}
-                  className="px-4 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs sm:text-sm transition-colors flex items-center gap-2 cursor-pointer border border-slate-700"
-                >
-                  <Lock className="w-4 h-4 text-slate-400" />
-                  <span>Admin Login</span>
                 </button>
               </div>
             </div>
@@ -855,7 +851,6 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={() => onOpenResidentLogin('login')}
       />
 

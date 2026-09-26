@@ -17,6 +17,7 @@ import {
 import { Announcement, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { SEOHead } from '../common/SEOHead';
 
 interface AnnouncementDetailViewProps {
   slug: string;
@@ -110,6 +111,15 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title={`${announcement.title} — Estate Announcement`}
+        description={(announcement.content || '').replace(/<[^>]*>?/gm, '').slice(0, 155) || 'Official announcement and notice for residents of Finger of God Estate, Asaba.'}
+        canonicalPath={`/#announcement/${announcement.slug}`}
+        ogType="article"
+        publishedTime={announcement.publish_at || announcement.created_at}
+        author={announcement.author_name || 'Finger of God Estate Secretariat'}
+      />
+
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs print:hidden">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">

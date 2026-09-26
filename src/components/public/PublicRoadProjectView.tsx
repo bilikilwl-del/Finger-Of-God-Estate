@@ -47,6 +47,7 @@ import {
 } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
+import { SEOHead } from '../common/SEOHead';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { RoadProjectPaystackModal } from '../payments/RoadProjectPaystackModal';
 import { useRoadProjectStream } from '../../hooks/useRoadProjectStream';
@@ -59,7 +60,6 @@ interface PublicRoadProjectViewProps {
   onNavigateToPortal: () => void;
   onNavigateToVerifyReceipt: () => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
   onNavigateHomeSection?: (sectionId: string) => void;
 }
 
@@ -71,7 +71,6 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
   onNavigateToPortal,
   onNavigateToVerifyReceipt,
   onOpenResidentLogin,
-  onOpenAdminLogin,
   onNavigateHomeSection
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -236,6 +235,14 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Road Modernization Project & Transparent Public Ledger — Finger of God Estate"
+        description="Live tracked road paving, concrete stormwater drainage, and interlocking project with real-time financial transparency ledger for Finger of God Estate, Asaba."
+        keywords={['Road Paving Project', 'Interlocking Stones', 'Finger of God Estate', 'Asaba Infrastructure', 'Public Financial Ledger', 'Development Levy']}
+        canonicalPath="/#road-project"
+        ogType="website"
+      />
+
       {/* 1. Universal Estate Header */}
       <PublicNavbar
         currentTab="road_project"
@@ -250,7 +257,6 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           else onNavigateHome();
         }}
         onOpenResidentLogin={onOpenResidentLogin || (() => {})}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       {/* 2. Hero Section: Road Project Overview */}
@@ -1440,9 +1446,6 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             </button>
             <button onClick={onNavigateToVerifyReceipt} className="hover:text-white transition-colors cursor-pointer">
               Verify Receipt
-            </button>
-            <button onClick={onOpenAdminLogin} className="hover:text-white transition-colors cursor-pointer">
-              Admin Console
             </button>
           </div>
         </div>

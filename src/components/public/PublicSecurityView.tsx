@@ -30,6 +30,7 @@ import { EstateSettings, Announcement, SecurityAlert } from '../../types/databas
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
 import { PublicNavbar } from '../layout/PublicNavbar';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicSecurityViewProps {
   estateSettings: EstateSettings;
@@ -41,7 +42,6 @@ interface PublicSecurityViewProps {
   onNavigateToPortal: () => void;
   onOpenResidentLogin: () => void;
   onOpenPayLevy: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
@@ -53,8 +53,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   onNavigateToVerifyReceipt,
   onNavigateToPortal,
   onOpenResidentLogin,
-  onOpenPayLevy,
-  onOpenAdminLogin
+  onOpenPayLevy
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [securityAnnouncements, setSecurityAnnouncements] = useState<Announcement[]>([]);
@@ -230,6 +229,14 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="24/7 Security Department & Emergency Operations — Finger of God Estate"
+        description="24/7 estate security command, access control policies, emergency contact dispatch, visitor protocols, and digital incident reporting for Finger of God Estate."
+        keywords={['Estate Security', 'Gate Access Control', 'Finger of God Estate Security', 'Emergency Numbers Asaba', 'Incident Reporting']}
+        canonicalPath="/#security"
+        ogType="website"
+      />
+
       {/* 1. Universal Estate Header */}
       <PublicNavbar
         currentTab="security_public"
@@ -244,7 +251,6 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
           else onNavigateHome();
         }}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       {/* 2. Breadcrumb Navigation Bar */}
@@ -806,11 +812,6 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                 <li>
                   <button onClick={onNavigateToVerifyReceipt} className="hover:text-white transition-colors cursor-pointer">
                     Verify Digital Receipt
-                  </button>
-                </li>
-                <li>
-                  <button onClick={onOpenAdminLogin} className="hover:text-white transition-colors cursor-pointer">
-                    Admin Console
                   </button>
                 </li>
               </ul>

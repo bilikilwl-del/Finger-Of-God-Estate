@@ -1,18 +1,15 @@
 import React from 'react';
 import {
-  Shield,
   Phone,
   Mail,
   MapPin,
-  Clock,
-  ArrowRight,
-  Lock,
   ChevronRight,
-  ExternalLink,
+  Shield,
   Coins,
   Zap,
   CreditCard,
-  FileText
+  FileText,
+  Bell
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
@@ -20,14 +17,12 @@ import { EstateLogo } from '../common/EstateLogo';
 interface PublicFooterProps {
   estateSettings: EstateSettings;
   onNavigate: (tab: NavigationTab) => void;
-  onOpenAdminLogin: () => void;
   onOpenResidentLogin: () => void;
 }
 
 export const PublicFooter: React.FC<PublicFooterProps> = ({
   estateSettings,
   onNavigate,
-  onOpenAdminLogin,
   onOpenResidentLogin
 }) => {
   const currentYear = new Date().getFullYear();
@@ -38,7 +33,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
   };
 
   return (
-    <footer className="bg-slate-950 text-slate-300 pt-14 pb-8 border-t border-slate-800">
+    <footer className="bg-slate-950 text-slate-300 pt-14 pb-8 border-t border-slate-800 font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-6 pb-12 border-b border-slate-800/80">
           {/* Col 1: Estate Identity */}
@@ -51,7 +46,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               subtitle="RESIDENTIAL COMMUNITY & ESTATE MANAGEMENT"
             />
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-              Finger of God Estate is a secure, serene, and well-managed residential community committed to first-class security, modern infrastructure, and transparent community stewardship.
+              Finger of God Estate is a secure, serene, and well-managed residential community committed to 24/7 security, modern infrastructure, and transparent community stewardship.
             </p>
             <div className="pt-2 space-y-2 text-xs text-slate-400">
               <div className="flex items-start gap-2.5">
@@ -60,7 +55,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Hotline: {estateSettings.contact_phone || '08023456789'} (Gate & Security)</span>
+                <span>Hotline: {estateSettings.contact_phone || '08023456789'} (Gate & Security Desk)</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -69,13 +64,13 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
             </div>
           </div>
 
-          {/* Col 2: Estate Services */}
+          {/* Col 2: Security & Levy */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Estate Services
+              Security & Levies
             </h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('security_public')}
@@ -91,16 +86,16 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Monthly Estate Levy</span>
+                  <span>Monthly Security Levy</span>
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => handleNav('public_residents')}
+                  onClick={() => handleNav('resident_portal')}
                   className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Resident Portal & Account</span>
+                  <span>Resident Portal & Dashboard</span>
                 </button>
               </li>
               <li>
@@ -109,28 +104,19 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Verify Payment Receipt</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={onOpenResidentLogin}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Resident Sign In</span>
+                  <span>Verify Stamped Receipt</span>
                 </button>
               </li>
             </ul>
           </div>
 
-          {/* Col 3: Estate Projects */}
+          {/* Col 3: Community Projects */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
               Estate Projects
             </h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('road_project')}
@@ -146,37 +132,19 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Light & Power Project</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => handleNav('projects_overview')}
-                  className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Projects Overview Hub</span>
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => handleNav('road_project')}
-                  className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Public Financial Ledger</span>
+                  <span>Light & Electrification</span>
                 </button>
               </li>
             </ul>
           </div>
 
-          {/* Col 4: Community & Policies */}
+          {/* Col 4: Community & Support */}
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-              Community & Info
+              Community Info
             </h4>
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('public_announcements')}
@@ -192,7 +160,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Estate Bylaws & Docs</span>
+                  <span>Estate Bylaws & Documents</span>
                 </button>
               </li>
               <li>
@@ -206,31 +174,22 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               </li>
               <li>
                 <button
-                  onClick={() => handleNav('home')}
-                  className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  onClick={onOpenResidentLogin}
+                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Estate Overview</span>
+                  <span>Resident Sign In</span>
                 </button>
               </li>
             </ul>
           </div>
         </div>
 
-        {/* Bottom Bar: Copyright, Security Notice, & Discreet Management Login */}
+        {/* Bottom Bar: Copyright Only (Zero Admin Link) */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {currentYear} Finger of God Estate Management Committee. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-            <span className="text-[11px] text-slate-600">Official Resident & Community Portal</span>
-            <span className="text-slate-700">•</span>
-            <button
-              onClick={onOpenAdminLogin}
-              className="text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
-              title="Estate Executive Management Console"
-            >
-              <Lock className="w-3 h-3 text-slate-600" />
-              <span>Management Portal</span>
-            </button>
+          <p>© {currentYear} {estateSettings.estate_name || 'Finger of God Estate'} Management Committee. All rights reserved.</p>
+          <div className="flex items-center gap-4 text-[11px] text-slate-500">
+            <span>Phase 1, Iyiaba, Asaba • Delta State, Nigeria</span>
           </div>
         </div>
       </div>

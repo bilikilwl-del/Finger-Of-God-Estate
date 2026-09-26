@@ -71,13 +71,13 @@ import { IncidentDetailModal } from '../security/IncidentDetailModal';
 import { QRCodeDisplay } from '../common/QRCodeDisplay';
 import { ResidentNotificationCenter } from './ResidentNotificationCenter';
 import { ResidentFirstTimeSetupModal } from './ResidentFirstTimeSetupModal';
+import { SEOHead } from '../common/SEOHead';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
   onLogout: () => void;
   onSwitchResident: () => void;
   onNavigateToVerifyReceipt?: (receiptNumber?: string) => void;
-  onNavigateToAdmin?: () => void;
   onNavigateToHome?: () => void;
   onNavigateToRoadProject?: () => void;
   onNavigateToSecurity?: () => void;
@@ -89,7 +89,6 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   onLogout,
   onSwitchResident,
   onNavigateToVerifyReceipt,
-  onNavigateToAdmin,
   onNavigateToHome,
   onNavigateToRoadProject,
   onNavigateToSecurity,
@@ -439,6 +438,12 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50/70 pb-16">
+      <SEOHead
+        title={`Resident Dashboard: ${residentProfile.full_name} (#${residentProfile.resident_number}) — Finger of God Estate`}
+        description="Private Resident Dashboard for Finger of God Estate. Manage monthly security levy payments, download receipts, request visitor passes, and report incidents."
+        noIndex={true}
+      />
+
       {/* Top Resident Bar */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -489,14 +494,6 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer border border-slate-700"
               >
                 Public Home
-              </button>
-            )}
-            {onNavigateToAdmin && (
-              <button
-                onClick={onNavigateToAdmin}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer border border-slate-700"
-              >
-                Admin Console
               </button>
             )}
             <button

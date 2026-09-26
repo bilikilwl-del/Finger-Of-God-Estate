@@ -19,6 +19,7 @@ import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
 import { PublicNavbar } from '../layout/PublicNavbar';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicAnnouncementsViewProps {
   estateSettings: EstateSettings;
@@ -73,6 +74,14 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Official Estate Announcements & Resident Notices — Finger of God Estate"
+        description="Official executive committee broadcasts, meeting notices, security alerts, and infrastructure advisories for residents of Finger of God Estate, Asaba."
+        keywords={['Estate Announcements', 'Community Notices', 'Finger of God Estate', 'AGM Meetings', 'Security Advisories', 'Asaba Delta State']}
+        canonicalPath="/#announcements"
+        ogType="website"
+      />
+
       {/* 1. Universal Estate Header */}
       <PublicNavbar
         currentTab="public_announcements"
@@ -86,7 +95,6 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
           else onNavigateHome();
         }}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenResidentLogin}
       />
 
       {/* Main Content Area */}

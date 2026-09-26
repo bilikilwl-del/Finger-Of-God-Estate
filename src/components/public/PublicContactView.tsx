@@ -17,21 +17,20 @@ import {
 import { EstateSettings, NavigationTab, Resident } from '../../types/database';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicContactViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicContactView: React.FC<PublicContactViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const [name, setName] = useState(currentResident?.full_name || '');
   const [phone, setPhone] = useState(currentResident?.phone_number || '');
@@ -58,13 +57,20 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Contact Estate EXCO, Security Gate & Management — Finger of God Estate"
+        description="Reach the Executive Committee, Chief Security Officer, facility maintenance desk, and security gate control at Finger of God Estate, Asaba, Delta State."
+        keywords={['Contact Estate', 'Security Gate Phone', 'Finger of God Estate Exco', 'Estate Secretariat', 'Asaba Delta State']}
+        canonicalPath="/#contact"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="contact"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -318,7 +324,6 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
     </div>

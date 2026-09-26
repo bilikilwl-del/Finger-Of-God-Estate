@@ -18,13 +18,13 @@ import {
 import { EstateSettings, EstateDocument, NavigationTab, Resident } from '../../types/database';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicDocumentsViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 const ESTATE_DOCUMENTS: EstateDocument[] = [
@@ -106,8 +106,7 @@ export const PublicDocumentsView: React.FC<PublicDocumentsViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,13 +142,20 @@ export const PublicDocumentsView: React.FC<PublicDocumentsViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Official Documents, Constitution & Bylaws — Finger of God Estate"
+        description="Download and review official estate documents, constitution, building guidelines, security access rules, and committee resolutions for Finger of God Estate."
+        keywords={['Estate Documents', 'Estate Constitution', 'Bylaws', 'Building Guidelines', 'Finger of God Estate', 'Asaba Delta State']}
+        canonicalPath="/#documents"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="documents"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -337,7 +343,6 @@ export const PublicDocumentsView: React.FC<PublicDocumentsViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
     </div>

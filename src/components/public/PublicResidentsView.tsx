@@ -20,31 +20,37 @@ import {
 import { EstateSettings, NavigationTab, Resident } from '../../types/database';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicResidentsViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicResidentsView: React.FC<PublicResidentsViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Resident Services & Digital Verification Hub — Finger of God Estate"
+        description="Resident directory guidelines, account activation, gate pass management, digital verification, and quick levy payment access for Finger of God Estate."
+        keywords={['Resident Services', 'Account Activation', 'Finger of God Estate Residents', 'Estate Verification', 'Gate Pass']}
+        canonicalPath="/#residents"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="public_residents"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -261,7 +267,6 @@ export const PublicResidentsView: React.FC<PublicResidentsViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
     </div>

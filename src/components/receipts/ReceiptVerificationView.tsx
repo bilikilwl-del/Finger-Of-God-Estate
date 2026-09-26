@@ -20,11 +20,11 @@ import { dbService } from '../../lib/supabase';
 import { PublicReceiptVerification } from '../../types/database';
 import { formatNaira } from '../../lib/paystack';
 import { EstateLogo } from '../common/EstateLogo';
+import { SEOHead } from '../common/SEOHead';
 
 interface ReceiptVerificationViewProps {
   initialReceiptNumber?: string;
   onNavigateToPortal?: () => void;
-  onNavigateToAdmin?: () => void;
   onNavigateToHome?: () => void;
   onNavigateToRoadProject?: () => void;
   onNavigateToSecurity?: () => void;
@@ -33,7 +33,6 @@ interface ReceiptVerificationViewProps {
 export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = ({
   initialReceiptNumber = '',
   onNavigateToPortal,
-  onNavigateToAdmin,
   onNavigateToHome,
   onNavigateToRoadProject,
   onNavigateToSecurity
@@ -77,6 +76,14 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
 
   return (
     <div className="min-h-[85vh] py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-8">
+      <SEOHead
+        title="Official Receipt Verification Portal — Finger of God Estate"
+        description="Verify the digital authenticity and validity of official Finger of God Estate levy payment receipts and transaction records."
+        keywords={['Receipt Verification', 'Verify Receipt', 'Finger of God Estate', 'Paystack Transaction Verification']}
+        canonicalPath="/#verify-receipt"
+        ogType="website"
+      />
+
       {/* Top Banner & Title */}
       <div className="text-center space-y-3 flex flex-col items-center">
         <EstateLogo
@@ -377,14 +384,6 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
             >
               <span>Resident Portal</span>
               <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {onNavigateToAdmin && (
-            <button
-              onClick={onNavigateToAdmin}
-              className="text-slate-600 font-semibold hover:text-slate-900 cursor-pointer"
-            >
-              Security Admin Login
             </button>
           )}
         </div>

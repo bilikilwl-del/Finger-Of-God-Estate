@@ -29,6 +29,7 @@ import {
 import { dbService } from '../../lib/supabase';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 
 interface PublicEstateLevyViewProps {
@@ -36,15 +37,13 @@ interface PublicEstateLevyViewProps {
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [searchResidentNumber, setSearchResidentNumber] = useState(currentResident?.resident_number || '');
@@ -99,13 +98,20 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Monthly Security Levy & Online Dues Payment — Finger of God Estate"
+        description="Official online payment portal for Finger of God Estate monthly security levy (₦5,000/month). Pay via Paystack and retrieve instant stamped receipts."
+        keywords={['Estate Security Levy', 'Paystack Online Payment', 'Finger of God Estate', 'Dues Receipt', 'Asaba Delta State']}
+        canonicalPath="/#estate-levy"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="estate_levy"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -365,7 +371,6 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
 

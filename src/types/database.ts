@@ -423,7 +423,9 @@ export type NavigationTab =
   | 'logs'
   | 'resident_portal'
   | 'verify_receipt'
-  | 'system_administration';
+  | 'system_administration'
+  | 'admin_login'
+  | 'not_found';
 
 export interface MonthlyFinancialSummary {
   period_month: number;

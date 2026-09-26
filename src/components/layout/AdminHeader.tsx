@@ -1,32 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, Plus, Database, Shield, Calendar, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { Menu, Plus, Shield, Calendar } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
-import { isSupabaseConfigured, isAnyTableMissing } from '../../lib/supabase';
 
 interface AdminHeaderProps {
   currentTab: NavigationTab;
   estateSettings: EstateSettings;
   onOpenMobileMenu: () => void;
   onAddResident: () => void;
-  onOpenSqlModal: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
   currentTab,
   estateSettings,
   onOpenMobileMenu,
-  onAddResident,
-  onOpenSqlModal
+  onAddResident
 }) => {
-  const [hasMissing, setHasMissing] = useState(isAnyTableMissing());
-
-  useEffect(() => {
-    const handleStatusChange = () => {
-      setHasMissing(isAnyTableMissing());
-    };
-    window.addEventListener('supabase-schema-status', handleStatusChange);
-    return () => window.removeEventListener('supabase-schema-status', handleStatusChange);
-  }, []);
   const getBreadcrumbTitle = (tab: NavigationTab) => {
     switch (tab) {
       case 'dashboard': return 'Financial Management & Admin Overview';
@@ -53,7 +41,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
-          className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden"
+          className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden cursor-pointer"
           aria-label="Open sidebar"
         >
           <Menu className="w-5 h-5" />
@@ -63,7 +51,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className="font-medium text-slate-700 truncate">{estateSettings.estate_name}</span>
             <span aria-hidden="true">/</span>
-            <span className="capitalize">{currentTab}</span>
+            <span className="capitalize">{currentTab.replace(/_/g, ' ')}</span>
           </div>
           <h2 className="font-display font-bold text-lg text-slate-900 truncate">
             {getBreadcrumbTitle(currentTab)}
@@ -83,28 +71,10 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           </span>
         </div>
 
-        {/* SQL Schema Button */}
-        <button
-          onClick={onOpenSqlModal}
-          className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
-            isSupabaseConfigured && hasMissing
-              ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
-              : 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
-          }`}
-          title="Supabase Database Relational Schema"
-        >
-          {isSupabaseConfigured && hasMissing ? (
-            <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          ) : (
-            <Database className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          )}
-          <span>{isSupabaseConfigured && hasMissing ? 'Tables Setup Needed' : 'Database Schema'}</span>
-        </button>
-
         {/* Primary CTA */}
         <button
           onClick={onAddResident}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors whitespace-nowrap"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors whitespace-nowrap cursor-pointer"
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span>Add Resident</span>

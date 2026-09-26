@@ -17,21 +17,20 @@ import {
 import { EstateSettings, NavigationTab, Resident } from '../../types/database';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
+import { SEOHead } from '../common/SEOHead';
 
 interface PublicProjectsOverviewViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
-  onOpenAdminLogin: () => void;
 }
 
 export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProps> = ({
   estateSettings,
   currentResident,
   onNavigate,
-  onOpenResidentLogin,
-  onOpenAdminLogin
+  onOpenResidentLogin
 }) => {
   const projects = [
     {
@@ -126,13 +125,20 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <SEOHead
+        title="Estate Development & Capital Infrastructure Projects — Finger of God Estate"
+        description="Explore ongoing and completed capital infrastructure projects at Finger of God Estate including road paving, solar illumination, and perimeter security upgrades."
+        keywords={['Capital Projects', 'Estate Infrastructure', 'Road Paving', 'Solar Streetlights', 'Finger of God Estate', 'Asaba Development']}
+        canonicalPath="/#projects"
+        ogType="website"
+      />
+
       <PublicNavbar
         currentTab="projects_overview"
         estateSettings={estateSettings}
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
-        onOpenAdminLogin={onOpenAdminLogin}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -258,7 +264,6 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
       <PublicFooter
         estateSettings={estateSettings}
         onNavigate={onNavigate}
-        onOpenAdminLogin={onOpenAdminLogin}
         onOpenResidentLogin={onOpenResidentLogin}
       />
     </div>
