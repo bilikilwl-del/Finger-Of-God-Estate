@@ -48,7 +48,6 @@ import { ReceiptVerificationView } from './components/receipts/ReceiptVerificati
 import { PublicHomeView } from './components/public/PublicHomeView';
 import { PublicSecurityView } from './components/public/PublicSecurityView';
 import { PublicRoadProjectView } from './components/public/PublicRoadProjectView';
-import { PublicLightProjectView } from './components/public/PublicLightProjectView';
 import { PublicEstateLevyView } from './components/public/PublicEstateLevyView';
 import { PublicDocumentsView } from './components/public/PublicDocumentsView';
 import { PublicContactView } from './components/public/PublicContactView';
@@ -69,9 +68,6 @@ function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: strin
   }
   if (path === '/road-project' || path === '/road') {
     return { tab: 'road_project', slug: '' };
-  }
-  if (path === '/light-project' || path === '/light') {
-    return { tab: 'light_project', slug: '' };
   }
   if (path === '/estate-levy' || path === '/levy') {
     return { tab: 'estate_levy', slug: '' };
@@ -112,7 +108,6 @@ function getPathnameFromTab(tab: NavigationTab, slug?: string): string {
     case 'home': return '/';
     case 'security_public': return '/security';
     case 'road_project': return '/road-project';
-    case 'light_project': return '/light-project';
     case 'estate_levy': return '/estate-levy';
     case 'resident_portal': return '/resident-portal';
     case 'login': return '/login';
@@ -484,39 +479,7 @@ export default function App() {
     );
   }
 
-  // ----------------------------------------------------
-  // 4. PUBLIC ROUTE: LIGHT PROJECT
-  // ----------------------------------------------------
-  if (currentTab === 'light_project') {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        {renderToast()}
-        <PublicLightProjectView
-          estateSettings={estateSettings}
-          currentResident={currentResident}
-          onNavigate={(tab) => {
-            if (tab === 'resident_portal') {
-              const active = currentResident || residentSessionService.getCurrentResident();
-              if (!active) handleOpenResidentLogin('login');
-            }
-            navigateTo(tab);
-          }}
-          onOpenResidentLogin={handleOpenResidentLogin}
-        />
-        <ResidentLoginModal
-          isOpen={isResidentLoginOpen}
-          initialTab={residentLoginInitialTab}
-          onClose={() => setIsResidentLoginOpen(false)}
-          onSuccess={(res) => {
-            setCurrentResident(res);
-            residentSessionService.setCurrentResident(res);
-            showToast(`Welcome, ${res.full_name}!`, 'success');
-            navigateTo('resident_portal');
-          }}
-        />
-      </div>
-    );
-  }
+
 
   // ----------------------------------------------------
   // 5. PUBLIC ROUTE: ESTATE LEVY

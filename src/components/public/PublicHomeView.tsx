@@ -6,7 +6,6 @@ import {
   UserCheck,
   ChevronRight,
   Sparkles,
-  Zap,
   Coins,
   Bell,
   Phone,
@@ -189,16 +188,6 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       icon: Coins,
       tab: 'road_project' as NavigationTab,
       badge: 'Live Ledger',
-      badgeColor: 'bg-amber-100 text-amber-800'
-    },
-    {
-      id: 'light',
-      title: 'Light & Electrification',
-      tagline: 'Power & Streetlights',
-      description: 'Dedicated 500kVA transformer maintenance, feeder lines, solar streetlights, and power development fund.',
-      icon: Zap,
-      tab: 'light_project' as NavigationTab,
-      badge: 'Infrastructure',
       badgeColor: 'bg-amber-100 text-amber-800'
     },
     {
@@ -532,46 +521,46 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="max-w-3xl mx-auto">
             {/* Road Project Card */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-8 flex flex-col justify-between space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-xl bg-amber-100 text-amber-800 shrink-0">
-                      <Coins className="w-6 h-6" />
+                    <div className="p-3.5 rounded-2xl bg-amber-100 text-amber-800 shrink-0">
+                      <Coins className="w-7 h-7" />
                     </div>
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Civil Infrastructure</span>
-                      <h3 className="text-lg font-bold text-slate-900">Road Paving & Interlocking</h3>
+                      <h3 className="text-xl font-bold text-slate-900">Road Paving & Interlocking</h3>
                     </div>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                    Phase 1
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                    Phase 1 Active
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Comprehensive road grading, dual-sided reinforced drainage channels, and 80mm interlocking stone paving across residential avenues.
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Comprehensive road grading, dual-sided reinforced drainage channels, and 80mm interlocking stone paving across residential avenues. Real-time transparent financial ledger & bank sync.
                 </p>
 
                 {/* Ledger Financial Preview */}
-                <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200/70 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="p-5 rounded-2xl bg-amber-50/60 border border-amber-200/70 grid grid-cols-3 gap-3 text-center text-xs">
                   <div>
-                    <p className="text-[10px] text-amber-800 uppercase font-semibold">Total Credit</p>
-                    <p className="font-bold text-amber-950 font-mono text-xs sm:text-sm">
+                    <p className="text-[11px] text-amber-800 uppercase font-semibold">Total Credit</p>
+                    <p className="font-bold text-amber-950 font-mono text-sm sm:text-base">
                       ₦{roadSummary ? roadSummary.total_collected.toLocaleString() : '22,400,000'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-rose-800 uppercase font-semibold">Total Debit</p>
-                    <p className="font-bold text-rose-950 font-mono text-xs sm:text-sm">
+                    <p className="text-[11px] text-rose-800 uppercase font-semibold">Total Debit</p>
+                    <p className="font-bold text-rose-950 font-mono text-sm sm:text-base">
                       ₦{roadSummary ? roadSummary.total_spent.toLocaleString() : '14,850,000'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-emerald-800 uppercase font-semibold">Balance</p>
-                    <p className="font-bold text-emerald-950 font-mono text-xs sm:text-sm">
+                    <p className="text-[11px] text-emerald-800 uppercase font-semibold">Balance</p>
+                    <p className="font-bold text-emerald-950 font-mono text-sm sm:text-base">
                       ₦{roadSummary ? roadSummary.current_balance.toLocaleString() : '7,550,000'}
                     </p>
                   </div>
@@ -581,65 +570,9 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               <div className="pt-2">
                 <button
                   onClick={() => onNavigate('road_project')}
-                  className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>View Full Road Project Report</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Light Project Card */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 rounded-xl bg-emerald-100 text-emerald-800 shrink-0">
-                      <Zap className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Power & Reliability</span>
-                      <h3 className="text-lg font-bold text-slate-900">Light & Electrification</h3>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
-                    67% Complete
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Dedicated 500kVA transformer substation overhaul, phase balancing, and deployment of 85 integrated all-in-one solar LED streetlights.
-                </p>
-
-                {/* Ledger Financial Preview */}
-                <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-200/70 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div>
-                    <p className="text-[10px] text-emerald-800 uppercase font-semibold">Total Credit</p>
-                    <p className="font-bold text-emerald-950 font-mono text-xs sm:text-sm">
-                      ₦12,450,000
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-rose-800 uppercase font-semibold">Total Debit</p>
-                    <p className="font-bold text-rose-950 font-mono text-xs sm:text-sm">
-                      ₦7,600,000
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-emerald-800 uppercase font-semibold">Reserve Fund</p>
-                    <p className="font-bold text-emerald-950 font-mono text-xs sm:text-sm">
-                      ₦4,850,000
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  onClick={() => onNavigate('light_project')}
-                  className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>View Light Project & Ledger</span>
+                  <span>View Full Road Project Report & Ledger</span>
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>

@@ -126,15 +126,6 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   <span>Road Paving Project</span>
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={() => handleNav('light_project')}
-                  className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Light & Electrification</span>
-                </button>
-              </li>
             </ul>
           </div>
 

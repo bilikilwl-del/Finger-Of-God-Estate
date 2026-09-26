@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Layers,
   Coins,
-  Zap,
   Shield,
   Clock,
   ArrowRight,
@@ -54,28 +53,6 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
       icon: Coins,
       actionTab: 'road_project' as NavigationTab,
       actionLabel: 'View Road Project Ledger'
-    },
-    {
-      id: 'light',
-      title: 'Light & Electrification Project',
-      category: 'Power & Energy',
-      targetBudget: 18500000,
-      collectedAmount: 12450000,
-      spentAmount: 7600000,
-      currentBalance: 4850000,
-      progressPercentage: 67,
-      status: 'Active (Transformer & Solar)',
-      statusColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      description: 'Dedicated 500kVA step-down estate transformer substation overhaul, feeder line load-balancing, and estate-wide deployment of 85 integrated all-in-one solar LED streetlights.',
-      highlights: [
-        'Dedicated 500kVA transformer maintenance reserve',
-        '85 High-lumen solar LED streetlights active',
-        'Phase-balancing & drop-out fuse overhaul',
-        'Emergency 24/7 electrical response committee'
-      ],
-      icon: Zap,
-      actionTab: 'light_project' as NavigationTab,
-      actionLabel: 'View Light Project Ledger'
     },
     {
       id: 'drainage',
