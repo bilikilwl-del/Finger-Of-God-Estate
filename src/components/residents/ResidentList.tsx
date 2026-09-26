@@ -329,137 +329,163 @@ export const ResidentList: React.FC<ResidentListProps> = ({
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="py-3.5 px-4 w-24">Resident No.</th>
-                  <th className="py-3.5 px-4">Name</th>
-                  <th className="py-3.5 px-4">Phone</th>
-                  <th className="py-3.5 px-4">House / Plot</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Registration Date</th>
+                  <th className="py-3.5 px-4">Resident Name</th>
+                  <th className="py-3.5 px-4">Phone Number</th>
+                  <th className="py-3.5 px-4">Building / House</th>
+                  <th className="py-3.5 px-4">Account Status</th>
+                  <th className="py-3.5 px-4">Profile Setup</th>
+                  <th className="py-3.5 px-4">Oct 2026 Levy</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {paginatedResidents.map((resident) => (
-                  <tr 
-                    key={resident.id}
-                    className="hover:bg-slate-50/70 transition-colors group"
-                  >
-                    {/* Resident No. */}
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-900 tabular-nums">
-                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-900 border border-slate-200 font-extrabold text-xs">
-                        {resident.resident_number}
-                      </span>
-                    </td>
+                {paginatedResidents.map((resident) => {
+                  const isActivated = Boolean(resident.account_activated);
+                  const isProfileDone = Boolean(resident.profile_completed);
+                  const accountStatus = resident.account_status || (
+                    !isActivated ? 'NOT ACTIVATED' : (isProfileDone ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED')
+                  );
 
-                    {/* Name */}
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => onViewResident(resident)}
-                        className="font-semibold text-slate-900 hover:text-emerald-600 transition-colors text-left block"
-                      >
-                        {resident.full_name}
-                      </button>
-                      {resident.email ? (
-                        <span className="text-[11px] text-slate-400 block truncate max-w-[200px]">
-                          {resident.email}
+                  return (
+                    <tr 
+                      key={resident.id}
+                      className="hover:bg-slate-50/70 transition-colors group"
+                    >
+                      {/* Resident No. */}
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 tabular-nums">
+                        <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-900 border border-slate-200 font-extrabold text-xs">
+                          {resident.resident_number.padStart(3, '0')}
                         </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 block truncate max-w-[200px]">
-                          {resident.address}
-                        </span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* Phone */}
-                    <td className="py-3.5 px-4 font-mono text-slate-700 tabular-nums whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="font-semibold text-slate-800">{resident.phone_number}</span>
-                      </div>
-                      {resident.additional_phone && (
-                        <span className="text-[10px] text-slate-400 block ml-5">
-                          Alt: {resident.additional_phone}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* House/Plot */}
-                    <td className="py-3.5 px-4 font-medium text-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span className="font-bold text-slate-900">{resident.house_number}</span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
-                        {resident.address}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase ${
-                        resident.status === 'Active'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}>
-                        {resident.status === 'Active' ? (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        ) : (
-                          <XCircle className="w-3 h-3 text-slate-400" />
-                        )}
-                        <span>{resident.status}</span>
-                      </span>
-                    </td>
-
-                    {/* Registration Date */}
-                    <td className="py-3.5 px-4 font-mono text-slate-600 tabular-nums">
-                      {resident.registration_date}
-                    </td>
-
-                    {/* Actions: View, Edit, Activate/Deactivate */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                      {/* Name */}
+                      <td className="py-3.5 px-4">
                         <button
                           onClick={() => onViewResident(resident)}
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors inline-flex items-center gap-1 shadow-2xs"
-                          title="View Profile"
+                          className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left block"
                         >
-                          <Eye className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="hidden sm:inline">View</span>
+                          {resident.full_name}
                         </button>
+                        {resident.email && (
+                          <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
+                            {resident.email}
+                          </span>
+                        )}
+                      </td>
 
-                        <button
-                          onClick={() => onEditResident(resident)}
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 hover:text-emerald-700 text-xs font-semibold transition-colors inline-flex items-center gap-1 shadow-2xs"
-                          title="Edit Resident"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="hidden sm:inline">Edit</span>
-                        </button>
+                      {/* Phone */}
+                      <td className="py-3.5 px-4 font-mono text-slate-700 tabular-nums whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-semibold text-slate-800">{resident.phone_number}</span>
+                        </div>
+                        {resident.additional_phone && (
+                          <span className="text-[10px] text-slate-400 block ml-5">
+                            Alt: {resident.additional_phone}
+                          </span>
+                        )}
+                      </td>
 
-                        <button
-                          onClick={() => onToggleStatus(resident)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1 border shadow-2xs ${
-                            resident.status === 'Active'
-                              ? 'bg-white border-slate-200 text-slate-600 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300'
-                              : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
-                          }`}
-                          title={resident.status === 'Active' ? 'Deactivate Resident' : 'Activate Resident'}
-                        >
-                          {resident.status === 'Active' ? (
-                            <>
-                              <UserX className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="hidden sm:inline">Deactivate</span>
-                            </>
+                      {/* House/Plot */}
+                      <td className="py-3.5 px-4 font-medium text-slate-800">
+                        <div className="flex items-center gap-1.5">
+                          <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-bold text-slate-900">{resident.house_number}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
+                          {resident.address}
+                        </span>
+                      </td>
+
+                      {/* Account Status */}
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase ${
+                          accountStatus === 'ACTIVE'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                            : accountStatus === 'PROFILE UPDATE REQUIRED'
+                            ? 'bg-blue-50 text-blue-800 border border-blue-300'
+                            : accountStatus === 'SUSPENDED'
+                            ? 'bg-rose-50 text-rose-800 border border-rose-300'
+                            : 'bg-amber-50 text-amber-900 border border-amber-300'
+                        }`}>
+                          {accountStatus === 'ACTIVE' ? (
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                           ) : (
-                            <>
-                              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                              <span className="hidden sm:inline">Activate</span>
-                            </>
+                            <XCircle className="w-3 h-3 text-amber-600" />
                           )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <span>{accountStatus}</span>
+                        </span>
+                      </td>
+
+                      {/* Profile Setup Status */}
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                          isProfileDone 
+                            ? 'bg-emerald-50 text-emerald-800 font-bold' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {isProfileDone ? 'Completed' : 'Pending'}
+                        </span>
+                      </td>
+
+                      {/* Payment Status (Oct 2026) */}
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          resident.resident_number === '001'
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        }`}>
+                          {resident.resident_number === '001' ? 'PAID' : 'UNPAID'}
+                        </span>
+                      </td>
+
+                      {/* Actions: View, Edit, Activate/Deactivate */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => onViewResident(resident)}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="View Profile"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="hidden sm:inline">View</span>
+                          </button>
+
+                          <button
+                            onClick={() => onEditResident(resident)}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-emerald-50 hover:border-emerald-300 text-slate-700 hover:text-emerald-700 text-xs font-semibold transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Edit Resident"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="hidden sm:inline">Edit</span>
+                          </button>
+
+                          <button
+                            onClick={() => onToggleStatus(resident)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1 border shadow-2xs ${
+                              resident.status === 'Active'
+                                ? 'bg-white border-slate-200 text-slate-600 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300'
+                                : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                            title={resident.status === 'Active' ? 'Deactivate Resident' : 'Activate Resident'}
+                          >
+                            {resident.status === 'Active' ? (
+                              <>
+                                <UserX className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="hidden sm:inline">Deactivate</span>
+                              </>
+                            ) : (
+                              <>
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="hidden sm:inline">Activate</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

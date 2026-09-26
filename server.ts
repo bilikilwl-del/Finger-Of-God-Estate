@@ -91,6 +91,8 @@ interface ServerResidentRecord {
   id: string;
   auth_user_id?: string | null;
   account_activated?: boolean;
+  profile_completed?: boolean;
+  account_status?: 'NOT ACTIVATED' | 'ACTIVE' | 'PROFILE UPDATE REQUIRED' | 'SUSPENDED';
   password_hash?: string | null;
   resident_number: string;
   full_name: string;
@@ -949,6 +951,8 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
         account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -956,8 +960,8 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status,
         registration_date: resident.registration_date
       }
@@ -1098,6 +1102,8 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id,
         account_activated: true,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1105,8 +1111,8 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status,
         registration_date: resident.registration_date
       }
@@ -1166,6 +1172,8 @@ app.post('/api/resident/login', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
         account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1173,8 +1181,8 @@ app.post('/api/resident/login', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status,
         registration_date: resident.registration_date
       }
@@ -1407,6 +1415,8 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
         account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1414,8 +1424,8 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status,
         registration_date: resident.registration_date
       }
@@ -1465,6 +1475,8 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
         account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1472,8 +1484,8 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status,
         registration_date: resident.registration_date
       }
@@ -1481,6 +1493,214 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Profile update error:', err);
     res.status(500).json({ success: false, message: 'Server error updating profile.' });
+  }
+});
+
+// -------------------------------------------------------------
+// ADMIN RESIDENT MANAGEMENT REST ENDPOINTS
+// -------------------------------------------------------------
+app.get('/api/admin/residents', (_req: Request, res: Response) => {
+  try {
+    const list = Array.from(residentsStore.values()).map(r => ({
+      ...r,
+      account_activated: !!r.account_activated,
+      profile_completed: !!r.profile_completed,
+      account_status: r.account_status || (r.account_activated ? (r.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED')
+    })).sort((a, b) => {
+      const na = parseInt(a.resident_number, 10) || 0;
+      const nb = parseInt(b.resident_number, 10) || 0;
+      return na - nb;
+    });
+    res.json({ success: true, count: list.length, residents: list });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch residents' });
+  }
+});
+
+app.post('/api/admin/residents', (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+    if (!data.resident_number || !data.full_name || !data.phone_number) {
+      return res.status(400).json({
+        success: false,
+        message: 'Resident Number, Full Name, and Phone Number are required.'
+      });
+    }
+
+    const cleanNum = String(data.resident_number).trim().padStart(3, '0');
+    
+    // Check uniqueness of resident number
+    if (residentsStore.has(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: `Resident Number "${cleanNum}" is already assigned to another resident. Resident numbers must be unique.`
+      });
+    }
+
+    // Check duplicate phone number
+    const inputDigits = String(data.phone_number).replace(/\D/g, '');
+    const phoneExists = Array.from(residentsStore.values()).some(r => {
+      const rDigits = String(r.phone_number).replace(/\D/g, '');
+      return (inputDigits.length >= 10 && rDigits.endsWith(inputDigits.slice(-10))) || inputDigits === rDigits;
+    });
+
+    if (phoneExists) {
+      return res.status(400).json({
+        success: false,
+        message: `Phone number "${data.phone_number}" is already registered to an existing resident.`
+      });
+    }
+
+    const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newResident: ServerResidentRecord = {
+      id: newId,
+      resident_number: cleanNum,
+      full_name: data.full_name.trim(),
+      phone_number: data.phone_number.trim(),
+      additional_phone: data.additional_phone ? data.additional_phone.trim() : null,
+      email: data.email ? data.email.trim().toLowerCase() : '',
+      house_number: data.house_number ? data.house_number.trim() : 'Phase 1',
+      address: data.address ? data.address.trim() : 'Finger of God Estate, Iyiaba, Asaba',
+      state: data.state || 'Delta',
+      lga: data.lga || 'Oshimili South',
+      status: data.status || 'Active',
+      account_activated: false,
+      profile_completed: false,
+      account_status: 'NOT ACTIVATED',
+      registration_date: data.registration_date || new Date().toISOString().split('T')[0]
+    };
+
+    residentsStore.set(cleanNum, newResident);
+
+    // Initialize October 2026 payment record
+    const payKey = `${cleanNum}_10_2026`;
+    if (!paymentsStore.has(payKey)) {
+      paymentsStore.set(payKey, {
+        id: `pay-${cleanNum}-10-2026`,
+        resident_id: newId,
+        resident_number: cleanNum,
+        resident_name: newResident.full_name,
+        house_number: newResident.house_number,
+        period_month: 10,
+        period_year: 2026,
+        period_label: 'October 2026',
+        amount_due: 5000,
+        amount_paid: 0,
+        status: 'UNPAID',
+        due_date: '2026-10-01',
+        paid_at: null,
+        paystack_reference: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    // Audit log
+    auditLogsStore.unshift({
+      id: crypto.randomUUID(),
+      admin_email: data.admin_email || 'admin@fingerofgodestate.ng',
+      action: 'CREATED_RESIDENT',
+      entity_type: 'resident',
+      entity_id: cleanNum,
+      description: `Registered resident ${cleanNum} - ${newResident.full_name} (${newResident.house_number})`,
+      created_at: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: `Resident ${cleanNum} has been successfully registered.`,
+      resident: newResident
+    });
+  } catch (err: any) {
+    console.error('Create resident error:', err);
+    res.status(500).json({ success: false, message: 'Unable to register this resident. Please check the information and try again.' });
+  }
+});
+
+app.put('/api/admin/residents/:id', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+    let existing = Array.from(residentsStore.values()).find(r => r.id === id || r.resident_number === id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Resident not found' });
+    }
+
+    const updated: ServerResidentRecord = {
+      ...existing,
+      ...data,
+      resident_number: existing.resident_number // Never mutate resident number
+    };
+
+    residentsStore.set(existing.resident_number, updated);
+    res.json({ success: true, message: 'Resident updated successfully', resident: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to update resident' });
+  }
+});
+
+// FIRST-TIME RESIDENT PROFILE SETUP COMPLETION (ONE-TIME ONLY)
+app.post('/api/resident/first-login-setup', (req: Request, res: Response) => {
+  try {
+    const { residentNumber, full_name, phone_number, additional_phone, house_number, address, email } = req.body;
+
+    if (!residentNumber) {
+      return res.status(400).json({ success: false, message: 'Resident number is required.' });
+    }
+
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      return res.status(404).json({ success: false, message: 'Resident record not found.' });
+    }
+
+    if (full_name) resident.full_name = String(full_name).trim();
+    if (phone_number) resident.phone_number = String(phone_number).trim();
+    if (additional_phone !== undefined) resident.additional_phone = additional_phone ? String(additional_phone).trim() : null;
+    if (house_number) resident.house_number = String(house_number).trim();
+    if (address) resident.address = String(address).trim();
+    if (email) resident.email = String(email).trim().toLowerCase();
+
+    // Mark one-time setup as completed and account fully active
+    resident.profile_completed = true;
+    resident.account_activated = true;
+    resident.account_status = 'ACTIVE';
+
+    residentsStore.set(cleanNum, resident);
+
+    // Update payment record resident name if present
+    const pay = paymentsStore.get(`${cleanNum}_10_2026`);
+    if (pay) {
+      pay.resident_name = resident.full_name;
+      pay.house_number = resident.house_number;
+    }
+
+    res.json({
+      success: true,
+      message: 'Your account is ready. Welcome to the Resident Portal.',
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: true,
+        profile_completed: true,
+        account_status: 'ACTIVE',
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('First login setup error:', err);
+    res.status(500).json({ success: false, message: 'Failed to complete profile setup.' });
   }
 });
 

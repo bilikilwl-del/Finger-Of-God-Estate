@@ -45,8 +45,8 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
   const [email, setEmail] = useState('');
   const [houseNumber, setHouseNumber] = useState('');
   const [address, setAddress] = useState('');
-  const [selectedState, setSelectedState] = useState('Lagos');
-  const [selectedLga, setSelectedLga] = useState('Eti-Osa');
+  const [selectedState, setSelectedState] = useState('Delta');
+  const [selectedLga, setSelectedLga] = useState('Oshimili South');
   const [notes, setNotes] = useState('');
   const [registrationDate, setRegistrationDate] = useState('');
   const [status, setStatus] = useState<ResidentStatus>('Active');
@@ -83,8 +83,8 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
       setEmail(residentToEdit.email || '');
       setHouseNumber(residentToEdit.house_number);
       setAddress(residentToEdit.address);
-      setSelectedState(residentToEdit.state || 'Lagos');
-      setSelectedLga(residentToEdit.lga || 'Eti-Osa');
+      setSelectedState(residentToEdit.state || 'Delta');
+      setSelectedLga(residentToEdit.lga || 'Oshimili South');
       setNotes(residentToEdit.notes || '');
       setRegistrationDate(residentToEdit.registration_date);
       setStatus(residentToEdit.status);
@@ -97,9 +97,9 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
       setAdditionalPhone('');
       setEmail('');
       setHouseNumber('');
-      setAddress('');
-      setSelectedState('Lagos');
-      setSelectedLga('Eti-Osa');
+      setAddress('Phase 1, Finger of God Estate, Iyiaba, Asaba');
+      setSelectedState('Delta');
+      setSelectedLga('Oshimili South');
       setNotes('');
       setStatus('Active');
 

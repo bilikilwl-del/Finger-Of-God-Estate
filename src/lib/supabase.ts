@@ -1973,9 +1973,27 @@ export async function verifySupabaseTables(): Promise<{
 }
 
 /**
- * Calculates the next sequential resident number (e.g. 001, 002, 003...)
+ * Calculates the next sequential resident number (e.g. 001, 002, 003... up to 300)
  */
 export async function getNextSequentialResidentNumber(): Promise<string> {
+  // First, check server store
+  try {
+    const res = await fetch('/api/admin/residents');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.residents) && json.residents.length > 0) {
+        let maxNum = 0;
+        json.residents.forEach((r: { resident_number: string }) => {
+          const parsed = parseInt(r.resident_number, 10);
+          if (!isNaN(parsed) && parsed > maxNum) {
+            maxNum = parsed;
+          }
+        });
+        return formatResidentNumber(Math.min(maxNum + 1, 300));
+      }
+    }
+  } catch {}
+
   if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
     try {
       const { data, error } = await supabase
@@ -1994,7 +2012,7 @@ export async function getNextSequentialResidentNumber(): Promise<string> {
             maxNum = parsed;
           }
         });
-        return formatResidentNumber(maxNum + 1);
+        return formatResidentNumber(Math.min(maxNum + 1, 300));
       }
     } catch (e: any) {
       if (isTableNotFoundError(e)) {
@@ -2013,7 +2031,7 @@ export async function getNextSequentialResidentNumber(): Promise<string> {
       maxNum = parsed;
     }
   });
-  return formatResidentNumber(maxNum + 1);
+  return formatResidentNumber(Math.min(maxNum + 1, 300));
 }
 
 // ==========================================
@@ -2138,7 +2156,40 @@ export const dbService = {
   async getResidents(query?: string, statusFilter?: 'All' | 'Active' | 'Inactive'): Promise<Resident[]> {
     let residents: Resident[] = [];
 
-    if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
+    // 1. Try fetching from server-side store
+    try {
+      const res = await fetch('/api/admin/residents');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.residents) && json.residents.length > 0) {
+          residents = json.residents.map((d: any) => ({
+            id: d.id,
+            auth_user_id: d.auth_user_id || null,
+            account_activated: !!d.account_activated,
+            profile_completed: !!d.profile_completed,
+            account_status: d.account_status || (d.account_activated ? (d.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
+            resident_number: d.resident_number,
+            full_name: d.full_name,
+            phone_number: d.phone_number,
+            additional_phone: d.additional_phone || null,
+            email: d.email || null,
+            house_number: d.house_number,
+            address: d.address,
+            state: d.state || 'Delta',
+            lga: d.lga || 'Oshimili South',
+            notes: d.notes || null,
+            registration_date: d.registration_date,
+            status: d.status as 'Active' | 'Inactive',
+            created_at: d.created_at || new Date().toISOString(),
+            updated_at: d.updated_at || new Date().toISOString()
+          }));
+          saveLocalResidents(residents);
+        }
+      }
+    } catch {}
+
+    // 2. If server didn't return residents, check Supabase
+    if (residents.length === 0 && isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
       try {
         let req = supabase.from('residents').select('*').order('resident_number', { ascending: true });
         
@@ -2152,10 +2203,14 @@ export const dbService = {
             markTableMissing('residents');
           }
           residents = getLocalResidents();
-        } else if (data) {
+        } else if (data && data.length > 0) {
           markTableAvailable('residents');
           residents = data.map((d: any) => ({
             id: d.id,
+            auth_user_id: d.auth_user_id || null,
+            account_activated: !!d.account_activated,
+            profile_completed: !!d.profile_completed,
+            account_status: d.account_status || (d.account_activated ? (d.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
             resident_number: d.resident_number,
             full_name: d.full_name,
             phone_number: d.phone_number,
@@ -2163,8 +2218,8 @@ export const dbService = {
             email: d.email || null,
             house_number: d.house_number,
             address: d.address,
-            state: d.state,
-            lga: d.lga,
+            state: d.state || 'Delta',
+            lga: d.lga || 'Oshimili South',
             notes: d.notes || null,
             registration_date: d.registration_date,
             status: d.status as 'Active' | 'Inactive',
@@ -2181,7 +2236,7 @@ export const dbService = {
         console.warn('Supabase fetch residents notice, using local storage:', err?.message || err);
         residents = getLocalResidents();
       }
-    } else {
+    } else if (residents.length === 0) {
       residents = getLocalResidents();
     }
 
@@ -2230,7 +2285,21 @@ export const dbService = {
   },
 
   async isResidentNumberTaken(residentNumber: string, excludeId?: string): Promise<boolean> {
-    const formatted = residentNumber.trim();
+    const formatted = residentNumber.trim().padStart(3, '0');
+    // Check server store
+    try {
+      const res = await fetch('/api/admin/residents');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.residents)) {
+          const match = json.residents.some((r: { id: string; resident_number: string }) => 
+            r.id !== excludeId && r.resident_number.trim().padStart(3, '0') === formatted
+          );
+          if (match) return true;
+        }
+      }
+    } catch {}
+
     if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
       try {
         let req = supabase.from('residents').select('id').eq('resident_number', formatted);
@@ -2253,12 +2322,26 @@ export const dbService = {
       }
     }
     const residents = getLocalResidents();
-    return residents.some(r => r.resident_number.trim() === formatted && r.id !== excludeId);
+    return residents.some(r => r.resident_number.trim().padStart(3, '0') === formatted && r.id !== excludeId);
   },
 
   async isPhoneNumberTaken(phoneNumber: string, excludeId?: string): Promise<boolean> {
     const normalized = normalizeNigerianPhone(phoneNumber);
     if (!normalized) return false;
+
+    // Check server store
+    try {
+      const res = await fetch('/api/admin/residents');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.residents)) {
+          const match = json.residents.some((r: { id: string; phone_number: string }) => 
+            r.id !== excludeId && normalizeNigerianPhone(r.phone_number) === normalized
+          );
+          if (match) return true;
+        }
+      }
+    } catch {}
 
     if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
       try {
@@ -2289,10 +2372,12 @@ export const dbService = {
     residentData: Omit<Resident, 'id' | 'created_at' | 'updated_at'>,
     adminEmail: string = 'admin'
   ): Promise<Resident> {
+    const cleanNum = residentData.resident_number.trim().padStart(3, '0');
+
     // Check resident number uniqueness
-    const isTaken = await this.isResidentNumberTaken(residentData.resident_number);
+    const isTaken = await this.isResidentNumberTaken(cleanNum);
     if (isTaken) {
-      throw new Error(`Resident Number "${residentData.resident_number}" is already assigned to another resident. Resident numbers must be unique.`);
+      throw new Error(`Resident Number "${cleanNum}" is already assigned to another resident. Resident numbers must be unique.`);
     }
 
     // Check phone number duplicate (normalized)
@@ -2302,16 +2387,44 @@ export const dbService = {
     }
 
     const now = new Date().toISOString();
-    const newResident: Resident = {
+    let newResident: Resident = {
       ...residentData,
+      resident_number: cleanNum,
       phone_number: normalizeNigerianPhone(residentData.phone_number),
       additional_phone: residentData.additional_phone ? normalizeNigerianPhone(residentData.additional_phone) : null,
       notes: residentData.notes ? residentData.notes.trim() : null,
+      account_activated: false,
+      profile_completed: false,
+      account_status: 'NOT ACTIVATED',
       id: 'res-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       created_at: now,
       updated_at: now
     };
 
+    // 1. Post to Server API endpoint
+    try {
+      const srvRes = await fetch('/api/admin/residents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newResident,
+          admin_email: adminEmail
+        })
+      });
+      if (srvRes.ok) {
+        const srvJson = await srvRes.json();
+        if (srvJson.success && srvJson.resident) {
+          newResident = {
+            ...newResident,
+            ...srvJson.resident
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Server create resident notice, continuing with local sync:', e);
+    }
+
+    // 2. Try Supabase Sync
     if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
       try {
         const { data, error } = await supabase
@@ -2336,9 +2449,6 @@ export const dbService = {
         if (error) {
           if (isTableNotFoundError(error)) {
             markTableMissing('residents');
-            console.warn('[Supabase Notice] Table "residents" not found in schema cache (PGRST205). Resident saved to local storage.');
-          } else {
-            console.warn('[Supabase Notice] Could not sync resident to Supabase:', error.message);
           }
         } else if (data) {
           markTableAvailable('residents');
@@ -2350,13 +2460,17 @@ export const dbService = {
         if (isTableNotFoundError(err)) {
           markTableMissing('residents');
         }
-        console.warn('[Supabase Notice] Supabase create resident notice:', err?.message || err);
       }
     }
 
-    // Save locally as well
+    // 3. Save locally as well
     const residents = getLocalResidents();
-    residents.push(newResident);
+    const existingIdx = residents.findIndex(r => r.resident_number === cleanNum);
+    if (existingIdx !== -1) {
+      residents[existingIdx] = newResident;
+    } else {
+      residents.push(newResident);
+    }
     saveLocalResidents(residents);
 
     await this.logActivity({
@@ -2368,6 +2482,76 @@ export const dbService = {
     });
 
     return newResident;
+  },
+
+  // COMPLETE ONE-TIME FIRST-LOGIN PROFILE SETUP
+  async completeFirstTimeProfileSetup(residentNumber: string, data: {
+    full_name: string;
+    phone_number: string;
+    additional_phone?: string | null;
+    house_number: string;
+    address: string;
+    email?: string | null;
+  }): Promise<{ success: boolean; resident?: Resident; message?: string }> {
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+
+    try {
+      const res = await fetch('/api/resident/first-login-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: cleanNum,
+          ...data
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.resident) {
+          const locals = getLocalResidents();
+          const idx = locals.findIndex(r => r.resident_number === cleanNum);
+          if (idx !== -1) {
+            locals[idx] = {
+              ...locals[idx],
+              ...json.resident,
+              account_activated: true,
+              profile_completed: true,
+              account_status: 'ACTIVE'
+            };
+            saveLocalResidents(locals);
+          }
+          residentSessionService.setCurrentResident(json.resident);
+          return { success: true, resident: json.resident, message: json.message };
+        }
+      }
+    } catch {}
+
+    // Fallback local update
+    const locals = getLocalResidents();
+    const idx = locals.findIndex(r => r.resident_number === cleanNum);
+    if (idx !== -1) {
+      locals[idx] = {
+        ...locals[idx],
+        full_name: data.full_name.trim(),
+        phone_number: normalizeNigerianPhone(data.phone_number),
+        additional_phone: data.additional_phone ? normalizeNigerianPhone(data.additional_phone) : null,
+        house_number: data.house_number.trim(),
+        address: data.address.trim(),
+        email: data.email ? data.email.trim().toLowerCase() : locals[idx].email,
+        account_activated: true,
+        profile_completed: true,
+        account_status: 'ACTIVE',
+        updated_at: new Date().toISOString()
+      };
+      saveLocalResidents(locals);
+      residentSessionService.setCurrentResident(locals[idx]);
+      return {
+        success: true,
+        resident: locals[idx],
+        message: 'Your account is ready. Welcome to the Resident Portal.'
+      };
+    }
+
+    return { success: false, message: 'Resident record not found.' };
   },
 
   async updateResident(

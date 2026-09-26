@@ -4,12 +4,15 @@
  */
 
 export type ResidentStatus = 'Active' | 'Inactive';
+export type ResidentAccountStatus = 'NOT ACTIVATED' | 'ACTIVE' | 'PROFILE UPDATE REQUIRED' | 'SUSPENDED' | 'Not Activated' | 'Active' | 'Profile Update Required' | 'Suspended';
 
 export interface Resident {
   id: string;
   auth_user_id?: string | null; // Linked Supabase Auth User ID
   account_activated?: boolean; // Indicates if online account has been activated
-  resident_number: string; // e.g. "001", "002", "010", "100", "300", "500", etc.
+  profile_completed?: boolean; // Indicates if first-time profile setup was completed
+  account_status?: ResidentAccountStatus; // Account status: NOT ACTIVATED | ACTIVE | PROFILE UPDATE REQUIRED | SUSPENDED
+  resident_number: string; // e.g. "001", "002", "010", "100", "300", etc.
   full_name: string;
   phone_number: string;
   additional_phone?: string | null; // Optional secondary emergency contact
