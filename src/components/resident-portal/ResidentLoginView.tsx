@@ -72,6 +72,30 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTimer, setLockoutTimer] = useState(0);
 
+  // Close Resident Portal handler
+  const handleClosePortal = () => {
+    if (isModal && onCloseModal) {
+      onCloseModal();
+      return;
+    }
+    try {
+      window.close();
+    } catch {}
+    setTimeout(() => {
+      if (!window.closed) {
+        if (onCloseModal) {
+          onCloseModal();
+        } else if (onNavigateToHome) {
+          onNavigateToHome();
+        } else if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
+          window.history.back();
+        } else if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
+    }, 60);
+  };
+
   // Password Login State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -470,15 +494,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
       {/* Brand Card Header */}
       <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white p-6 sm:p-7 relative border-b border-slate-800">
-        {isModal && onCloseModal && (
-          <button
-            onClick={onCloseModal}
-            className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+        <button
+          onClick={handleClosePortal}
+          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer border border-slate-700/60"
+          title="Close Resident Portal"
+          aria-label="Close Resident Portal"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
         <div className="flex items-center gap-3">
           <EstateLogo

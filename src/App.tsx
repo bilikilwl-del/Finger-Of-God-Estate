@@ -15,6 +15,7 @@ import {
   authService, 
   residentSessionService 
 } from './lib/supabase';
+import { diagnoseSupabaseConnection } from './lib/supabaseDiagnostics';
 
 // Layout & Admin Components
 import { AdminSidebar } from './components/layout/AdminSidebar';
@@ -56,7 +57,7 @@ import { AnnouncementDetailView } from './components/public/AnnouncementDetailVi
 import { PublicResidentsView } from './components/public/PublicResidentsView';
 import { NotFoundView } from './components/common/NotFoundView';
 
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: string } {
   const path = pathname.toLowerCase().replace(/\/$/, '') || '/';
@@ -214,10 +215,13 @@ export default function App() {
 
   // Initial Data Initialization
   useEffect(() => {
+    // Run connectivity and configuration diagnostics
+    diagnoseSupabaseConnection().catch(() => {});
+
     const initData = async () => {
       setLoading(true);
       try {
-        const user = authService.getCurrentUser();
+        const user = await authService.getActiveAdminUser();
         setAdminUser(user);
 
         const [loadedSettings, loadedResidents, loadedLogs] = await Promise.all([
@@ -335,7 +339,7 @@ export default function App() {
     await authService.logout();
     setAdminUser(null);
     showToast('Signed out of administrative console.', 'info');
-    navigateTo('home');
+    navigateTo('dashboard');
   };
 
   const handleAdminAuthenticated = async (user: any) => {
@@ -563,10 +567,19 @@ export default function App() {
             onNavigateToHome={() => navigateTo('home')}
             onNavigateToRoadProject={() => navigateTo('road_project')}
             onNavigateToSecurity={() => navigateTo('security_public')}
+            onClosePortal={() => navigateTo('home')}
             estateSettings={estateSettings}
           />
         ) : (
-          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100 font-sans">
+          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100 font-sans relative">
+            <button
+              onClick={() => navigateTo('home')}
+              className="absolute top-6 right-6 p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-500 hover:text-slate-900 shadow-sm hover:shadow transition-all cursor-pointer"
+              title="Close Resident Portal"
+              aria-label="Close Resident Portal"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl max-w-md w-full text-center space-y-5 border border-slate-200">
               <div className="w-16 h-16 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
                 <CheckCircle2 className="w-8 h-8" />

@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
+import { verifyAdminToken, VerifiedAdminUser } from './database.ts';
 
 export type RoadTransactionType = 'CREDIT' | 'DEBIT';
 
@@ -1172,22 +1173,28 @@ roadProjectRouter.post('/bank-transfer/webhook', (req: Request, res: Response) =
 });
 
 // Admin Authorization Middleware for Road Project
-const requireRoadAdminAuth = (req: Request, res: Response, next: express.NextFunction) => {
+const requireRoadAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  const adminEmailHeader = req.headers['x-admin-email'] as string;
-  const candidateEmail = (adminEmailHeader || (req.body && req.body.admin_email) || (req.query && req.query.admin_email))?.toLowerCase()?.trim();
   const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
-  if (token && token !== 'null' && token !== 'undefined') {
-    return next();
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Administrator authentication token required for road project operations.'
+    });
   }
-  if (candidateEmail && (candidateEmail.includes('admin') || candidateEmail.endsWith('@fingerofgodestate.ng'))) {
-    return next();
+
+  const result = await verifyAdminToken(token);
+  if (!result.valid || !result.user) {
+    const isForbidden = result.error?.includes('not authorized') || result.error?.includes('Access denied');
+    return res.status(isForbidden ? 403 : 401).json({
+      success: false,
+      message: result.error || 'Unauthorized: Invalid administrator credentials.'
+    });
   }
-  return res.status(401).json({
-    success: false,
-    message: 'Unauthorized: Administrator credentials required for road project operations.'
-  });
+
+  (req as any).adminUser = result.user;
+  return next();
 };
 
 // 7. RECORD AUTHORIZED PROJECT EXPENDITURE (DEBIT)

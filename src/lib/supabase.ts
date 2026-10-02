@@ -77,6 +77,9 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+export { diagnoseSupabaseConnection } from './supabaseDiagnostics';
+export type { SupabaseDiagnosticResult, SupabaseDiagnosticDetails } from './supabaseDiagnostics';
+
 // ==========================================
 // DEFAULT SEED DATA (For initial run / local storage)
 // ==========================================
@@ -1973,12 +1976,33 @@ export async function verifySupabaseTables(): Promise<{
 }
 
 /**
+ * Returns authenticated headers for administrative REST API requests
+ */
+export async function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...extraHeaders
+  };
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch {}
+  }
+  return headers;
+}
+
+/**
  * Calculates the next sequential resident number (e.g. 001, 002, 003... up to 300)
  */
 export async function getNextSequentialResidentNumber(): Promise<string> {
   // First, check server store
   try {
-    const res = await fetch('/api/admin/residents');
+    const res = await fetch('/api/admin/residents', {
+      headers: await getAdminAuthHeaders()
+    });
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.residents) && json.residents.length > 0) {
@@ -2158,7 +2182,9 @@ export const dbService = {
 
     // 1. Try fetching from server-side store
     try {
-      const res = await fetch('/api/admin/residents');
+      const res = await fetch('/api/admin/residents', {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.residents) && json.residents.length > 0) {
@@ -2453,7 +2479,7 @@ export const dbService = {
     try {
       const srvRes = await fetch('/api/admin/residents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({
           ...newResident,
           admin_email: adminEmail
@@ -4073,7 +4099,9 @@ export const dbService = {
 
   async getFinancialSummary(month: number = 10, year: number = 2026): Promise<any> {
     try {
-      const res = await fetch(`/api/admin/financial-summary?month=${month}&year=${year}`);
+      const res = await fetch(`/api/admin/financial-summary?month=${month}&year=${year}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) return json.data;
@@ -4124,7 +4152,9 @@ export const dbService = {
 
   async getCollectionHistory(): Promise<any[]> {
     try {
-      const res = await fetch('/api/admin/collection-history');
+      const res = await fetch('/api/admin/collection-history', {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.history) return json.history;
@@ -4163,7 +4193,9 @@ export const dbService = {
 
   async getPaidResidents(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
     try {
-      const res = await fetch(`/api/admin/paid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/admin/paid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.residents) return json.residents;
@@ -4194,7 +4226,9 @@ export const dbService = {
 
   async getUnpaidResidents(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
     try {
-      const res = await fetch(`/api/admin/unpaid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/admin/unpaid-residents?month=${month}&year=${year}&q=${encodeURIComponent(q)}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.residents) return json.residents;
@@ -4223,7 +4257,9 @@ export const dbService = {
 
   async getOutstandingPayments(month: number = 10, year: number = 2026, q: string = ''): Promise<any[]> {
     try {
-      const res = await fetch(`/api/admin/outstanding-payments?month=${month}&year=${year}&q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/admin/outstanding-payments?month=${month}&year=${year}&q=${encodeURIComponent(q)}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.outstanding) return json.outstanding;
@@ -4247,7 +4283,9 @@ export const dbService = {
   async searchPaymentsGlobal(query: string): Promise<any[]> {
     if (!query.trim()) return [];
     try {
-      const res = await fetch(`/api/admin/global-payment-search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(`/api/admin/global-payment-search?q=${encodeURIComponent(query.trim())}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.results) return json.results;
@@ -4284,7 +4322,9 @@ export const dbService = {
     if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
     if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: await getAdminAuthHeaders()
+    });
     if (!res.ok) throw new Error(`Report generation failed: HTTP ${res.status}`);
     const json = await res.json();
     return json.report;
@@ -4304,7 +4344,7 @@ export const dbService = {
       const user = authService.getCurrentUser();
       await fetch('/api/admin/audit-log', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({
           admin_email: user?.email || 'admin@fingerofgodestate.ng',
           action,
@@ -4490,7 +4530,9 @@ export const dbService = {
       if (filters?.priority && filters.priority !== 'ALL') params.append('priority', filters.priority);
       if (filters?.query) params.append('query', filters.query);
 
-      const res = await fetch(`/api/admin/announcements?${params.toString()}`);
+      const res = await fetch(`/api/admin/announcements?${params.toString()}`, {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.announcements)) {
@@ -4554,7 +4596,7 @@ export const dbService = {
     try {
       const res = await fetch('/api/admin/announcements', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({ ...data, admin_email: adminEmail })
       });
       if (res.ok) {
@@ -4691,7 +4733,7 @@ export const dbService = {
     try {
       const res = await fetch(`/api/admin/announcements/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({ ...data, admin_email: adminEmail })
       });
       if (res.ok) {
@@ -4731,7 +4773,7 @@ export const dbService = {
     try {
       const res = await fetch(`/api/admin/announcements/${id}/status`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAdminAuthHeaders(),
         body: JSON.stringify({ status, admin_email: adminEmail })
       });
       if (res.ok) {
@@ -4754,7 +4796,8 @@ export const dbService = {
   async deleteAnnouncement(id: string, adminEmail: string = 'admin@fingerofgodestate.ng'): Promise<boolean> {
     try {
       const res = await fetch(`/api/admin/announcements/${id}?admin_email=${encodeURIComponent(adminEmail)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: await getAdminAuthHeaders()
       });
       if (res.ok) {
         const locals = getLocalAnnouncements().filter(a => a.id !== id);
@@ -6510,6 +6553,37 @@ export const authService = {
     return null;
   },
 
+  async getActiveAdminUser(): Promise<any | null> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const cleanEmail = session.user.email.toLowerCase().trim();
+          const { data: adminRecord } = await supabase
+            .from('admin_users')
+            .select('*')
+            .or(`auth_user_id.eq.${session.user.id},email.eq.${cleanEmail}`)
+            .eq('status', 'Active')
+            .maybeSingle();
+
+          if (adminRecord && ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'].includes(adminRecord.role)) {
+            const userObj = {
+              id: session.user.id,
+              email: adminRecord.email,
+              full_name: adminRecord.full_name || 'Estate Administrator',
+              role: adminRecord.role
+            };
+            this.setCurrentUser(userObj);
+            return userObj;
+          }
+        }
+      } catch {}
+      this.setCurrentUser(null);
+      return null;
+    }
+    return this.getCurrentUser();
+  },
+
   setCurrentUser(user: any | null) {
     if (user) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
@@ -6537,30 +6611,38 @@ export const authService = {
         }
 
         if (data.user) {
-          // Verify administrator role from admin_users table or user_metadata
-          const { data: adminRecord } = await supabase
+          // Verify administrator role from admin_users table
+          const { data: adminRecord, error: adminErr } = await supabase
             .from('admin_users')
             .select('*')
-            .eq('email', cleanEmail)
+            .or(`auth_user_id.eq.${data.user.id},email.eq.${cleanEmail}`)
             .eq('status', 'Active')
             .maybeSingle();
 
-          const metadataRole = data.user.user_metadata?.role;
-          const assignedRole = adminRecord?.role || metadataRole;
-
-          if (!assignedRole || (assignedRole !== 'Super Admin' && assignedRole !== 'Administrator' && assignedRole !== 'Accountant' && assignedRole !== 'Security Officer')) {
+          if (adminErr || !adminRecord) {
             await supabase.auth.signOut();
+            this.setCurrentUser(null);
             return {
               success: false,
-              error: 'Access denied: Your account is not authorized as an estate administrator.'
+              error: 'Your account is not authorized for administrator access.'
+            };
+          }
+
+          const validRoles = ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'];
+          if (!validRoles.includes(adminRecord.role)) {
+            await supabase.auth.signOut();
+            this.setCurrentUser(null);
+            return {
+              success: false,
+              error: 'Your account does not have a valid administrator role.'
             };
           }
 
           const userObj = {
             id: data.user.id,
             email: data.user.email || cleanEmail,
-            full_name: adminRecord?.full_name || data.user.user_metadata?.full_name || 'Estate Administrator',
-            role: assignedRole
+            full_name: adminRecord.full_name || 'Estate Administrator',
+            role: adminRecord.role
           };
 
           this.setCurrentUser(userObj);
@@ -6569,7 +6651,7 @@ export const authService = {
             admin_email: userObj.email,
             action: 'ADMIN_LOGIN',
             entity_type: 'auth',
-            description: `Admin ${userObj.email} signed in successfully via Supabase Auth`
+            description: `Admin ${userObj.email} signed in successfully via Supabase Auth (${userObj.role})`
           });
 
           return { success: true, user: userObj };
@@ -6657,8 +6739,9 @@ export const authService = {
   async resetPassword(email: string): Promise<{ success: boolean; message: string; error?: string }> {
     if (isSupabaseConfigured && supabase) {
       try {
+        const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/admin` : undefined;
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin
+          redirectTo: redirectUrl
         });
         if (error) {
           return { success: false, message: '', error: error.message };

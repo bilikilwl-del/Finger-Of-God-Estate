@@ -668,3 +668,79 @@ export const serverDb = {
     };
   }
 };
+
+// ==========================================
+// SERVER-SIDE AUTHORIZATION & VERIFICATION
+// ==========================================
+export interface VerifiedAdminUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'Super Admin' | 'Administrator' | 'Accountant' | 'Security Officer';
+  status: 'Active' | 'Inactive';
+}
+
+export async function verifyAdminToken(token: string): Promise<{ valid: boolean; user?: VerifiedAdminUser; error?: string }> {
+  if (!token || token === 'null' || token === 'undefined') {
+    return { valid: false, error: 'Authentication token is required.' };
+  }
+
+  try {
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user || !user.email) {
+      return { valid: false, error: 'Invalid or expired administrator session.' };
+    }
+
+    const cleanEmail = user.email.toLowerCase().trim();
+
+    // Query admin_users table in Supabase
+    try {
+      const { data: adminRecord, error: dbErr } = await supabaseAdmin
+        .from('admin_users')
+        .select('*')
+        .or(`auth_user_id.eq.${user.id},email.eq.${cleanEmail}`)
+        .eq('status', 'Active')
+        .maybeSingle();
+
+      if (!dbErr && adminRecord) {
+        return {
+          valid: true,
+          user: {
+            id: adminRecord.id,
+            email: adminRecord.email,
+            full_name: adminRecord.full_name,
+            role: adminRecord.role,
+            status: adminRecord.status
+          }
+        };
+      }
+    } catch (dbEx) {
+      console.warn('Error querying admin_users table in Supabase:', dbEx);
+    }
+
+    // Check local fallback admin table only if remote query failed
+    const localAdmin = localDb.admin_users.find(
+      (a: any) => (a.auth_user_id === user.id || a.email.toLowerCase() === cleanEmail) && a.status === 'Active'
+    );
+
+    if (localAdmin) {
+      return {
+        valid: true,
+        user: {
+          id: localAdmin.id,
+          email: localAdmin.email,
+          full_name: localAdmin.full_name,
+          role: localAdmin.role,
+          status: localAdmin.status
+        }
+      };
+    }
+
+    return {
+      valid: false,
+      error: 'Access denied: Your account is not authorized for administrator access.'
+    };
+  } catch (err: any) {
+    return { valid: false, error: err.message || 'Authentication service error.' };
+  }
+}

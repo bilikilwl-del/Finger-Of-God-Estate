@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
-import { serverDb, supabaseAdmin } from './src/server/database.ts';
+import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser } from './src/server/database.ts';
 
 dotenv.config();
 
@@ -24,48 +24,51 @@ app.use(express.json({
   }
 }));
 
-// Robust Server-side Administrator Authorization Middleware
+// Robust Server-side Administrator Authorization Middleware (Strict Token & admin_users Verification)
 export const requireAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  const adminEmailHeader = req.headers['x-admin-email'] as string;
   const adminToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
-  // 1. Verify Supabase Auth JWT if present
-  if (adminToken && adminToken !== 'null' && adminToken !== 'undefined') {
-    try {
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(adminToken);
-      if (user && !error) {
-        const role = user.user_metadata?.role;
-        const email = user.email?.toLowerCase();
-        if (role === 'Super Admin' || role === 'Administrator' || role === 'Accountant' || role === 'Security Officer' || email?.includes('admin')) {
-          (req as any).adminUser = user;
-          return next();
-        }
-      }
-    } catch {}
+  if (!adminToken) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Valid administrator authorization credentials required.'
+    });
   }
 
-  // 2. Verify registered admin credentials via header / query / body
-  const candidateEmail = (adminEmailHeader || (req.body && req.body.admin_email) || (req.query && req.query.admin_email))?.toLowerCase()?.trim();
-  if (candidateEmail) {
-    if (candidateEmail === 'admin@fingerofgodestate.ng' || candidateEmail.endsWith('@fingerofgodestate.ng')) {
-      (req as any).adminUser = { email: candidateEmail, role: 'Administrator' };
+  const result = await verifyAdminToken(adminToken);
+  if (!result.valid || !result.user) {
+    const isForbidden = result.error?.includes('not authorized') || result.error?.includes('Access denied');
+    return res.status(isForbidden ? 403 : 401).json({
+      success: false,
+      message: result.error || 'Unauthorized: Invalid administrator credentials.'
+    });
+  }
+
+  (req as any).adminUser = result.user;
+  return next();
+};
+
+// Role-based Access Control Middleware
+export const requireAdminRole = (allowedRoles: string[]) => {
+  return (req: Request, res: Response, next: express.NextFunction) => {
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
+    if (!adminUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Administrator authentication required.'
+      });
+    }
+
+    if (adminUser.role === 'Super Admin' || allowedRoles.includes(adminUser.role)) {
       return next();
     }
-    // Check in database admin_users
-    try {
-      const { data } = await supabaseAdmin.from('admin_users').select('*').eq('email', candidateEmail).eq('status', 'Active').maybeSingle();
-      if (data) {
-        (req as any).adminUser = data;
-        return next();
-      }
-    } catch {}
-  }
 
-  return res.status(401).json({
-    success: false,
-    message: 'Unauthorized: Valid administrator authorization credentials required.'
-  });
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden: This action requires one of the following roles: ${allowedRoles.join(', ')}.`
+    });
+  };
 };
 
 // In-memory server-side storage cache for transactions & receipts (synced with Supabase)
@@ -1550,7 +1553,7 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // ADMIN RESIDENT MANAGEMENT REST ENDPOINTS
 // -------------------------------------------------------------
-app.get('/api/admin/residents', async (_req: Request, res: Response) => {
+app.get('/api/admin/residents', requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const dbResidents = await serverDb.getResidents();
     // Sync into memory cache
@@ -2037,7 +2040,7 @@ app.get('/api/payments/all', (_req: Request, res: Response) => {
 // =============================================================
 
 // 1. MONTHLY FINANCIAL SUMMARY (STRICT VERIFIED DATA ONLY)
-app.get('/api/admin/financial-summary', (req: Request, res: Response) => {
+app.get('/api/admin/financial-summary', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -2108,7 +2111,7 @@ app.get('/api/admin/financial-summary', (req: Request, res: Response) => {
 });
 
 // 2. HISTORICAL COLLECTION RECORD
-app.get('/api/admin/collection-history', (_req: Request, res: Response) => {
+app.get('/api/admin/collection-history', requireAdminAuth, (_req: Request, res: Response) => {
   try {
     const billingCycles = [
       { month: 10, year: 2026, label: 'October 2026' },
@@ -2162,7 +2165,7 @@ app.get('/api/admin/collection-history', (_req: Request, res: Response) => {
 });
 
 // 3. PAID RESIDENTS PAGE / ENDPOINT
-app.get('/api/admin/paid-residents', (req: Request, res: Response) => {
+app.get('/api/admin/paid-residents', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -2214,7 +2217,7 @@ app.get('/api/admin/paid-residents', (req: Request, res: Response) => {
 });
 
 // 4. UNPAID RESIDENTS PAGE / ENDPOINT
-app.get('/api/admin/unpaid-residents', (req: Request, res: Response) => {
+app.get('/api/admin/unpaid-residents', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -2267,7 +2270,7 @@ app.get('/api/admin/unpaid-residents', (req: Request, res: Response) => {
 });
 
 // 5. OUTSTANDING PAYMENTS PAGE / ENDPOINT
-app.get('/api/admin/outstanding-payments', (req: Request, res: Response) => {
+app.get('/api/admin/outstanding-payments', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -2320,7 +2323,7 @@ app.get('/api/admin/outstanding-payments', (req: Request, res: Response) => {
 });
 
 // 6. GLOBAL PAYMENT SEARCH
-app.get('/api/admin/global-payment-search', (req: Request, res: Response) => {
+app.get('/api/admin/global-payment-search', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
     if (!q) {
@@ -2402,7 +2405,7 @@ app.get('/api/admin/global-payment-search', (req: Request, res: Response) => {
 });
 
 // 7. FINANCIAL REPORTS ENDPOINT (WITH CSV EXPORT SUPPORT)
-app.get('/api/admin/reports/:reportType', (req: Request, res: Response) => {
+app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const { reportType } = req.params;
     const month = parseInt(String(req.query.month || '10'), 10);
@@ -3132,7 +3135,7 @@ app.get('/api/sms/config', (_req: Request, res: Response) => {
 });
 
 // 2. SMS SUMMARY STATISTICS
-app.get('/api/sms/stats', (req: Request, res: Response) => {
+app.get('/api/sms/stats', requireAdminAuth, (req: Request, res: Response) => {
   const month = parseInt(req.query.month as string || '10', 10);
   const year = parseInt(req.query.year as string || '2026', 10);
   const logs = Array.from(smsLogsStore.values());
@@ -3157,7 +3160,7 @@ app.get('/api/sms/stats', (req: Request, res: Response) => {
 });
 
 // 3. SMS LOGS HISTORY WITH FILTERS
-app.get('/api/sms/logs', (req: Request, res: Response) => {
+app.get('/api/sms/logs', requireAdminAuth, (req: Request, res: Response) => {
   let logs = Array.from(smsLogsStore.values());
 
   const query = (req.query.query as string || '').toLowerCase().trim();
@@ -3377,13 +3380,37 @@ app.post('/api/admin/auth/verify-login', async (req: Request, res: Response) => 
       });
 
       if (!error && data.user) {
+        // Query admin_users table to verify role and status
+        const { data: adminRecord } = await supabaseAdmin
+          .from('admin_users')
+          .select('*')
+          .or(`auth_user_id.eq.${data.user.id},email.eq.${cleanEmail}`)
+          .eq('status', 'Active')
+          .maybeSingle();
+
+        if (!adminRecord) {
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied: Your account is not authorized for administrator access.'
+          });
+        }
+
+        const validRoles = ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'];
+        if (!validRoles.includes(adminRecord.role)) {
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied: Your account does not have a valid administrator role.'
+          });
+        }
+
         return res.json({
           success: true,
+          token: data.session?.access_token,
           user: {
-            id: data.user.id,
-            email: data.user.email || cleanEmail,
-            full_name: data.user.user_metadata?.full_name || 'Estate Administrator',
-            role: data.user.user_metadata?.role || 'Administrator'
+            id: adminRecord.id,
+            email: adminRecord.email,
+            full_name: adminRecord.full_name || 'Estate Administrator',
+            role: adminRecord.role
           }
         });
       }
@@ -3477,7 +3504,7 @@ app.get('/api/announcements/public/:slug', (req: Request, res: Response) => {
 });
 
 // Admin: Get all announcements with management filters
-app.get('/api/admin/announcements', (req: Request, res: Response) => {
+app.get('/api/admin/announcements', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const { status, category, priority, query } = req.query;
 

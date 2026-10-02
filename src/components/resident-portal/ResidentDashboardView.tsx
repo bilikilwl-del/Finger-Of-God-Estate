@@ -7,6 +7,7 @@ import {
   Calendar, 
   CreditCard, 
   CheckCircle2, 
+  X,
   XCircle, 
   AlertCircle, 
   Clock, 
@@ -81,6 +82,7 @@ interface ResidentDashboardViewProps {
   onNavigateToHome?: () => void;
   onNavigateToRoadProject?: () => void;
   onNavigateToSecurity?: () => void;
+  onClosePortal?: () => void;
   estateSettings?: EstateSettings;
 }
 
@@ -92,6 +94,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   onNavigateToHome,
   onNavigateToRoadProject,
   onNavigateToSecurity,
+  onClosePortal,
   estateSettings
 }) => {
   const [residentProfile, setResidentProfile] = useState<Resident>(currentResident);
@@ -99,6 +102,32 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   useEffect(() => {
     setResidentProfile(currentResident);
   }, [currentResident]);
+
+  // Gracefully close the Resident Portal interface
+  const handleClosePortal = () => {
+    // 1. If opened in a script-created popup/tab, attempt window.close()
+    try {
+      window.close();
+    } catch {
+      // Browser prevented window.close
+    }
+
+    // 2. If window is still open (e.g. browser restricted window.close for user-opened tabs),
+    // navigate back to previous view or estate homepage without logging out
+    setTimeout(() => {
+      if (!window.closed) {
+        if (onClosePortal) {
+          onClosePortal();
+        } else if (onNavigateToHome) {
+          onNavigateToHome();
+        } else if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
+          window.history.back();
+        } else if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
+    }, 60);
+  };
 
   const [dashboardData, setDashboardData] = useState<ResidentDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -445,7 +474,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       {/* Top Resident Bar */}
       <div className="bg-slate-900 text-white border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center">
+          <div className="flex items-center justify-between w-full sm:w-auto">
             <EstateLogo
               size="sm"
               variant="horizontal"
@@ -453,9 +482,19 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               estateName={estateSettings?.estate_name || 'Finger of God Estate'}
               subtitle="RESIDENT PORTAL • ASABA"
             />
+            {/* Mobile Close Button */}
+            <button
+              onClick={handleClosePortal}
+              className="sm:hidden p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer border border-slate-700 flex items-center gap-1"
+              title="Close Resident Portal"
+              aria-label="Close Resident Portal"
+            >
+              <X className="w-4 h-4 text-slate-300" />
+              <span className="text-[11px] font-medium pr-1">Close</span>
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs w-full sm:w-auto justify-end">
             <button
               onClick={onSwitchResident}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition-colors cursor-pointer border border-slate-700"
@@ -498,8 +537,20 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               onClick={onLogout}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-200 transition-colors cursor-pointer ml-1"
               title="Sign Out"
+              aria-label="Sign Out"
             >
               <LogOut className="w-4 h-4" />
+            </button>
+
+            {/* Desktop Close Resident Portal Button */}
+            <button
+              onClick={handleClosePortal}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 hover:text-white font-medium transition-colors cursor-pointer border border-slate-700 ml-1"
+              title="Close Resident Portal"
+              aria-label="Close Resident Portal"
+            >
+              <X className="w-4 h-4 text-slate-300" />
+              <span>Close Portal</span>
             </button>
           </div>
         </div>
