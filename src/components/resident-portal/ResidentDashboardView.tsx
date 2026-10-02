@@ -246,10 +246,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       setResidentAnnouncements(announcements);
       setUnreadNotifCount(notifs.length);
 
-      // Check walk-ins awaiting this resident's approval
-      const allPasses = await dbService.getVisitorPasses();
-      const waiting = allPasses.filter(p => 
-        (p.resident_number === currentResident.resident_number || p.house_number.toUpperCase() === currentResident.house_number.toUpperCase()) &&
+      // Check walk-ins awaiting this resident's approval from their own passes
+      const waiting = passes.filter(p => 
         p.status === 'Expected' &&
         p.notes?.includes('WALK-IN')
       );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Coins,
   X,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { EstateSettings, RoadProjectCategory, RoadProjectTransaction } from '../../types/database';
 import { dbService } from '../../lib/supabase';
+import { getPaystackConfig, loadPaystackInlineScript } from '../../lib/paystack';
 
 interface RoadProjectPaystackModalProps {
   isOpen: boolean;
@@ -37,11 +38,21 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
   const [category, setCategory] = useState<RoadProjectCategory>('Building Contribution');
   const [selectedPreset, setSelectedPreset] = useState<number>(100000);
   const [customAmount, setCustomAmount] = useState('');
+  const [paystackPublicKey, setPaystackPublicKey] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successTx, setSuccessTx] = useState<RoadProjectTransaction | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      getPaystackConfig().then(cfg => {
+        if (cfg?.publicKey) setPaystackPublicKey(cfg.publicKey);
+      });
+      loadPaystackInlineScript();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -96,8 +107,9 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
       // Check if Paystack Inline SDK is loaded in window
       const paystackWin = window as any;
       if (typeof paystackWin.PaystackPop !== 'undefined' && initRes.access_code && !initRes.authorization_url?.includes('paystack_simulation')) {
+        const effectiveKey = paystackPublicKey || (window as any).__PAYSTACK_KEY__ || 'pk_test_sample';
         const handler = paystackWin.PaystackPop.setup({
-          key: estateSettings.currency || 'pk_test_sample',
+          key: effectiveKey,
           email: email.trim() || `donor.${Date.now()}@fingerofgodestate.ng`,
           amount: Math.round(currentAmount * 100),
           ref: reference,

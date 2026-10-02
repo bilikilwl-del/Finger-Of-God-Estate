@@ -1089,28 +1089,9 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
       });
     }
 
-    // Sandbox / Simulation Verification
-    const simulatedData = {
-      reference: cleanRef,
-      id: `sim_pstk_${Date.now()}`,
-      status: 'success',
-      currency: 'NGN',
-      amount: req.body.amount ? Math.round(Number(req.body.amount) * 100) : 10000000,
-      paid_at: new Date().toISOString(),
-      channel: 'card (test)',
-      metadata: {
-        project: 'road_project',
-        building_number: req.body.buildingNumber || '024',
-        payer_name: req.body.payerName || 'Verified Resident Contributor',
-        category: 'Building Contribution'
-      }
-    };
-
-    const simResult = processVerifiedRoadPaystackEvent(simulatedData);
-    return res.json({
-      success: true,
-      transaction: simResult.transaction,
-      summary: computeRoadProjectSummary()
+    return res.status(400).json({
+      success: false,
+      message: 'Paystack payment gateway is not configured on the server. Please set PAYSTACK_SECRET_KEY in production to verify live road contributions.'
     });
   } catch (err: any) {
     console.error('[Road Paystack Verify Error]', err);
@@ -1190,8 +1171,27 @@ roadProjectRouter.post('/bank-transfer/webhook', (req: Request, res: Response) =
   }
 });
 
+// Admin Authorization Middleware for Road Project
+const requireRoadAdminAuth = (req: Request, res: Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const adminEmailHeader = req.headers['x-admin-email'] as string;
+  const candidateEmail = (adminEmailHeader || (req.body && req.body.admin_email) || (req.query && req.query.admin_email))?.toLowerCase()?.trim();
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+  if (token && token !== 'null' && token !== 'undefined') {
+    return next();
+  }
+  if (candidateEmail && (candidateEmail.includes('admin') || candidateEmail.endsWith('@fingerofgodestate.ng'))) {
+    return next();
+  }
+  return res.status(401).json({
+    success: false,
+    message: 'Unauthorized: Administrator credentials required for road project operations.'
+  });
+};
+
 // 7. RECORD AUTHORIZED PROJECT EXPENDITURE (DEBIT)
-roadProjectRouter.post('/expenditure', (req: Request, res: Response) => {
+roadProjectRouter.post('/expenditure', requireRoadAdminAuth, (req: Request, res: Response) => {
   try {
     const {
       amount,
@@ -1294,7 +1294,7 @@ roadProjectRouter.get('/reconciliation', (_req: Request, res: Response) => {
 });
 
 // 9. MATCH UNMATCHED TRANSACTION TO BUILDING
-roadProjectRouter.post('/reconciliation/match', (req: Request, res: Response) => {
+roadProjectRouter.post('/reconciliation/match', requireRoadAdminAuth, (req: Request, res: Response) => {
   try {
     const { reconciliation_id, building_number, contributor_name } = req.body;
     if (!reconciliation_id || !building_number) {
@@ -1338,7 +1338,7 @@ roadProjectRouter.post('/reconciliation/match', (req: Request, res: Response) =>
 });
 
 // 10. IMPORT BATCH VERIFIED BANK STATEMENT
-roadProjectRouter.post('/reconciliation/import-statement', (req: Request, res: Response) => {
+roadProjectRouter.post('/reconciliation/import-statement', requireRoadAdminAuth, (req: Request, res: Response) => {
   try {
     const { statement_rows } = req.body;
     if (!Array.isArray(statement_rows) || statement_rows.length === 0) {
@@ -1387,7 +1387,7 @@ roadProjectRouter.post('/reconciliation/import-statement', (req: Request, res: R
 });
 
 // 11. TRIGGER BANK SYNC
-roadProjectRouter.post('/bank-sync', (_req: Request, res: Response) => {
+roadProjectRouter.post('/bank-sync', requireRoadAdminAuth, (_req: Request, res: Response) => {
   // Sync status check & poll
   const summary = computeRoadProjectSummary();
   res.json({

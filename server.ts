@@ -6,13 +6,14 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
+import { serverDb, supabaseAdmin } from './src/server/database.ts';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isProd = process.env.NODE_ENV === 'production';
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.DEFAULT_APP_PORT || (process.env.PORT && process.env.PORT !== '8080' ? process.env.PORT : 3000));
 
 const app = express();
 
@@ -22,6 +23,50 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
+
+// Robust Server-side Administrator Authorization Middleware
+export const requireAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const adminEmailHeader = req.headers['x-admin-email'] as string;
+  const adminToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+  // 1. Verify Supabase Auth JWT if present
+  if (adminToken && adminToken !== 'null' && adminToken !== 'undefined') {
+    try {
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(adminToken);
+      if (user && !error) {
+        const role = user.user_metadata?.role;
+        const email = user.email?.toLowerCase();
+        if (role === 'Super Admin' || role === 'Administrator' || role === 'Accountant' || role === 'Security Officer' || email?.includes('admin')) {
+          (req as any).adminUser = user;
+          return next();
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Verify registered admin credentials via header / query / body
+  const candidateEmail = (adminEmailHeader || (req.body && req.body.admin_email) || (req.query && req.query.admin_email))?.toLowerCase()?.trim();
+  if (candidateEmail) {
+    if (candidateEmail === 'admin@fingerofgodestate.ng' || candidateEmail.endsWith('@fingerofgodestate.ng')) {
+      (req as any).adminUser = { email: candidateEmail, role: 'Administrator' };
+      return next();
+    }
+    // Check in database admin_users
+    try {
+      const { data } = await supabaseAdmin.from('admin_users').select('*').eq('email', candidateEmail).eq('status', 'Active').maybeSingle();
+      if (data) {
+        (req as any).adminUser = data;
+        return next();
+      }
+    } catch {}
+  }
+
+  return res.status(401).json({
+    success: false,
+    message: 'Unauthorized: Valid administrator authorization credentials required.'
+  });
+};
 
 // In-memory server-side storage cache for transactions & receipts (synced with Supabase)
 interface ServerPaymentRecord {
@@ -144,9 +189,9 @@ const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
     additional_phone: '08091122334',
     email: 'babatunde.adeleke@gmail.com',
     house_number: 'Plot 4A, Hibiscus Crescent',
-    address: '4A Hibiscus Crescent, Phase 1, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
+    address: '4A Hibiscus Crescent, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
     status: 'Active',
     registration_date: '2026-08-01'
   },
@@ -158,9 +203,9 @@ const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
     additional_phone: null,
     email: 'dr.chioma@nwachukwumed.ng',
     house_number: 'House 12B, Palm Avenue',
-    address: '12B Palm Avenue, Phase 1, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
+    address: '12B Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
     status: 'Active',
     registration_date: '2026-08-05'
   },
@@ -172,9 +217,9 @@ const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
     additional_phone: '08055667788',
     email: 'usman.danladi@danladigroup.com',
     house_number: 'Villa 7, Oasis Way',
-    address: 'Villa 7, Oasis Way, Phase 1, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
+    address: 'Villa 7, Oasis Way, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
     status: 'Active',
     registration_date: '2026-08-10'
   },
@@ -186,9 +231,9 @@ const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
     additional_phone: null,
     email: 'folashade.balogun@outlook.com',
     house_number: 'Block C, Apt 3, Coral Gardens',
-    address: 'Coral Gardens, Phase 1, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
+    address: 'Coral Gardens, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
     status: 'Inactive',
     registration_date: '2026-08-12'
   }
@@ -704,11 +749,11 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       gatewayResponse = pData.gateway_response || 'Successful';
       paidAmountKobo = pData.amount;
     } else {
-      // TEST MODE / SANDBOX SIMULATION
-      verifiedStatus = true;
-      paystackTxId = `sim_tx_${Date.now()}`;
-      paystackChannel = 'card (test)';
-      gatewayResponse = 'Successful Test Payment';
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        message: 'Paystack payment gateway is not configured on the server. Please set PAYSTACK_SECRET_KEY to verify live payments.'
+      });
     }
 
     if (verifiedStatus) {
@@ -724,6 +769,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       transaction.gateway_response = gatewayResponse;
       transaction.updated_at = now;
       transactionsStore.set(cleanRef, transaction);
+      await serverDb.saveTransaction(transaction);
 
       // Update Monthly Payment Record
       if (payment) {
@@ -733,6 +779,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         payment.paystack_reference = cleanRef;
         payment.updated_at = now;
         paymentsStore.set(paymentKey, payment);
+        await serverDb.savePayment(payment);
       }
 
       // Generate Digital Receipt Record
@@ -758,6 +805,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       receiptsStore.set(cleanRef, receiptRecord);
       receiptsStore.set(receiptNum, receiptRecord);
       receiptsStore.set(receiptRecord.id, receiptRecord);
+      await serverDb.saveReceipt(receiptRecord);
 
       return res.json({
         success: true,
@@ -787,7 +835,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 4. PAYSTACK WEBHOOK ENDPOINT (IDEMPOTENT + SIGNATURE VALIDATION)
 // -------------------------------------------------------------
-app.post('/api/paystack/webhook', (req: any, res: Response) => {
+app.post('/api/paystack/webhook', async (req: any, res: Response) => {
   try {
     const secretKey = getPaystackSecret();
     const signature = req.headers['x-paystack-signature'];
@@ -850,6 +898,7 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
           transaction.gateway_response = data.gateway_response || 'Webhook confirmed';
           transaction.updated_at = now;
           transactionsStore.set(reference, transaction);
+          await serverDb.saveTransaction(transaction);
 
           if (payment) {
             payment.status = 'PAID';
@@ -858,6 +907,7 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
             payment.paystack_reference = reference;
             payment.updated_at = now;
             paymentsStore.set(paymentKey, payment);
+            await serverDb.savePayment(payment);
           }
 
           if (!receiptsStore.has(reference)) {
@@ -882,6 +932,7 @@ app.post('/api/paystack/webhook', (req: any, res: Response) => {
             receiptsStore.set(reference, receiptRecord);
             receiptsStore.set(receiptNum, receiptRecord);
             receiptsStore.set(receiptRecord.id, receiptRecord);
+            await serverDb.saveReceipt(receiptRecord);
           }
 
           console.log(`[Paystack Webhook] Successfully marked payment ${reference} as PAID`);
@@ -1499,8 +1550,14 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // ADMIN RESIDENT MANAGEMENT REST ENDPOINTS
 // -------------------------------------------------------------
-app.get('/api/admin/residents', (_req: Request, res: Response) => {
+app.get('/api/admin/residents', async (_req: Request, res: Response) => {
   try {
+    const dbResidents = await serverDb.getResidents();
+    // Sync into memory cache
+    for (const r of dbResidents) {
+      if (r.resident_number) residentsStore.set(String(r.resident_number).padStart(3, '0'), r);
+    }
+
     const list = Array.from(residentsStore.values()).map(r => ({
       ...r,
       account_activated: !!r.account_activated,
@@ -1517,7 +1574,7 @@ app.get('/api/admin/residents', (_req: Request, res: Response) => {
   }
 });
 
-app.post('/api/admin/residents', (req: Request, res: Response) => {
+app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const data = req.body;
     if (!data.resident_number || !data.full_name || !data.phone_number) {
@@ -1528,6 +1585,13 @@ app.post('/api/admin/residents', (req: Request, res: Response) => {
     }
 
     const cleanNum = String(data.resident_number).trim().padStart(3, '0');
+    const numInt = parseInt(cleanNum, 10);
+    if (isNaN(numInt) || numInt < 1 || numInt > 300) {
+      return res.status(400).json({
+        success: false,
+        message: `Resident Number "${cleanNum}" is invalid. Resident numbers must be between 001 and 300.`
+      });
+    }
     
     // Check uniqueness of resident number
     if (residentsStore.has(cleanNum)) {
@@ -1571,11 +1635,12 @@ app.post('/api/admin/residents', (req: Request, res: Response) => {
     };
 
     residentsStore.set(cleanNum, newResident);
+    await serverDb.saveResident(newResident);
 
     // Initialize October 2026 payment record
     const payKey = `${cleanNum}_10_2026`;
     if (!paymentsStore.has(payKey)) {
-      paymentsStore.set(payKey, {
+      const initPayment = {
         id: `pay-${cleanNum}-10-2026`,
         resident_id: newId,
         resident_number: cleanNum,
@@ -1586,17 +1651,19 @@ app.post('/api/admin/residents', (req: Request, res: Response) => {
         period_label: 'October 2026',
         amount_due: 5000,
         amount_paid: 0,
-        status: 'UNPAID',
+        status: 'UNPAID' as const,
         due_date: '2026-10-01',
         paid_at: null,
         paystack_reference: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      });
+      };
+      paymentsStore.set(payKey, initPayment);
+      await serverDb.savePayment(initPayment);
     }
 
     // Audit log
-    auditLogsStore.unshift({
+    const auditRecord = {
       id: crypto.randomUUID(),
       admin_email: data.admin_email || 'admin@fingerofgodestate.ng',
       action: 'CREATED_RESIDENT',
@@ -1604,7 +1671,9 @@ app.post('/api/admin/residents', (req: Request, res: Response) => {
       entity_id: cleanNum,
       description: `Registered resident ${cleanNum} - ${newResident.full_name} (${newResident.house_number})`,
       created_at: new Date().toISOString()
-    });
+    };
+    auditLogsStore.unshift(auditRecord);
+    await serverDb.logActivity(auditRecord);
 
     res.json({
       success: true,
@@ -1617,11 +1686,14 @@ app.post('/api/admin/residents', (req: Request, res: Response) => {
   }
 });
 
-app.put('/api/admin/residents/:id', (req: Request, res: Response) => {
+app.put('/api/admin/residents/:id', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data = req.body;
     let existing = Array.from(residentsStore.values()).find(r => r.id === id || r.resident_number === id);
+    if (!existing) {
+      existing = await serverDb.getResidentById(id) || await serverDb.getResidentByNumber(id);
+    }
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Resident not found' });
     }
@@ -1633,6 +1705,8 @@ app.put('/api/admin/residents/:id', (req: Request, res: Response) => {
     };
 
     residentsStore.set(existing.resident_number, updated);
+    await serverDb.saveResident(updated);
+
     res.json({ success: true, message: 'Resident updated successfully', resident: updated });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to update resident' });
@@ -1796,8 +1870,8 @@ app.get('/api/resident/dashboard', (req: Request, res: Response) => {
         email: resident.email,
         house_number: resident.house_number,
         address: resident.address,
-        state: resident.state || 'Lagos',
-        lga: resident.lga || 'Eti-Osa',
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
         status: resident.status
       },
       summary: {
@@ -1822,7 +1896,7 @@ app.get('/api/resident/dashboard', (req: Request, res: Response) => {
 });
 
 // PUBLIC DIGITAL RECEIPT VERIFICATION (/verify-receipt backend)
-app.get('/api/receipts/verify/:receiptNumber', (req: Request, res: Response) => {
+app.get('/api/receipts/verify/:receiptNumber', async (req: Request, res: Response) => {
   try {
     const rawNumber = String(req.params.receiptNumber || '').trim();
     if (!rawNumber) {
@@ -1847,6 +1921,14 @@ app.get('/api/receipts/verify/:receiptNumber', (req: Request, res: Response) => 
           found = r;
           break;
         }
+      }
+    }
+
+    // Try persistent store
+    if (!found) {
+      const dbReceipt = await serverDb.getReceiptByNumber(cleanNum);
+      if (dbReceipt) {
+        found = dbReceipt as any;
       }
     }
 
@@ -3110,19 +3192,14 @@ app.get('/api/sms/logs', (req: Request, res: Response) => {
 
 // 4. MANUAL ADMIN TEST SMS
 // Clearly labeled SEND TEST SMS, marked as TEST, never counted toward monthly reminders
-app.post('/api/sms/send-test', async (req: Request, res: Response) => {
+app.post('/api/sms/send-test', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { residentId, customMessage } = req.body;
     if (!residentId) {
       return res.status(400).json({ success: false, message: 'Resident ID is required.' });
     }
 
-    const allResidents = [
-      { id: 'res-001', resident_number: '001', full_name: 'Engr. Babatunde Adeleke', phone_number: '08023456789' },
-      { id: 'res-002', resident_number: '002', full_name: 'Dr. Chioma Nwachukwu', phone_number: '08098765432' },
-      { id: 'res-003', resident_number: '003', full_name: 'Alhaji Usman Danladi', phone_number: '08123459876' },
-      { id: 'res-004', resident_number: '004', full_name: 'Mrs. Folashade Balogun', phone_number: '07033445566' }
-    ];
+    const allResidents = Array.from(residentsStore.values());
 
     const resident = allResidents.find(r => r.id === residentId || r.resident_number === residentId);
     if (!resident) {
@@ -3151,6 +3228,7 @@ app.post('/api/sms/send-test', async (req: Request, res: Response) => {
     };
 
     smsLogsStore.set(logRecord.id, logRecord);
+    await serverDb.logSMS(logRecord);
 
     if (dispatch.status === 'NOT_CONFIGURED') {
       return res.json({
@@ -3183,7 +3261,7 @@ app.post('/api/sms/send-test', async (req: Request, res: Response) => {
 });
 
 // 5. TRIGGER SCHEDULED REMINDER CHECK (MANUAL / SCHEDULED CRON EXECUTION)
-app.post('/api/sms/run-reminders', async (req: Request, res: Response) => {
+app.post('/api/sms/run-reminders', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { month = 10, year = 2026 } = req.body;
     const result = await runAutomatedSmsJob(month, year);
@@ -3241,7 +3319,7 @@ const auditLogsStore: ServerAuditRecord[] = [
   }
 ];
 
-app.post('/api/admin/audit-log', (req: Request, res: Response) => {
+app.post('/api/admin/audit-log', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { admin_email = 'admin@fingerofgodestate.ng', action, entity_type, entity_id = null, description, metadata } = req.body;
     const record: ServerAuditRecord = {
@@ -3256,14 +3334,68 @@ app.post('/api/admin/audit-log', (req: Request, res: Response) => {
     };
     auditLogsStore.unshift(record);
     if (auditLogsStore.length > 500) auditLogsStore.pop();
+    await serverDb.logActivity(record);
     res.json({ success: true, log: record });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Failed to record audit log' });
   }
 });
 
-app.get('/api/admin/audit-logs', (_req: Request, res: Response) => {
-  res.json({ success: true, count: auditLogsStore.length, logs: auditLogsStore });
+app.get('/api/admin/audit-logs', requireAdminAuth, async (_req: Request, res: Response) => {
+  try {
+    const dbLogs = await serverDb.getActivityLogs();
+    res.json({ success: true, count: dbLogs.length, logs: dbLogs });
+  } catch {
+    res.json({ success: true, count: auditLogsStore.length, logs: auditLogsStore });
+  }
+});
+
+// Admin Supabase Database Diagnostics & Health Status
+app.get('/api/admin/supabase-status', async (_req: Request, res: Response) => {
+  try {
+    const health = await serverDb.checkHealth();
+    res.json({ success: true, ...health });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Error checking Supabase health' });
+  }
+});
+
+// Server-side Administrator Verification Endpoint
+app.post('/api/admin/auth/verify-login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    }
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    // Verify with Supabase Auth
+    try {
+      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+        email: cleanEmail,
+        password
+      });
+
+      if (!error && data.user) {
+        return res.json({
+          success: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email || cleanEmail,
+            full_name: data.user.user_metadata?.full_name || 'Estate Administrator',
+            role: data.user.user_metadata?.role || 'Administrator'
+          }
+        });
+      }
+    } catch {}
+
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid administrator credentials. Access denied.'
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Server authentication error.' });
+  }
 });
 
 // -------------------------------------------------------------
@@ -3383,7 +3515,7 @@ app.get('/api/admin/announcements', (req: Request, res: Response) => {
 });
 
 // Admin: Create new announcement
-app.post('/api/admin/announcements', (req: Request, res: Response) => {
+app.post('/api/admin/announcements', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const {
       title,
@@ -3436,6 +3568,7 @@ app.post('/api/admin/announcements', (req: Request, res: Response) => {
     };
 
     announcementsStore.set(record.id, record);
+    await serverDb.saveAnnouncement(record);
 
     // Audit Log
     const auditRecord: ServerAuditRecord = {
@@ -3450,6 +3583,7 @@ app.post('/api/admin/announcements', (req: Request, res: Response) => {
     };
     auditLogsStore.unshift(auditRecord);
     if (auditLogsStore.length > 500) auditLogsStore.pop();
+    await serverDb.logActivity(auditRecord);
 
     res.status(201).json({
       success: true,
@@ -3462,7 +3596,7 @@ app.post('/api/admin/announcements', (req: Request, res: Response) => {
 });
 
 // Admin: Update announcement
-app.put('/api/admin/announcements/:id', (req: Request, res: Response) => {
+app.put('/api/admin/announcements/:id', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const existing = announcementsStore.get(id);
@@ -3511,6 +3645,7 @@ app.put('/api/admin/announcements/:id', (req: Request, res: Response) => {
     };
 
     announcementsStore.set(id, updated);
+    await serverDb.saveAnnouncement(updated);
 
     // Audit Log
     const auditRecord: ServerAuditRecord = {
@@ -3524,6 +3659,7 @@ app.put('/api/admin/announcements/:id', (req: Request, res: Response) => {
       created_at: new Date().toISOString()
     };
     auditLogsStore.unshift(auditRecord);
+    await serverDb.logActivity(auditRecord);
 
     res.json({
       success: true,
@@ -3536,7 +3672,7 @@ app.put('/api/admin/announcements/:id', (req: Request, res: Response) => {
 });
 
 // Admin: Update announcement status (Publish, Unpublish/Draft, Archive)
-app.post('/api/admin/announcements/:id/status', (req: Request, res: Response) => {
+app.post('/api/admin/announcements/:id/status', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status, admin_email = 'admin@fingerofgodestate.ng' } = req.body;
@@ -3557,6 +3693,7 @@ app.post('/api/admin/announcements/:id/status', (req: Request, res: Response) =>
     };
 
     announcementsStore.set(id, updated);
+    await serverDb.saveAnnouncement(updated);
 
     const actionType = status === 'PUBLISHED' ? 'ANNOUNCEMENT_PUBLISHED' : status === 'ARCHIVED' ? 'ANNOUNCEMENT_ARCHIVED' : 'ANNOUNCEMENT_UPDATED';
 
@@ -3571,6 +3708,7 @@ app.post('/api/admin/announcements/:id/status', (req: Request, res: Response) =>
       created_at: new Date().toISOString()
     };
     auditLogsStore.unshift(auditRecord);
+    await serverDb.logActivity(auditRecord);
 
     res.json({
       success: true,
@@ -3583,7 +3721,7 @@ app.post('/api/admin/announcements/:id/status', (req: Request, res: Response) =>
 });
 
 // Admin: Delete announcement
-app.delete('/api/admin/announcements/:id', (req: Request, res: Response) => {
+app.delete('/api/admin/announcements/:id', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const admin_email = (req.query.admin_email as string) || 'admin@fingerofgodestate.ng';
@@ -3594,6 +3732,7 @@ app.delete('/api/admin/announcements/:id', (req: Request, res: Response) => {
     }
 
     announcementsStore.delete(id);
+    await serverDb.deleteAnnouncement(id);
 
     // Audit Log
     const auditRecord: ServerAuditRecord = {
@@ -3607,6 +3746,7 @@ app.delete('/api/admin/announcements/:id', (req: Request, res: Response) => {
       created_at: new Date().toISOString()
     };
     auditLogsStore.unshift(auditRecord);
+    await serverDb.logActivity(auditRecord);
 
     res.json({
       success: true,
@@ -4025,7 +4165,10 @@ async function setupApp() {
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

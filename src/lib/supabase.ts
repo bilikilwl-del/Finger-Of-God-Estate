@@ -2368,6 +2368,54 @@ export const dbService = {
     return residents.some(r => r.id !== excludeId && normalizeNigerianPhone(r.phone_number) === normalized);
   },
 
+  // Targeted Secure Public Resident Lookup (No phone, email, or private address exposed)
+  async lookupResidentPublic(residentNumber: string): Promise<{
+    found: boolean;
+    resident?: {
+      id: string;
+      resident_number: string;
+      full_name: string;
+      house_number: string;
+      status: string;
+    };
+    payments?: MonthlyPayment[];
+    message?: string;
+  }> {
+    const cleanNum = residentNumber.trim().padStart(3, '0');
+    try {
+      const res = await fetch(`/api/resident/lookup?resident_number=${encodeURIComponent(cleanNum)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.found && data.resident) {
+          return {
+            found: true,
+            resident: data.resident,
+            payments: data.payments || []
+          };
+        }
+      }
+    } catch {}
+
+    const local = getLocalResidents();
+    const r = local.find(x => x.resident_number === cleanNum);
+    if (r) {
+      const payments = getLocalPayments().filter(p => p.resident_number === cleanNum);
+      return {
+        found: true,
+        resident: {
+          id: r.id,
+          resident_number: r.resident_number,
+          full_name: r.full_name,
+          house_number: r.house_number,
+          status: r.status
+        },
+        payments
+      };
+    }
+
+    return { found: false, message: `Resident #${cleanNum} not found in estate directory.` };
+  },
+
   async createResident(
     residentData: Omit<Resident, 'id' | 'created_at' | 'updated_at'>,
     adminEmail: string = 'admin'
@@ -4182,12 +4230,13 @@ export const dbService = {
       }
     } catch {}
 
+    const monthName = new Date(year, month - 1, 1).toLocaleString('default', { month: 'long' });
     const unpaid = await this.getUnpaidResidents(month, year, q);
     return unpaid.map(u => ({
       resident_number: u.resident_number,
       resident_name: u.resident_name,
       house_number: u.house_number,
-      period_label: `October ${year}`,
+      period_label: `${monthName} ${year}`,
       amount_due: 5000,
       amount_paid: 0,
       outstanding_amount: 5000,
@@ -6458,13 +6507,7 @@ export const authService = {
       const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (raw) return JSON.parse(raw);
     } catch {}
-    // Default initial admin session for fast prototyping
-    return {
-      id: 'admin-001',
-      email: 'admin@fingerofgodestate.ng',
-      full_name: 'Chief Security Administrator',
-      role: 'Super Admin'
-    };
+    return null;
   },
 
   setCurrentUser(user: any | null) {
@@ -6476,79 +6519,128 @@ export const authService = {
   },
 
   async login(email: string, password: string): Promise<{ success: boolean; error?: string; user?: any }> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail || !password) {
+      return { success: false, error: 'Email and password are required.' };
+    }
+
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: cleanEmail,
           password
         });
+
         if (error) {
-          return { success: false, error: error.message };
+          return { success: false, error: error.message || 'Invalid administrator credentials.' };
         }
+
         if (data.user) {
+          // Verify administrator role from admin_users table or user_metadata
+          const { data: adminRecord } = await supabase
+            .from('admin_users')
+            .select('*')
+            .eq('email', cleanEmail)
+            .eq('status', 'Active')
+            .maybeSingle();
+
+          const metadataRole = data.user.user_metadata?.role;
+          const assignedRole = adminRecord?.role || metadataRole;
+
+          if (!assignedRole || (assignedRole !== 'Super Admin' && assignedRole !== 'Administrator' && assignedRole !== 'Accountant' && assignedRole !== 'Security Officer')) {
+            await supabase.auth.signOut();
+            return {
+              success: false,
+              error: 'Access denied: Your account is not authorized as an estate administrator.'
+            };
+          }
+
           const userObj = {
             id: data.user.id,
-            email: data.user.email || email,
-            full_name: data.user.user_metadata?.full_name || 'Estate Administrator',
-            role: 'Administrator'
+            email: data.user.email || cleanEmail,
+            full_name: adminRecord?.full_name || data.user.user_metadata?.full_name || 'Estate Administrator',
+            role: assignedRole
           };
+
           this.setCurrentUser(userObj);
+
           await dbService.logActivity({
             admin_email: userObj.email,
             action: 'ADMIN_LOGIN',
             entity_type: 'auth',
             description: `Admin ${userObj.email} signed in successfully via Supabase Auth`
           });
+
           return { success: true, user: userObj };
         }
       } catch (e: any) {
-        return { success: false, error: e.message || 'Authentication error' };
+        return { success: false, error: e.message || 'Authentication service error.' };
       }
     }
 
-    // Local authentication fallback for instant verification & offline testing
+    // Server-side admin verification fallback via Express API (checks Supabase backend)
+    try {
+      const res = await fetch('/api/admin/auth/verify-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password })
+      });
+      const result = await res.json();
+      if (result.success && result.user) {
+        this.setCurrentUser(result.user);
+        return { success: true, user: result.user };
+      }
+      return { success: false, error: result.message || 'Invalid administrator credentials.' };
+    } catch {
+      return { success: false, error: 'Administrator authentication failed. Please check credentials.' };
+    }
+  },
+
+  async register(email: string, password: string, fullName: string): Promise<{ success: boolean; error?: string; user?: any }> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail || !password || !fullName) {
+      return { success: false, error: 'Full name, email, and password are required.' };
+    }
+
     if (password.length < 6) {
       return { success: false, error: 'Password must be at least 6 characters.' };
     }
 
-    const userObj = {
-      id: 'admin-' + Math.floor(Math.random() * 1000),
-      email: email.trim().toLowerCase(),
-      full_name: email.split('@')[0].replace('.', ' ').replace(/^./, str => str.toUpperCase()) + ' (Admin)',
-      role: 'Administrator'
-    };
-    this.setCurrentUser(userObj);
-
-    await dbService.logActivity({
-      admin_email: userObj.email,
-      action: 'ADMIN_LOGIN',
-      entity_type: 'auth',
-      description: `Admin ${userObj.email} signed into the console`
-    });
-
-    return { success: true, user: userObj };
-  },
-
-  async register(email: string, password: string, fullName: string): Promise<{ success: boolean; error?: string; user?: any }> {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: cleanEmail,
           password,
           options: {
             data: {
-              full_name: fullName
+              full_name: fullName.trim(),
+              role: 'Administrator'
             }
           }
         });
+
         if (error) {
           return { success: false, error: error.message };
         }
+
         if (data.user) {
+          // Record in admin_users table
+          try {
+            await supabase.from('admin_users').upsert({
+              auth_user_id: data.user.id,
+              email: cleanEmail,
+              full_name: fullName.trim(),
+              role: 'Administrator',
+              status: 'Active'
+            });
+          } catch {}
+
           const userObj = {
             id: data.user.id,
-            email: data.user.email || email,
-            full_name: fullName,
+            email: data.user.email || cleanEmail,
+            full_name: fullName.trim(),
             role: 'Administrator'
           };
           this.setCurrentUser(userObj);
@@ -6559,26 +6651,7 @@ export const authService = {
       }
     }
 
-    // Local fallback
-    if (password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters.' };
-    }
-    const userObj = {
-      id: 'admin-' + Math.floor(Math.random() * 1000),
-      email: email.trim().toLowerCase(),
-      full_name: fullName.trim(),
-      role: 'Administrator'
-    };
-    this.setCurrentUser(userObj);
-
-    await dbService.logActivity({
-      admin_email: userObj.email,
-      action: 'ADMIN_LOGIN',
-      entity_type: 'auth',
-      description: `New administrator account created for ${fullName} (${userObj.email})`
-    });
-
-    return { success: true, user: userObj };
+    return { success: false, error: 'Supabase authentication service is not configured. Admin registration requires active database connectivity.' };
   },
 
   async resetPassword(email: string): Promise<{ success: boolean; message: string; error?: string }> {
@@ -6597,8 +6670,9 @@ export const authService = {
     }
 
     return {
-      success: true,
-      message: `Password reset instruction sent to ${email}. Check your inbox for recovery link.`
+      success: false,
+      message: '',
+      error: 'Password reset service unavailable. Supabase Auth must be configured.'
     };
   },
 

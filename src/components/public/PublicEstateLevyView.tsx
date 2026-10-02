@@ -67,22 +67,16 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
     setSearching(true);
     setSearchError('');
     try {
-      const residents = await dbService.getResidents();
-      const cleanInput = searchResidentNumber.trim();
-      const target = residents.find(
-        r => r.resident_number === cleanInput || 
-             r.resident_number.padStart(3, '0') === cleanInput.padStart(3, '0')
-      );
+      const cleanInput = searchResidentNumber.trim().padStart(3, '0');
+      const lookupResult = await dbService.lookupResidentPublic(cleanInput);
 
-      if (!target) {
-        setSearchError(`Resident Number "${cleanInput}" was not found in the estate directory.`);
+      if (!lookupResult.found || !lookupResult.resident) {
+        setSearchError(lookupResult.message || `Resident Number "${cleanInput}" was not found in the estate directory.`);
         setSearchedResident(null);
         setResidentPayments([]);
       } else {
-        setSearchedResident(target);
-        // Load monthly payments for this resident
-        const payments = await dbService.getMonthlyPayments({ residentNumber: target.resident_number });
-        setResidentPayments(payments);
+        setSearchedResident(lookupResult.resident as Resident);
+        setResidentPayments(lookupResult.payments || []);
       }
     } catch {
       setSearchError('Unable to retrieve resident records. Please check your network.');

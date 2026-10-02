@@ -53,6 +53,7 @@ import { PublicDocumentsView } from './components/public/PublicDocumentsView';
 import { PublicContactView } from './components/public/PublicContactView';
 import { PublicAnnouncementsView } from './components/public/PublicAnnouncementsView';
 import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
+import { PublicResidentsView } from './components/public/PublicResidentsView';
 import { NotFoundView } from './components/common/NotFoundView';
 
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
@@ -91,6 +92,9 @@ function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: strin
   if (path === '/contact' || path === '/support') {
     return { tab: 'contact', slug: '' };
   }
+  if (path === '/residents') {
+    return { tab: 'public_residents', slug: '' };
+  }
   if (path === '/verify-receipt' || path === '/verify_receipt') {
     return { tab: 'verify_receipt', slug: '' };
   }
@@ -115,6 +119,7 @@ function getPathnameFromTab(tab: NavigationTab, slug?: string): string {
     case 'announcement_detail': return slug ? `/announcements/${slug}` : '/announcements';
     case 'documents': return '/documents';
     case 'contact': return '/contact';
+    case 'public_residents': return '/residents';
     case 'verify_receipt': return '/verify-receipt';
     case 'admin_login':
     case 'dashboard':
@@ -721,6 +726,40 @@ export default function App() {
       <div className="min-h-screen bg-slate-50">
         {renderToast()}
         <PublicContactView
+          estateSettings={estateSettings}
+          currentResident={currentResident}
+          onNavigate={(tab) => {
+            if (tab === 'resident_portal') {
+              const active = currentResident || residentSessionService.getCurrentResident();
+              if (!active) handleOpenResidentLogin('login');
+            }
+            navigateTo(tab);
+          }}
+          onOpenResidentLogin={handleOpenResidentLogin}
+        />
+        <ResidentLoginModal
+          isOpen={isResidentLoginOpen}
+          initialTab={residentLoginInitialTab}
+          onClose={() => setIsResidentLoginOpen(false)}
+          onSuccess={(res) => {
+            setCurrentResident(res);
+            residentSessionService.setCurrentResident(res);
+            showToast(`Welcome, ${res.full_name}!`, 'success');
+            navigateTo('resident_portal');
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
+  // 9.5. PUBLIC ROUTE: RESIDENT SERVICES HUB
+  // ----------------------------------------------------
+  if (currentTab === 'public_residents') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {renderToast()}
+        <PublicResidentsView
           estateSettings={estateSettings}
           currentResident={currentResident}
           onNavigate={(tab) => {

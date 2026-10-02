@@ -503,7 +503,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
           </div>
         </section>
 
-        {/* 7. ESTATE PROJECTS HIGHLIGHT (Road & Light Projects) */}
+        {/* 7. ESTATE PROJECTS HIGHLIGHT (Road Modernization Project) */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 border-b border-slate-200 pb-4">
             <div>

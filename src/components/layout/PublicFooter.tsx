@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Shield,
   Coins,
-  Zap,
   CreditCard,
   FileText,
   Bell
