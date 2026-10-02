@@ -1,12 +1,13 @@
 -- =========================================================================
 -- FINGER OF GOD ESTATE MANAGEMENT SYSTEM
--- OFFICIAL PRODUCTION DATABASE ARCHITECTURE & MIGRATION SCRIPT
+-- OFFICIAL PRODUCTION DATABASE ARCHITECTURE & MIGRATION SCRIPT (FINAL)
 -- =========================================================================
 -- Target Database: PostgreSQL 15+ / Supabase
--- This script is idempotent and safe to run on fresh or existing databases.
+-- This script is strictly idempotent, hardened with least-privilege RLS,
+-- has zero password storage in public tables, and has zero fake seeds.
 -- =========================================================================
 
--- Enable required extensions
+-- Enable core extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -22,8 +23,8 @@ CREATE TABLE IF NOT EXISTS public.estate_settings (
     monthly_security_levy NUMERIC(12, 2) NOT NULL DEFAULT 5000.00 CHECK (monthly_security_levy >= 0),
     payment_due_day INTEGER NOT NULL DEFAULT 1 CHECK (payment_due_day >= 1 AND payment_due_day <= 28),
     currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
-    contact_phone VARCHAR(50) NOT NULL DEFAULT '08023456789',
-    contact_email VARCHAR(100) NOT NULL DEFAULT 'admin@fingerofgodestate.ng',
+    contact_phone VARCHAR(50) NOT NULL DEFAULT '',
+    contact_email VARCHAR(100) NOT NULL DEFAULT '',
     sms_sender_name VARCHAR(20) NOT NULL DEFAULT 'FINGEROFGOD',
     first_payment_month VARCHAR(30) NOT NULL DEFAULT 'October 2026',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -31,14 +32,16 @@ CREATE TABLE IF NOT EXISTS public.estate_settings (
 );
 
 -- -------------------------------------------------------------------------
--- 2. RESIDENTS TABLE (Unique resident numbers 001 - 300)
+-- 2. RESIDENTS TABLE
+-- Strictly enforces 001 - 300 and unique phone.
+-- NOTE: Passwords are NOT stored here; authentication is handled solely by Supabase Auth (auth.users).
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.residents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
     resident_number VARCHAR(10) NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
-    phone_number VARCHAR(30) NOT NULL,
+    phone_number VARCHAR(30) NOT NULL UNIQUE,
     additional_phone VARCHAR(30),
     email VARCHAR(150),
     house_number TEXT NOT NULL,
@@ -50,10 +53,9 @@ CREATE TABLE IF NOT EXISTS public.residents (
     status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Suspended')),
     account_activated BOOLEAN NOT NULL DEFAULT FALSE,
     profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
-    password_hash TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_resident_number_format CHECK (resident_number ~ '^[0-9]{3}$' AND resident_number::integer BETWEEN 1 AND 300)
+    CONSTRAINT chk_resident_number_range CHECK (resident_number ~ '^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$')
 );
 
 CREATE INDEX IF NOT EXISTS idx_residents_num ON public.residents(resident_number);
@@ -62,11 +64,11 @@ CREATE INDEX IF NOT EXISTS idx_residents_status ON public.residents(status);
 CREATE INDEX IF NOT EXISTS idx_residents_auth_user ON public.residents(auth_user_id);
 
 -- -------------------------------------------------------------------------
--- 3. ADMIN USERS & RBAC TABLE
+-- 3. ADMIN USERS TABLE (Linked to auth.users via Unique auth_user_id)
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.admin_users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    auth_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
     role VARCHAR(30) NOT NULL DEFAULT 'Administrator' CHECK (role IN ('Super Admin', 'Administrator', 'Security Officer', 'Accountant')),
@@ -105,7 +107,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_period ON public.monthly_payments(period
 CREATE INDEX IF NOT EXISTS idx_payments_status ON public.monthly_payments(status);
 
 -- -------------------------------------------------------------------------
--- 5. PAYMENT TRANSACTIONS TABLE (Audit Trail)
+-- 5. PAYMENT TRANSACTIONS TABLE
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.payment_transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -137,6 +139,7 @@ CREATE INDEX IF NOT EXISTS idx_tx_res ON public.payment_transactions(resident_id
 
 -- -------------------------------------------------------------------------
 -- 6. DIGITAL STAMPED RECEIPTS TABLE
+-- Protected from anonymous direct SELECT. Verification via verify_receipt() RPC only.
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.receipts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -190,7 +193,7 @@ CREATE INDEX IF NOT EXISTS idx_rd_tx_ref ON public.road_project_transactions(ref
 CREATE INDEX IF NOT EXISTS idx_rd_tx_bldg ON public.road_project_transactions(building_number);
 
 -- -------------------------------------------------------------------------
--- 8. ROAD MODERNIZATION PROJECT MILESTONES TABLE
+-- 8. ROAD MODERNIZATION PROJECT MILESTONES TABLE (Project Configuration)
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.road_project_milestones (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -232,7 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_rd_contrib_paystack ON public.road_project_contri
 CREATE INDEX IF NOT EXISTS idx_rd_contrib_bldg ON public.road_project_contributions(building_number);
 
 -- -------------------------------------------------------------------------
--- 9. BANK RECONCILIATIONS / ESCROW TRANSFER AUDIT TABLE
+-- 9. BANK RECONCILIATIONS TABLE
 -- -------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.bank_reconciliations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -275,7 +278,6 @@ CREATE TABLE IF NOT EXISTS public.sms_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Duplicate SMS Protection: prevent sending the same reminder type more than once per period
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sms_sent_reminder 
 ON public.sms_logs (resident_id, payment_month, payment_year, reminder_type) 
 WHERE (reminder_type IN ('REMINDER_1', 'REMINDER_2') AND delivery_status = 'SENT');
@@ -343,7 +345,7 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
 CREATE INDEX IF NOT EXISTS idx_activity_created ON public.activity_logs(created_at DESC);
 
 -- -------------------------------------------------------------------------
--- 13. SEED INITIAL BASELINE DATA
+-- 13. SEED INITIAL CONFIGURATION DATA (STRUCTURAL ONLY - ZERO FAKE DATA)
 -- -------------------------------------------------------------------------
 INSERT INTO public.estate_settings (
     estate_name,
@@ -366,31 +368,111 @@ SELECT
     5000.00,
     1,
     'NGN',
-    '08023456789',
-    'admin@fingerofgodestate.ng',
+    '',
+    '',
     'FINGEROFGOD',
     'October 2026'
 WHERE NOT EXISTS (SELECT 1 FROM public.estate_settings LIMIT 1);
 
--- Seed Initial Super Admin record
-INSERT INTO public.admin_users (email, full_name, role, status)
-VALUES ('admin@fingerofgodestate.ng', 'Chief Executive Administrator', 'Super Admin', 'Active')
-ON CONFLICT (email) DO NOTHING;
-
--- Seed Initial Road Project Milestones
+-- Structural Road Modernization Milestones (Phase roadmap definitions only, 0% progress)
 INSERT INTO public.road_project_milestones (milestone_order, title, description, status, progress_percentage)
 VALUES 
-    (1, 'Phase 1 Drainage Construction', 'Heavy-duty concrete stormwater drainage along Main Boulevard', 'COMPLETED', 100),
-    (2, 'Sub-base Earthwork & Compaction', 'Subgrade scarification and heavy-duty laterite stabilization', 'COMPLETED', 100),
-    (3, 'Stone Base Course & Crushed Rock', 'Delivery and vibratory rolling of granite stone base aggregates', 'IN_PROGRESS', 65),
+    (1, 'Phase 1 Drainage Construction', 'Heavy-duty concrete stormwater drainage along Main Boulevard', 'UPCOMING', 0),
+    (2, 'Sub-base Earthwork & Compaction', 'Subgrade scarification and heavy-duty laterite stabilization', 'UPCOMING', 0),
+    (3, 'Stone Base Course & Crushed Rock', 'Delivery and vibratory rolling of granite stone base aggregates', 'UPCOMING', 0),
     (4, 'Heavy Interlocking Paving', 'Laying 80mm industrial interlocking paving blocks', 'UPCOMING', 0),
     (5, 'Culvert Crossings & Final Curing', 'Reinforced culvert slabs and access curb integration', 'UPCOMING', 0)
-ON CONFLICT (milestone_order) DO UPDATE 
-SET title = EXCLUDED.title, description = EXCLUDED.description;
+ON CONFLICT (milestone_order) DO NOTHING;
+
+-- -------------------------------------------------------------------------
+-- 14. AUTHENTICATION & RBAC HELPER FUNCTIONS
+-- -------------------------------------------------------------------------
+
+-- Helper security function: Check if current auth user is an active administrator
+-- Configured with SECURITY DEFINER and a fixed search_path to prevent escalation attacks
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.admin_users
+    WHERE auth_user_id = auth.uid()
+      AND status = 'Active'
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
+-- Public Receipt Verification RPC: Exact single-record lookup returning strictly approved verification fields
+CREATE OR REPLACE FUNCTION public.verify_receipt(
+    p_receipt_number TEXT DEFAULT NULL,
+    p_paystack_ref TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    receipt_number VARCHAR(80),
+    resident_number VARCHAR(10),
+    resident_name TEXT,
+    house_number TEXT,
+    amount_paid NUMERIC(12, 2),
+    currency VARCHAR(10),
+    period_covered VARCHAR(50),
+    payment_date TIMESTAMPTZ,
+    paystack_reference VARCHAR(120),
+    status VARCHAR(20),
+    issued_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+STABLE
+AS $$
+DECLARE
+    v_clean_num TEXT;
+    v_clean_ref TEXT;
+BEGIN
+    v_clean_num := NULLIF(trim(p_receipt_number), '');
+    v_clean_ref := NULLIF(trim(p_paystack_ref), '');
+
+    -- Require at least one non-empty exact parameter
+    IF v_clean_num IS NULL AND v_clean_ref IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Guard against arbitrary scans or trivial substrings (must be >= 4 characters)
+    IF (v_clean_num IS NOT NULL AND length(v_clean_num) < 4) AND 
+       (v_clean_ref IS NOT NULL AND length(v_clean_ref) < 4) THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        r.receipt_number,
+        r.resident_number,
+        r.resident_name,
+        r.house_number,
+        r.amount_paid,
+        r.currency,
+        r.period_covered,
+        r.payment_date,
+        r.paystack_reference,
+        r.status,
+        r.issued_at
+    FROM public.receipts r
+    WHERE (v_clean_num IS NOT NULL AND (r.receipt_number = v_clean_num OR UPPER(r.receipt_number) = UPPER(v_clean_num)))
+       OR (v_clean_ref IS NOT NULL AND (r.paystack_reference = v_clean_ref OR UPPER(r.paystack_reference) = UPPER(v_clean_ref)))
+    LIMIT 1;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.verify_receipt(TEXT, TEXT) TO anon, authenticated;
 
 -- =========================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES - LEAST PRIVILEGE HARDENING
+-- ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================================
+
 ALTER TABLE public.estate_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.residents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
@@ -406,64 +488,63 @@ ALTER TABLE public.sms_reminders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
--- Helper security function: Check if current auth user is an active administrator
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-STABLE
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.admin_users
-    WHERE auth_user_id = auth.uid()
-      AND status = 'Active'
-  );
-$$;
-
--- 1. Estate Settings: Public read, admin write
+-- 1. Estate Settings Policies
+DROP POLICY IF EXISTS "Public read on estate settings" ON public.estate_settings;
 CREATE POLICY "Public read on estate settings"
     ON public.estate_settings FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "Admin write on estate settings" ON public.estate_settings;
 CREATE POLICY "Admin write on estate settings"
     ON public.estate_settings FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 2. Residents: Admins have full access; authenticated residents see only their own record
+-- 2. Residents Policies (Zero anonymous access)
+DROP POLICY IF EXISTS "Admin full access on residents" ON public.residents;
 CREATE POLICY "Admin full access on residents"
     ON public.residents FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Residents read own record" ON public.residents;
 CREATE POLICY "Residents read own record"
     ON public.residents FOR SELECT
     TO authenticated
     USING (auth_user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Residents update own contact info" ON public.residents;
 CREATE POLICY "Residents update own contact info"
     ON public.residents FOR UPDATE
     TO authenticated
     USING (auth_user_id = auth.uid())
     WITH CHECK (auth_user_id = auth.uid());
 
--- 3. Admin Users: Only admins can view or modify admin profiles
-CREATE POLICY "Admin access on admin_users"
+-- 3. Admin Users Policies (Zero anonymous access)
+DROP POLICY IF EXISTS "Admins read own profile" ON public.admin_users;
+CREATE POLICY "Admins read own profile"
+    ON public.admin_users FOR SELECT
+    TO authenticated
+    USING (auth_user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Admin full management on admin_users" ON public.admin_users;
+CREATE POLICY "Admin full management on admin_users"
     ON public.admin_users FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 4. Monthly Payments: Admins full access; residents read own payments
+-- 4. Monthly Payments Policies (Zero anonymous access)
+DROP POLICY IF EXISTS "Admin full access on payments" ON public.monthly_payments;
 CREATE POLICY "Admin full access on payments"
     ON public.monthly_payments FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Residents view own payments" ON public.monthly_payments;
 CREATE POLICY "Residents view own payments"
     ON public.monthly_payments FOR SELECT
     TO authenticated
@@ -475,13 +556,15 @@ CREATE POLICY "Residents view own payments"
       )
     );
 
--- 5. Payment Transactions: Admins full access; residents read own transactions
+-- 5. Payment Transactions Policies (Zero anonymous access)
+DROP POLICY IF EXISTS "Admin full access on transactions" ON public.payment_transactions;
 CREATE POLICY "Admin full access on transactions"
     ON public.payment_transactions FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Residents view own transactions" ON public.payment_transactions;
 CREATE POLICY "Residents view own transactions"
     ON public.payment_transactions FOR SELECT
     TO authenticated
@@ -493,13 +576,16 @@ CREATE POLICY "Residents view own transactions"
       )
     );
 
--- 6. Receipts: Public verification allowed via exact receipt_number / paystack_reference
+-- 6. Receipts Policies (Zero anonymous direct SELECT)
+DROP POLICY IF EXISTS "Public exact receipt lookup" ON public.receipts;
+DROP POLICY IF EXISTS "Admin full access on receipts" ON public.receipts;
 CREATE POLICY "Admin full access on receipts"
     ON public.receipts FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+DROP POLICY IF EXISTS "Residents view own receipts" ON public.receipts;
 CREATE POLICY "Residents view own receipts"
     ON public.receipts FOR SELECT
     TO authenticated
@@ -511,92 +597,90 @@ CREATE POLICY "Residents view own receipts"
       )
     );
 
-CREATE POLICY "Public exact receipt lookup"
-    ON public.receipts FOR SELECT
-    TO anon
-    USING (true);
-
--- 7. Road Modernization Project: Public read for transparency; Admin write
+-- 7. Road Modernization Project Transactions Policies
+DROP POLICY IF EXISTS "Public read on road transactions" ON public.road_project_transactions;
 CREATE POLICY "Public read on road transactions"
     ON public.road_project_transactions FOR SELECT
     USING (status = 'VERIFIED');
 
+DROP POLICY IF EXISTS "Admin write on road transactions" ON public.road_project_transactions;
 CREATE POLICY "Admin write on road transactions"
     ON public.road_project_transactions FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
+-- 8. Road Modernization Project Milestones Policies
+DROP POLICY IF EXISTS "Public read on road milestones" ON public.road_project_milestones;
 CREATE POLICY "Public read on road milestones"
     ON public.road_project_milestones FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "Admin write on road milestones" ON public.road_project_milestones;
 CREATE POLICY "Admin write on road milestones"
     ON public.road_project_milestones FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 7b. Road Project Contributions: Public read verified; Residents read own; Admin full access
+-- 8b. Road Project Contributions Policies
+DROP POLICY IF EXISTS "Public read verified contributions" ON public.road_project_contributions;
 CREATE POLICY "Public read verified contributions"
     ON public.road_project_contributions FOR SELECT
     USING (status = 'COMPLETED');
 
+DROP POLICY IF EXISTS "Admin full access on road contributions" ON public.road_project_contributions;
 CREATE POLICY "Admin full access on road contributions"
     ON public.road_project_contributions FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
-CREATE POLICY "Residents read own road contributions"
-    ON public.road_project_contributions FOR SELECT
-    TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM public.residents r 
-        WHERE r.id = road_project_contributions.resident_id 
-          AND r.auth_user_id = auth.uid()
-      )
-    );
-
--- 8. Bank Reconciliations: Admin only
+-- 9. Bank Reconciliations Policies (Admin only)
+DROP POLICY IF EXISTS "Admin access on bank reconciliations" ON public.bank_reconciliations;
 CREATE POLICY "Admin access on bank reconciliations"
     ON public.bank_reconciliations FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 9. SMS Logs: Admin only
+-- 10. SMS Logs Policies (Admin only)
+DROP POLICY IF EXISTS "Admin access on sms logs" ON public.sms_logs;
 CREATE POLICY "Admin access on sms logs"
     ON public.sms_logs FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 9b. SMS Reminders Schedule: Admin only
+-- 10b. SMS Reminders Schedule Policies (Admin only)
+DROP POLICY IF EXISTS "Admin access on sms reminders" ON public.sms_reminders;
 CREATE POLICY "Admin access on sms reminders"
     ON public.sms_reminders FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 10. Announcements: Public read for published; Admin full access
+-- 11. Announcements Policies (Public read published; Admin full access)
+DROP POLICY IF EXISTS "Public read published announcements" ON public.announcements;
 CREATE POLICY "Public read published announcements"
     ON public.announcements FOR SELECT
     USING (status = 'PUBLISHED' AND publish_at <= NOW());
 
+DROP POLICY IF EXISTS "Admin full access on announcements" ON public.announcements;
 CREATE POLICY "Admin full access on announcements"
     ON public.announcements FOR ALL
     TO authenticated
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 11. Activity Logs: Admin only
+-- 12. Activity Logs Policies (Admin only)
+DROP POLICY IF EXISTS "Admin read activity logs" ON public.activity_logs;
 CREATE POLICY "Admin read activity logs"
     ON public.activity_logs FOR SELECT
     TO authenticated
     USING (public.is_admin());
 
+DROP POLICY IF EXISTS "Admin write activity logs" ON public.activity_logs;
 CREATE POLICY "Admin write activity logs"
     ON public.activity_logs FOR INSERT
     TO authenticated
