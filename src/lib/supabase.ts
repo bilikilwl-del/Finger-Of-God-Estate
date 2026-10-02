@@ -1880,89 +1880,43 @@ export async function verifySupabaseTables(): Promise<{
     return {
       allReady: false,
       checkedTables: {},
-      message: 'Supabase credentials not configured. Running in secure local storage mode.'
+      message: 'Supabase credentials not configured.'
     };
   }
 
-  const results: Record<string, boolean> = {
-    estate_settings: false,
-    residents: false,
-    activity_logs: false,
-    monthly_payments: false,
-    payment_transactions: false,
-    receipts: false
-  };
+  const tables = [
+    'estate_settings',
+    'residents',
+    'admin_users',
+    'monthly_payments',
+    'payment_transactions',
+    'receipts',
+    'road_project_transactions',
+    'road_project_milestones',
+    'road_project_contributions',
+    'bank_reconciliations',
+    'sms_logs',
+    'sms_reminders',
+    'announcements',
+    'activity_logs'
+  ];
 
-  try {
-    const { error: settingsErr } = await supabase.from('estate_settings').select('id').limit(1);
-    if (!settingsErr || !isTableNotFoundError(settingsErr)) {
-      results.estate_settings = true;
-      markTableAvailable('estate_settings');
-    } else {
-      markTableMissing('estate_settings');
-    }
-  } catch {
-    markTableMissing('estate_settings');
-  }
+  const results: Record<string, boolean> = {};
 
-  try {
-    const { error: residentsErr } = await supabase.from('residents').select('id').limit(1);
-    if (!residentsErr || !isTableNotFoundError(residentsErr)) {
-      results.residents = true;
-      markTableAvailable('residents');
-    } else {
-      markTableMissing('residents');
+  for (const tableName of tables) {
+    try {
+      const { error } = await supabase.from(tableName).select('id').limit(1);
+      if (!error || !isTableNotFoundError(error)) {
+        results[tableName] = true;
+        markTableAvailable(tableName);
+      } else {
+        results[tableName] = false;
+        markTableMissing(tableName);
+      }
+    } catch {
+      results[tableName] = false;
+      markTableMissing(tableName);
     }
-  } catch {
-    markTableMissing('residents');
-  }
-
-  try {
-    const { error: logsErr } = await supabase.from('activity_logs').select('id').limit(1);
-    if (!logsErr || !isTableNotFoundError(logsErr)) {
-      results.activity_logs = true;
-      markTableAvailable('activity_logs');
-    } else {
-      markTableMissing('activity_logs');
-    }
-  } catch {
-    markTableMissing('activity_logs');
-  }
-
-  try {
-    const { error: payErr } = await supabase.from('monthly_payments').select('id').limit(1);
-    if (!payErr || !isTableNotFoundError(payErr)) {
-      results.monthly_payments = true;
-      markTableAvailable('monthly_payments');
-    } else {
-      markTableMissing('monthly_payments');
-    }
-  } catch {
-    markTableMissing('monthly_payments');
-  }
-
-  try {
-    const { error: txErr } = await supabase.from('payment_transactions').select('id').limit(1);
-    if (!txErr || !isTableNotFoundError(txErr)) {
-      results.payment_transactions = true;
-      markTableAvailable('payment_transactions');
-    } else {
-      markTableMissing('payment_transactions');
-    }
-  } catch {
-    markTableMissing('payment_transactions');
-  }
-
-  try {
-    const { error: rcpErr } = await supabase.from('receipts').select('id').limit(1);
-    if (!rcpErr || !isTableNotFoundError(rcpErr)) {
-      results.receipts = true;
-      markTableAvailable('receipts');
-    } else {
-      markTableMissing('receipts');
-    }
-  } catch {
-    markTableMissing('receipts');
   }
 
   const allReady = Object.values(results).every(Boolean);
@@ -1970,8 +1924,8 @@ export async function verifySupabaseTables(): Promise<{
     allReady,
     checkedTables: results,
     message: allReady 
-      ? 'All Supabase tables verified and synchronized.'
-      : 'One or more Supabase tables have not been created yet in the schema cache. Please execute supabase_schema.sql.'
+      ? 'All 14 Supabase production tables verified and synchronized.'
+      : 'One or more Supabase tables have not been created yet in the schema cache. Please execute supabase_production_migration.sql.'
   };
 }
 

@@ -210,15 +210,20 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
   };
 
   const tables = [
-    { name: 'estate_settings', stage: 'Stage 1 (Active)', desc: 'Configures estate name, monthly levy (₦5,000), due day (1st), first billing month (Oct 2026), phone, email, and SMS sender name.' },
-    { name: 'residents', stage: 'Stage 1 (Active)', desc: 'Stores resident profiles, sequential unique resident numbers (001, 002...), phone, address, state, LGA, and status.' },
-    { name: 'activity_logs', stage: 'Stage 1 (Active)', desc: 'Audit logging for administrative operations (resident created, edited, status changed, settings updated).' },
-    { name: 'admin_users', stage: 'Stage 1 & 3', desc: 'Stores administrative users, linked to Supabase Auth UUID, roles (Super Admin, Administrator, Security Officer, Accountant).' },
-    { name: 'monthly_payments', stage: 'Stage 2 (Prepared)', desc: 'Tracks monthly ₦5,000 security levy obligations starting October 2026 per resident.' },
-    { name: 'payment_transactions', stage: 'Stage 2 (Prepared)', desc: 'Audit records for Paystack checkout references, bank transfers, POS, and cash entries.' },
-    { name: 'receipts', stage: 'Stage 2 (Prepared)', desc: 'Sequential receipt generation for levy payments with PDF URLs.' },
-    { name: 'sms_reminders', stage: 'Stage 3 (Prepared)', desc: 'Logs for automated SMS reminders, overdue alerts, and security broadcasts.' },
-    { name: 'announcements', stage: 'Stage 3 (Prepared)', desc: 'Broadcast notices for estate residents and security notifications.' }
+    { name: 'estate_settings', stage: 'Production Core', desc: 'Configures estate name, monthly security levy (₦5,000), due day (1st), Delta State / Asaba address, contact email, phone, and SMS sender name.' },
+    { name: 'residents', stage: 'Production Core', desc: 'Permanent resident register (#001–#300 unique numbers), phone, address, account activation, profile completed, Supabase Auth link.' },
+    { name: 'admin_users', stage: 'Production Auth & RBAC', desc: 'Authorized administrative users with roles: Super Admin, Administrator, Accountant, Security Officer.' },
+    { name: 'monthly_payments', stage: 'Financial & Levy', desc: 'Authoritative ₦5,000 monthly security levy obligations starting October 2026 per active resident.' },
+    { name: 'payment_transactions', stage: 'Financial & Audit', desc: 'Verified Paystack gateway references, channel, amount, date, resident relationship, and idempotency status.' },
+    { name: 'receipts', stage: 'Financial Receipts', desc: 'Official digital payment receipts with unique receipt numbers, verification hashes, and QR verification.' },
+    { name: 'road_project_transactions', stage: 'Road Modernization Ledger', desc: 'Transparent credit/debit financial records for road paving, earthwork, materials, and contractor expenditures.' },
+    { name: 'road_project_milestones', stage: 'Road Modernization Projects', desc: 'Construction milestones, progress percentage, target completion dates, and engineering statuses.' },
+    { name: 'road_project_contributions', stage: 'Road Modernization Pledges', desc: 'Building contributions, special levy receipts, and matching bank deposits.' },
+    { name: 'bank_reconciliations', stage: 'Accounts & Banking', desc: 'Zenith Bank statement automated reconciliation records, matching status, and variance tracking.' },
+    { name: 'sms_logs', stage: 'Communications & Alerts', desc: 'Audit log of automated payment reminders, dispatch timestamp, delivery status, and recipient phone numbers.' },
+    { name: 'sms_reminders', stage: 'Communications Schedule', desc: 'Configured automated reminder schedules for upcoming and overdue security levy dates.' },
+    { name: 'announcements', stage: 'Public & Resident Notices', desc: 'Official management committee bulletins, security advisories, meeting notices, and publications.' },
+    { name: 'activity_logs', stage: 'System Audit', desc: 'Administrative activity trail recording all data creations, modifications, status updates, and sign-ins.' }
   ];
 
   return (
@@ -285,7 +290,7 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
             onClick={() => setActiveTab('tables')}
             className={`pb-3 border-b-2 transition-colors ${activeTab === 'tables' ? 'border-emerald-600 text-emerald-700 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
           >
-            Database Tables (9)
+            Database Tables (14)
           </button>
           <button
             onClick={() => setActiveTab('sql')}
