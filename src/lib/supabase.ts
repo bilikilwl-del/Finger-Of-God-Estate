@@ -6511,31 +6511,60 @@ export const authService = {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.email) {
-          const cleanEmail = session.user.email.toLowerCase().trim();
-          const { data: adminRecord } = await supabase
-            .from('admin_users')
-            .select('*')
-            .or(`auth_user_id.eq.${session.user.id},email.eq.${cleanEmail}`)
-            .eq('status', 'Active')
-            .maybeSingle();
+        if (session?.user?.id) {
+          // 1. Check profiles table in Supabase using authenticated user's UUID
+          try {
+            const { data: profileRecord, error: pErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .maybeSingle();
 
-          if (adminRecord && ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'].includes(adminRecord.role)) {
-            const userObj = {
-              id: session.user.id,
-              email: adminRecord.email,
-              full_name: adminRecord.full_name || 'Estate Administrator',
-              role: adminRecord.role
-            };
-            this.setCurrentUser(userObj);
-            return userObj;
-          }
+            if (!pErr && profileRecord) {
+              const isAdmin = profileRecord.role === 'admin' || 
+                              profileRecord.role === 'Super Admin' || 
+                              profileRecord.role === 'Administrator';
+
+              if (isAdmin) {
+                const userObj = {
+                  id: session.user.id,
+                  email: session.user.email || profileRecord.email,
+                  full_name: profileRecord.full_name || 'Estate Administrator',
+                  role: 'admin'
+                };
+                this.setCurrentUser(userObj);
+                return userObj;
+              } else {
+                await supabase.auth.signOut();
+                this.setCurrentUser(null);
+                return null;
+              }
+            }
+          } catch {}
+
+          // 2. Server-side authoritative verification check via /api/admin/auth/verify-session
+          try {
+            const res = await fetch('/api/admin/auth/verify-session', {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            const data = await res.json();
+            if (data.success && data.user) {
+              const userObj = {
+                id: session.user.id,
+                email: data.user.email || session.user.email,
+                full_name: data.user.full_name || 'Estate Administrator',
+                role: 'admin'
+              };
+              this.setCurrentUser(userObj);
+              return userObj;
+            }
+          } catch {}
         }
       } catch {}
       this.setCurrentUser(null);
       return null;
     }
-    return this.getCurrentUser();
+    return null;
   },
 
   setCurrentUser(user: any | null) {
@@ -6564,49 +6593,67 @@ export const authService = {
           return { success: false, error: error.message || 'Invalid administrator credentials.' };
         }
 
-        if (data.user) {
-          // Verify administrator role from admin_users table
-          const { data: adminRecord, error: adminErr } = await supabase
-            .from('admin_users')
-            .select('*')
-            .or(`auth_user_id.eq.${data.user.id},email.eq.${cleanEmail}`)
-            .eq('status', 'Active')
-            .maybeSingle();
+        if (data.user && data.session) {
+          // Authoritative verification of user's UUID and profiles.role
+          let isAuthorizedAdmin = false;
+          let adminFullName = 'Estate Administrator';
 
-          if (adminErr || !adminRecord) {
-            await supabase.auth.signOut();
-            this.setCurrentUser(null);
-            return {
-              success: false,
-              error: 'Your account is not authorized for administrator access.'
-            };
+          // 1. Try profiles table in Supabase
+          try {
+            const { data: profileRecord, error: pErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', data.user.id)
+              .maybeSingle();
+
+            if (!pErr && profileRecord) {
+              if (profileRecord.role === 'admin' || profileRecord.role === 'Super Admin' || profileRecord.role === 'Administrator') {
+                isAuthorizedAdmin = true;
+                adminFullName = profileRecord.full_name || adminFullName;
+              }
+            }
+          } catch {}
+
+          // 2. Try server-side verification with Bearer token
+          if (!isAuthorizedAdmin) {
+            try {
+              const res = await fetch('/api/admin/auth/verify-session', {
+                headers: { Authorization: `Bearer ${data.session.access_token}` }
+              });
+              const vResult = await res.json();
+              if (vResult.success && vResult.user) {
+                isAuthorizedAdmin = true;
+                adminFullName = vResult.user.full_name || adminFullName;
+              }
+            } catch {}
           }
 
-          const validRoles = ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'];
-          if (!validRoles.includes(adminRecord.role)) {
+          if (!isAuthorizedAdmin) {
             await supabase.auth.signOut();
             this.setCurrentUser(null);
             return {
               success: false,
-              error: 'Your account does not have a valid administrator role.'
+              error: 'Access denied: Your account is not authorized for administrator access.'
             };
           }
 
           const userObj = {
             id: data.user.id,
             email: data.user.email || cleanEmail,
-            full_name: adminRecord.full_name || 'Estate Administrator',
-            role: adminRecord.role
+            full_name: adminFullName,
+            role: 'admin'
           };
 
           this.setCurrentUser(userObj);
 
-          await dbService.logActivity({
-            admin_email: userObj.email,
-            action: 'ADMIN_LOGIN',
-            entity_type: 'auth',
-            description: `Admin ${userObj.email} signed in successfully via Supabase Auth (${userObj.role})`
-          });
+          try {
+            await dbService.logActivity({
+              admin_email: userObj.email,
+              action: 'ADMIN_LOGIN',
+              entity_type: 'auth',
+              description: `Administrator ${userObj.email} signed in successfully via Supabase Auth`
+            });
+          } catch {}
 
           return { success: true, user: userObj };
         }
@@ -6615,7 +6662,7 @@ export const authService = {
       }
     }
 
-    // Server-side admin verification fallback via Express API (checks Supabase backend)
+    // Server-side admin verification fallback via Express API
     try {
       const res = await fetch('/api/admin/auth/verify-login', {
         method: 'POST',

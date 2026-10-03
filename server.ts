@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
 import { electionRouter } from './src/server/electionServer.ts';
-import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser } from './src/server/database.ts';
+import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
 
 dotenv.config();
 
@@ -3364,7 +3364,7 @@ app.get('/api/admin/supabase-status', async (_req: Request, res: Response) => {
   }
 });
 
-// Server-side Administrator Verification Endpoint
+// Server-side Administrator Verification Endpoints
 app.post('/api/admin/auth/verify-login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -3380,38 +3380,24 @@ app.post('/api/admin/auth/verify-login', async (req: Request, res: Response) => 
         password
       });
 
-      if (!error && data.user) {
-        // Query admin_users table to verify role and status
-        const { data: adminRecord } = await supabaseAdmin
-          .from('admin_users')
-          .select('*')
-          .or(`auth_user_id.eq.${data.user.id},email.eq.${cleanEmail}`)
-          .eq('status', 'Active')
-          .maybeSingle();
-
-        if (!adminRecord) {
+      if (!error && data.user && data.session?.access_token) {
+        // Authoritative verification using UUID & profiles.role via verifyAdminToken
+        const authResult = await verifyAdminToken(data.session.access_token);
+        if (!authResult.valid || !authResult.user) {
           return res.status(403).json({
             success: false,
-            message: 'Access denied: Your account is not authorized for administrator access.'
-          });
-        }
-
-        const validRoles = ['Super Admin', 'Administrator', 'Accountant', 'Security Officer'];
-        if (!validRoles.includes(adminRecord.role)) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access denied: Your account does not have a valid administrator role.'
+            message: authResult.error || 'Access denied: Your account is not authorized for administrator access.'
           });
         }
 
         return res.json({
           success: true,
-          token: data.session?.access_token,
+          token: data.session.access_token,
           user: {
-            id: adminRecord.id,
-            email: adminRecord.email,
-            full_name: adminRecord.full_name || 'Estate Administrator',
-            role: adminRecord.role
+            id: data.user.id,
+            email: data.user.email || cleanEmail,
+            full_name: authResult.user.full_name || 'Estate Administrator',
+            role: authResult.user.role || 'admin'
           }
         });
       }
@@ -3423,6 +3409,34 @@ app.post('/api/admin/auth/verify-login', async (req: Request, res: Response) => 
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: 'Server authentication error.' });
+  }
+});
+
+// Server-side Administrator Session Verification Endpoint
+app.get('/api/admin/auth/verify-session', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Authorization token required.' });
+    }
+
+    const authResult = await verifyAdminToken(token);
+    if (!authResult.valid || !authResult.user) {
+      return res.status(403).json({ success: false, message: authResult.error || 'Unauthorized administrator session.' });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: authResult.user.id,
+        email: authResult.user.email,
+        full_name: authResult.user.full_name,
+        role: authResult.user.role || 'admin'
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Error verifying session.' });
   }
 });
 
@@ -4195,6 +4209,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // 7. VITE DEV MIDDLEWARE / STATIC ASSETS
 // -------------------------------------------------------------
 async function setupApp() {
+  // Ensure the designated administrator account is bootstrapped and verified
+  try {
+    await ensureDesignatedAdminAccount();
+  } catch (err) {
+    console.warn('Notice ensuring designated admin account:', err);
+  }
+
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({

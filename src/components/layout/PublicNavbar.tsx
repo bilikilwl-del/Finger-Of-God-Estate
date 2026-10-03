@@ -23,6 +23,7 @@ export interface PublicNavbarProps {
   currentTab: NavigationTab;
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
+  adminUser?: any | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
   unreadAnnouncementsCount?: number;
@@ -32,6 +33,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
   currentTab,
   estateSettings,
   currentResident,
+  adminUser,
   onNavigate,
   onOpenResidentLogin,
   unreadAnnouncementsCount = 0

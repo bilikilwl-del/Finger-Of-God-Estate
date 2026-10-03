@@ -125,6 +125,7 @@ const DEFAULT_RESIDENTS = [
 export interface PersistentDatabaseSchema {
   estate_settings: typeof DEFAULT_ESTATE_SETTINGS;
   residents: any[];
+  profiles: any[];
   admin_users: any[];
   monthly_payments: any[];
   payment_transactions: any[];
@@ -151,7 +152,29 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
       return {
         estate_settings: parsed.estate_settings || DEFAULT_ESTATE_SETTINGS,
         residents: parsed.residents || DEFAULT_RESIDENTS,
-        admin_users: parsed.admin_users || [{ id: 'admin-001', email: 'admin@fingerofgodestate.ng', full_name: 'Chief Executive Administrator', role: 'Super Admin', status: 'Active' }],
+        profiles: parsed.profiles || [
+          {
+            id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+            email: 'admin@fingerofgodestate.com',
+            full_name: 'Estate Administrator',
+            role: 'admin',
+            status: 'Active',
+            created_at: new Date('2026-10-02T21:40:22.668Z').toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        admin_users: parsed.admin_users || [
+          {
+            id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+            auth_user_id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+            email: 'admin@fingerofgodestate.com',
+            full_name: 'Estate Administrator',
+            role: 'admin',
+            status: 'Active',
+            created_at: new Date('2026-10-02T21:40:22.668Z').toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
         monthly_payments: parsed.monthly_payments || [],
         payment_transactions: parsed.payment_transactions || [],
         receipts: parsed.receipts || [],
@@ -173,13 +196,27 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
   const baseline: PersistentDatabaseSchema = {
     estate_settings: DEFAULT_ESTATE_SETTINGS,
     residents: DEFAULT_RESIDENTS,
+    profiles: [
+      {
+        id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+        email: 'admin@fingerofgodestate.com',
+        full_name: 'Estate Administrator',
+        role: 'admin',
+        status: 'Active',
+        created_at: '2026-10-02T21:40:22.668Z',
+        updated_at: new Date().toISOString()
+      }
+    ],
     admin_users: [
       {
-        id: '00000000-0000-0000-0000-000000000002',
-        email: 'admin@fingerofgodestate.ng',
-        full_name: 'Chief Executive Administrator',
-        role: 'Super Admin',
-        status: 'Active'
+        id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+        auth_user_id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
+        email: 'admin@fingerofgodestate.com',
+        full_name: 'Estate Administrator',
+        role: 'admin',
+        status: 'Active',
+        created_at: '2026-10-02T21:40:22.668Z',
+        updated_at: new Date().toISOString()
       }
     ],
     monthly_payments: [],
@@ -625,6 +662,68 @@ export const serverDb = {
     return record;
   },
 
+  // PROFILES & RBAC MANAGEMENT
+  async getProfile(id: string) {
+    try {
+      const { data, error } = await supabaseAdmin.from('profiles').select('*').eq('id', id).maybeSingle();
+      if (!error && data) return data;
+    } catch {}
+    return (localDb.profiles || []).find((p: any) => p.id === id) || null;
+  },
+
+  async upsertProfile(profile: { id: string; email: string; full_name?: string; role: string; status?: string }) {
+    const updatedRecord = {
+      id: profile.id,
+      email: profile.email.toLowerCase().trim(),
+      full_name: profile.full_name || 'Estate Administrator',
+      role: profile.role,
+      status: profile.status || 'Active',
+      updated_at: new Date().toISOString()
+    };
+
+    const existingIdx = (localDb.profiles || []).findIndex((p: any) => p.id === profile.id);
+    if (existingIdx >= 0) {
+      localDb.profiles[existingIdx] = { ...localDb.profiles[existingIdx], ...updatedRecord };
+    } else {
+      localDb.profiles = localDb.profiles || [];
+      localDb.profiles.push({
+        ...updatedRecord,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    // Sync admin_users table for backward compatibility
+    const adminIdx = (localDb.admin_users || []).findIndex((a: any) => a.id === profile.id || a.auth_user_id === profile.id);
+    if (adminIdx >= 0) {
+      localDb.admin_users[adminIdx] = { ...localDb.admin_users[adminIdx], ...updatedRecord, auth_user_id: profile.id };
+    } else {
+      localDb.admin_users = localDb.admin_users || [];
+      localDb.admin_users.push({
+        ...updatedRecord,
+        auth_user_id: profile.id,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('profiles').upsert(updatedRecord);
+    } catch (e) {
+      // Ignore if table not yet migrated in Supabase schema cache
+    }
+    try {
+      await supabaseAdmin.from('admin_users').upsert({
+        ...updatedRecord,
+        auth_user_id: profile.id
+      });
+    } catch (e) {
+      // Ignore if table not yet migrated in Supabase schema cache
+    }
+
+    return updatedRecord;
+  },
+
   // HEALTH CHECK
   async checkHealth() {
     const tables = [
@@ -676,7 +775,7 @@ export interface VerifiedAdminUser {
   id: string;
   email: string;
   full_name: string;
-  role: 'Super Admin' | 'Administrator' | 'Accountant' | 'Security Officer';
+  role: 'admin' | 'Super Admin' | 'Administrator' | 'Accountant' | 'Security Officer';
   status: 'Active' | 'Inactive';
 }
 
@@ -687,18 +786,53 @@ export async function verifyAdminToken(token: string): Promise<{ valid: boolean;
 
   try {
     const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !user || !user.email) {
+    if (authErr || !user || !user.id || !user.email) {
       return { valid: false, error: 'Invalid or expired administrator session.' };
     }
 
     const cleanEmail = user.email.toLowerCase().trim();
 
-    // Query admin_users table in Supabase
+    // 1. Authoritative check: Query profiles table by Supabase Auth user ID (UUID)
+    try {
+      const { data: profileRecord, error: pErr } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!pErr && profileRecord) {
+        const isAdmin = profileRecord.role === 'admin' || 
+                        profileRecord.role === 'Super Admin' || 
+                        profileRecord.role === 'Administrator';
+
+        if (isAdmin) {
+          return {
+            valid: true,
+            user: {
+              id: user.id,
+              email: user.email,
+              full_name: profileRecord.full_name || 'Estate Administrator',
+              role: profileRecord.role === 'admin' ? 'admin' : (profileRecord.role as any),
+              status: profileRecord.status || 'Active'
+            }
+          };
+        } else {
+          return {
+            valid: false,
+            error: 'Access denied: Your account is not authorized with the administrator role.'
+          };
+        }
+      }
+    } catch (pEx) {
+      console.warn('Error querying profiles table in Supabase:', pEx);
+    }
+
+    // 2. Query admin_users table in Supabase
     try {
       const { data: adminRecord, error: dbErr } = await supabaseAdmin
         .from('admin_users')
         .select('*')
-        .or(`auth_user_id.eq.${user.id},email.eq.${cleanEmail}`)
+        .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
         .eq('status', 'Active')
         .maybeSingle();
 
@@ -706,11 +840,11 @@ export async function verifyAdminToken(token: string): Promise<{ valid: boolean;
         return {
           valid: true,
           user: {
-            id: adminRecord.id,
-            email: adminRecord.email,
-            full_name: adminRecord.full_name,
-            role: adminRecord.role,
-            status: adminRecord.status
+            id: user.id,
+            email: adminRecord.email || user.email,
+            full_name: adminRecord.full_name || 'Estate Administrator',
+            role: adminRecord.role || 'admin',
+            status: adminRecord.status || 'Active'
           }
         };
       }
@@ -718,20 +852,36 @@ export async function verifyAdminToken(token: string): Promise<{ valid: boolean;
       console.warn('Error querying admin_users table in Supabase:', dbEx);
     }
 
-    // Check local fallback admin table only if remote query failed
-    const localAdmin = localDb.admin_users.find(
-      (a: any) => (a.auth_user_id === user.id || a.email.toLowerCase() === cleanEmail) && a.status === 'Active'
+    // 3. Check persistent database profiles by authenticated user UUID
+    const localProfile = (localDb.profiles || []).find(
+      (p: any) => p.id === user.id && (p.role === 'admin' || p.role === 'Super Admin' || p.role === 'Administrator')
     );
+    if (localProfile) {
+      return {
+        valid: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          full_name: localProfile.full_name || 'Estate Administrator',
+          role: localProfile.role || 'admin',
+          status: localProfile.status || 'Active'
+        }
+      };
+    }
 
+    // Check local admin_users
+    const localAdmin = (localDb.admin_users || []).find(
+      (a: any) => (a.auth_user_id === user.id || a.id === user.id) && a.status === 'Active'
+    );
     if (localAdmin) {
       return {
         valid: true,
         user: {
-          id: localAdmin.id,
-          email: localAdmin.email,
-          full_name: localAdmin.full_name,
-          role: localAdmin.role,
-          status: localAdmin.status
+          id: user.id,
+          email: localAdmin.email || user.email,
+          full_name: localAdmin.full_name || 'Estate Administrator',
+          role: localAdmin.role || 'admin',
+          status: localAdmin.status || 'Active'
         }
       };
     }
@@ -744,3 +894,87 @@ export async function verifyAdminToken(token: string): Promise<{ valid: boolean;
     return { valid: false, error: err.message || 'Authentication service error.' };
   }
 }
+
+// ==========================================
+// DESIGNATED ADMINISTRATOR PROVISIONING
+// ==========================================
+export const DESIGNATED_ADMIN_EMAIL = 'admin@fingerofgodestate.com';
+
+export async function ensureDesignatedAdminAccount(): Promise<{
+  success: boolean;
+  userId?: string;
+  email: string;
+  role: string;
+  createdInAuth?: boolean;
+}> {
+  try {
+    let authUserId: string | null = null;
+    let createdInAuth = false;
+
+    // 1. Check if the user exists in Supabase Auth
+    try {
+      const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (!listError && usersData?.users) {
+        const found = usersData.users.find(
+          (u) => u.email?.toLowerCase().trim() === DESIGNATED_ADMIN_EMAIL.toLowerCase().trim()
+        );
+        if (found) {
+          authUserId = found.id;
+        }
+      }
+    } catch (e) {
+      console.warn('Error listing Supabase Auth users:', e);
+    }
+
+    // 2. If account does not exist in Supabase Auth, create it securely server-side
+    if (!authUserId) {
+      try {
+        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email: DESIGNATED_ADMIN_EMAIL,
+          email_confirm: true,
+          user_metadata: {
+            full_name: 'Estate Administrator',
+            role: 'admin'
+          }
+        });
+
+        if (!createError && newUser?.user) {
+          authUserId = newUser.user.id;
+          createdInAuth = true;
+        }
+      } catch (createEx) {
+        console.warn('Error creating Supabase Auth admin user:', createEx);
+      }
+    }
+
+    // Fallback to known UUID if still not retrieved
+    const finalUserId = authUserId || '2aef6033-2600-4d7a-aaa5-7f54c441e429';
+
+    // 3. Assign the admin role in the profiles architecture (using UUID)
+    await serverDb.upsertProfile({
+      id: finalUserId,
+      email: DESIGNATED_ADMIN_EMAIL,
+      full_name: 'Estate Administrator',
+      role: 'admin',
+      status: 'Active'
+    });
+
+    console.log(`[AUTH] Designated administrator account ensured: ${DESIGNATED_ADMIN_EMAIL} (UUID: ${finalUserId}, Role: admin)`);
+
+    return {
+      success: true,
+      userId: finalUserId,
+      email: DESIGNATED_ADMIN_EMAIL,
+      role: 'admin',
+      createdInAuth
+    };
+  } catch (err: any) {
+    console.error('Error ensuring designated admin account:', err);
+    return {
+      success: false,
+      email: DESIGNATED_ADMIN_EMAIL,
+      role: 'admin'
+    };
+  }
+}
+

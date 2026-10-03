@@ -59,7 +59,7 @@ import { PublicElectionView } from './components/election/PublicElectionView';
 import { AdminElectionView } from './components/admin/AdminElectionView';
 import { NotFoundView } from './components/common/NotFoundView';
 
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, ShieldAlert } from 'lucide-react';
 
 function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: string } {
   const path = pathname.toLowerCase().replace(/\/$/, '') || '/';
@@ -874,6 +874,41 @@ export default function App() {
           onAuthenticated={handleAdminAuthenticated}
           onNavigateHome={() => navigateTo('home')}
         />
+      </div>
+    );
+  }
+
+  // If user is authenticated but their profile role is not 'admin':
+  if (adminUser.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-between text-slate-100 font-sans p-6">
+        {renderToast()}
+        <div className="max-w-md w-full mx-auto my-auto bg-slate-900 border border-rose-500/30 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-14 h-14 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-black text-white tracking-tight">Access Denied</h2>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Authenticated as <strong className="text-white">{adminUser.email}</strong>, but this account is not assigned the administrator role (<code className="text-rose-400 bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-900">profiles.role !== &apos;admin&apos;</code>).
+          </p>
+          <div className="pt-3 flex flex-col gap-2.5">
+            <button
+              onClick={handleAdminLogout}
+              className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+            >
+              Sign Out &amp; Use Administrator Account
+            </button>
+            <button
+              onClick={() => navigateTo('home')}
+              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs rounded-xl transition-all cursor-pointer border border-slate-700"
+            >
+              Return to Public Website
+            </button>
+          </div>
+        </div>
+        <footer className="text-center text-xs text-slate-600 py-4">
+          &copy; {new Date().getFullYear()} {estateSettings?.estate_name || 'Finger of God Estate'} Management Committee
+        </footer>
       </div>
     );
   }

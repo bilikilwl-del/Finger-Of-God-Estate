@@ -106,13 +106,37 @@
       "updated_at": "2026-10-02T19:51:29.833Z"
     }
   ],
+  "profiles": [
+    {
+      "id": "2aef6033-2600-4d7a-aaa5-7f54c441e429",
+      "email": "admin@fingerofgodestate.com",
+      "full_name": "Estate Administrator",
+      "role": "admin",
+      "status": "Active",
+      "created_at": "2026-10-02T21:40:22.668Z",
+      "updated_at": "2026-10-03T16:20:00.000Z"
+    }
+  ],
   "admin_users": [
     {
+      "id": "2aef6033-2600-4d7a-aaa5-7f54c441e429",
+      "auth_user_id": "2aef6033-2600-4d7a-aaa5-7f54c441e429",
+      "email": "admin@fingerofgodestate.com",
+      "full_name": "Estate Administrator",
+      "role": "admin",
+      "status": "Active",
+      "created_at": "2026-10-02T21:40:22.668Z",
+      "updated_at": "2026-10-03T16:20:00.000Z"
+    },
+    {
       "id": "00000000-0000-0000-0000-000000000002",
+      "auth_user_id": "00000000-0000-0000-0000-000000000002",
       "email": "admin@fingerofgodestate.ng",
       "full_name": "Chief Executive Administrator",
-      "role": "Super Admin",
-      "status": "Active"
+      "role": "admin",
+      "status": "Active",
+      "created_at": "2026-10-02T19:51:29.833Z",
+      "updated_at": "2026-10-03T16:20:00.000Z"
     }
   ],
   "monthly_payments": [
