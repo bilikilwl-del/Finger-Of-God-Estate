@@ -64,27 +64,107 @@ function sha256(data: string): string {
 // 1. PUBLIC ELECTION ENDPOINTS
 // ==========================================
 
-// GET /api/election/active - Returns active or latest published election from Supabase
-electionRouter.get('/active', async (_req: Request, res: Response) => {
+// Helper to format timestamps in WAT (West Africa Time, UTC+1)
+const formatElectionWat = (date: Date): string => {
+  const datePart = date.toLocaleDateString('en-US', {
+    timeZone: 'Africa/Lagos',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+  const timePart = date.toLocaleTimeString('en-US', {
+    timeZone: 'Africa/Lagos',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+  return `${datePart} – ${timePart} WAT`;
+};
+
+// GET /api/election/active - Returns scheduled, active, or closed election from Supabase
+const handleGetPublicElection = async (_req: Request, res: Response) => {
   try {
-    const { data: electionData, error: elecError } = await supabaseAdmin
+    // 1. Look for the official election by ID first, or fallback to the latest election
+    let { data: electionData, error: elecError } = await supabaseAdmin
       .from('elections')
       .select('*')
-      .in('status', ['OPEN', 'UPCOMING', 'PAUSED', 'CLOSED', 'RESULTS_PUBLISHED'])
-      .order('starts_at', { ascending: false })
-      .limit(1)
+      .eq('id', 'aee791a1-d88a-4292-b0d2-0e5f68ea7de8')
       .maybeSingle();
 
+    if (!electionData) {
+      const { data: fallback, error: fbError } = await supabaseAdmin
+        .from('elections')
+        .select('*')
+        .order('starts_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      electionData = fallback;
+      elecError = fbError;
+    }
+
     if (elecError) {
-      console.error('Error fetching active election from Supabase:', elecError);
-      return res.status(500).json({ success: false, message: 'Error retrieving active election.' });
+      console.error('Error fetching election from Supabase:', elecError);
+      return res.status(500).json({ success: false, message: 'Error retrieving election.' });
     }
 
     if (!electionData) {
-      return res.status(404).json({ success: false, message: 'No active election scheduled at this time.' });
+      return res.status(404).json({ success: false, message: 'No election scheduled at this time.' });
     }
 
-    // Fetch active positions
+    // 2. Compute dynamic election status based on server & database time
+    const serverNow = new Date();
+    const serverTimeIso = serverNow.toISOString();
+    const startsAt = new Date(electionData.starts_at);
+    const endsAt = new Date(electionData.ends_at);
+
+    let calculatedStatus: 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'RESULTS_PUBLISHED' | 'PAUSED';
+    let statusLabel: string;
+    let isVotingOpen: boolean = false;
+    let isScheduled: boolean = false;
+    let isClosed: boolean = false;
+
+    if (electionData.status === 'RESULTS_PUBLISHED') {
+      calculatedStatus = 'RESULTS_PUBLISHED';
+      statusLabel = 'Status: Official Results Certified';
+      isClosed = true;
+      isVotingOpen = false;
+    } else if (electionData.status === 'PAUSED') {
+      calculatedStatus = 'PAUSED';
+      statusLabel = 'Status: Voting Paused';
+      isVotingOpen = false;
+    } else if (serverNow < startsAt) {
+      // Future scheduled election:
+      calculatedStatus = 'SCHEDULED';
+      statusLabel = 'Status: Scheduled — Voting Not Yet Open';
+      isScheduled = true;
+      isVotingOpen = false;
+    } else if (serverNow >= startsAt && serverNow < endsAt) {
+      // Current time has reached opening date/time:
+      calculatedStatus = 'OPEN';
+      statusLabel = 'Status: Voting Open';
+      isVotingOpen = true;
+      // Auto-sync database status to OPEN if it was DRAFT or UPCOMING
+      if (['DRAFT', 'UPCOMING'].includes(electionData.status)) {
+        await supabaseAdmin.from('elections').update({ status: 'OPEN', updated_at: serverTimeIso }).eq('id', electionData.id);
+        electionData.status = 'OPEN';
+      }
+    } else {
+      // Current time has reached or passed closing date/time:
+      calculatedStatus = 'CLOSED';
+      statusLabel = 'Status: Voting Closed';
+      isClosed = true;
+      isVotingOpen = false;
+      // Auto-sync database status to CLOSED if it was OPEN
+      if (electionData.status === 'OPEN') {
+        await supabaseAdmin.from('elections').update({ status: 'CLOSED', updated_at: serverTimeIso }).eq('id', electionData.id);
+        electionData.status = 'CLOSED';
+      }
+    }
+
+    const votingOpensDisplay = formatElectionWat(startsAt);
+    const votingClosesDisplay = formatElectionWat(endsAt);
+
+    // 3. Fetch active positions
     const { data: positionsData, error: posError } = await supabaseAdmin
       .from('election_positions')
       .select('*')
@@ -96,13 +176,17 @@ electionRouter.get('/active', async (_req: Request, res: Response) => {
       return res.status(500).json({ success: false, message: 'Error retrieving election positions.' });
     }
 
-    // Fetch approved candidates
-    const { data: candidatesData, error: candError } = await supabaseAdmin
+    // 4. Fetch candidates (approved candidates for ballot, or all registered candidates if in preparation)
+    const candidateQuery = supabaseAdmin
       .from('election_candidates')
       .select('*')
-      .eq('election_id', electionData.id)
-      .eq('status', 'APPROVED')
-      .order('display_order', { ascending: true });
+      .eq('election_id', electionData.id);
+
+    if (calculatedStatus === 'OPEN' || calculatedStatus === 'CLOSED' || calculatedStatus === 'RESULTS_PUBLISHED') {
+      candidateQuery.eq('status', 'APPROVED');
+    }
+
+    const { data: candidatesData, error: candError } = await candidateQuery.order('display_order', { ascending: true });
 
     if (candError) {
       return res.status(500).json({ success: false, message: 'Error retrieving candidates.' });
@@ -113,9 +197,17 @@ electionRouter.get('/active', async (_req: Request, res: Response) => {
       title: electionData.name,
       year: new Date(electionData.starts_at).getFullYear() || 2026,
       description: electionData.description,
-      status: electionData.status as ElectionStatus,
+      status: (calculatedStatus === 'SCHEDULED' ? 'UPCOMING' : calculatedStatus) as ElectionStatus,
+      calculated_status: calculatedStatus,
+      status_label: statusLabel,
+      is_voting_open: isVotingOpen,
+      is_scheduled: isScheduled,
+      is_closed: isClosed,
       opening_at: electionData.starts_at,
       closing_at: electionData.ends_at,
+      voting_opens_display: votingOpensDisplay,
+      voting_closes_display: votingClosesDisplay,
+      server_time: serverTimeIso,
       election_rules: electionData.constitution_rules || '',
       tie_resolution_rule: electionData.tie_breaking_rule || '',
       published_at: null,
@@ -156,10 +248,14 @@ electionRouter.get('/active', async (_req: Request, res: Response) => {
       candidates: formattedCandidates
     });
   } catch (err: any) {
-    console.error('Unhandled error in /active election endpoint:', err);
+    console.error('Unhandled error in public election endpoint:', err);
     return res.status(500).json({ success: false, message: 'Internal server error.' });
   }
-});
+};
+
+electionRouter.get('/active', handleGetPublicElection);
+electionRouter.get('/current', handleGetPublicElection);
+electionRouter.get('/public', handleGetPublicElection);
 
 // GET /api/election/:id - Get specific election by ID or code
 electionRouter.get('/:id', async (req: Request, res: Response) => {
@@ -941,26 +1037,150 @@ electionRouter.post('/admin/elections/:id/positions', requireElectionAdmin, asyn
   }
 });
 
+// PUT /api/election/admin/elections/:id/positions/:positionId - Update position before election opens
+electionRouter.put('/admin/elections/:id/positions/:positionId', requireElectionAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id, positionId } = req.params;
+    const { title, description, display_order, max_selections, is_active } = req.body;
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
+
+    // Check election status - cannot edit positions if election is OPEN or RESULTS_PUBLISHED
+    const { data: election, error: elecErr } = await supabaseAdmin
+      .from('elections')
+      .select('status, name')
+      .eq('id', id)
+      .single();
+
+    if (elecErr || !election) {
+      return res.status(404).json({ success: false, message: 'Election not found.' });
+    }
+
+    if (election.status === 'OPEN' || election.status === 'RESULTS_PUBLISHED') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot edit positions while election status is ${election.status}.`
+      });
+    }
+
+    const updateFields: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (title !== undefined) updateFields.name = String(title).trim();
+    if (description !== undefined) updateFields.description = String(description).trim();
+    if (display_order !== undefined) updateFields.display_order = Number(display_order);
+    if (max_selections !== undefined) updateFields.max_selections = Number(max_selections);
+    if (is_active !== undefined) updateFields.is_active = Boolean(is_active);
+
+    const { data: updatedPos, error } = await supabaseAdmin
+      .from('election_positions')
+      .update(updateFields)
+      .eq('id', positionId)
+      .eq('election_id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Audit log
+    await supabaseAdmin.from('election_audit_logs').insert({
+      election_id: id,
+      action: 'POSITION_UPDATED',
+      actor_type: 'ADMIN',
+      actor_reference: adminUser.email,
+      description: `Position "${updatedPos.name}" updated (Active: ${updatedPos.is_active}, Order: ${updatedPos.display_order})`
+    });
+
+    return res.json({
+      success: true,
+      position: {
+        id: updatedPos.id,
+        election_id: updatedPos.election_id,
+        title: updatedPos.name,
+        description: updatedPos.description,
+        display_order: updatedPos.display_order,
+        active: updatedPos.is_active,
+        max_selections: updatedPos.max_selections,
+        created_at: updatedPos.created_at,
+        updated_at: updatedPos.updated_at
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: 'Error updating position.' });
+  }
+});
+
 // POST /api/election/admin/elections/:id/candidates - Add candidate in Supabase
 electionRouter.post('/admin/elections/:id/candidates', requireElectionAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { position_id, full_name, photograph_url, biography, candidate_statement, display_order } = req.body;
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
 
-    if (!position_id || !full_name) {
-      return res.status(400).json({ success: false, message: 'Position and candidate name are required.' });
+    if (!position_id || !full_name || !String(full_name).trim()) {
+      return res.status(400).json({ success: false, message: 'Position selection and candidate full name are required.' });
     }
 
+    // Verify election status allows candidate registration (DRAFT or UPCOMING)
+    const { data: election, error: elecErr } = await supabaseAdmin
+      .from('elections')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (elecErr || !election) {
+      return res.status(404).json({ success: false, message: 'Election not found.' });
+    }
+
+    if (['OPEN', 'CLOSED', 'RESULTS_PUBLISHED'].includes(election.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot register new candidates while election is in ${election.status} status.`
+      });
+    }
+
+    // Verify that the position belongs to this election
+    const { data: positionRecord, error: posErr } = await supabaseAdmin
+      .from('election_positions')
+      .select('id, name')
+      .eq('id', position_id)
+      .eq('election_id', id)
+      .maybeSingle();
+
+    if (posErr || !positionRecord) {
+      return res.status(400).json({ success: false, message: 'Selected position is not part of this election.' });
+    }
+
+    // Check for duplicate candidate name in the same position
+    const cleanName = String(full_name).trim();
+    const { data: existingCand } = await supabaseAdmin
+      .from('election_candidates')
+      .select('id')
+      .eq('election_id', id)
+      .eq('position_id', position_id)
+      .ilike('full_name', cleanName)
+      .maybeSingle();
+
+    if (existingCand) {
+      return res.status(400).json({
+        success: false,
+        message: `A candidate with the name "${cleanName}" is already registered for ${positionRecord.name}.`
+      });
+    }
+
+    // Insert candidate with initial status PENDING
     const { data: newCand, error } = await supabaseAdmin
       .from('election_candidates')
       .insert({
         election_id: id,
         position_id,
-        full_name: String(full_name).trim(),
+        full_name: cleanName,
         photo_url: photograph_url || '',
         profile: String(biography || '').trim(),
         manifesto: String(candidate_statement || '').trim(),
-        status: 'APPROVED',
+        status: 'PENDING',
         display_order: display_order || 1
       })
       .select()
@@ -970,7 +1190,16 @@ electionRouter.post('/admin/elections/:id/candidates', requireElectionAdmin, asy
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    return res.json({ success: true, candidate: newCand });
+    // Audit trail
+    await supabaseAdmin.from('election_audit_logs').insert({
+      election_id: id,
+      action: 'CANDIDATE_REGISTERED',
+      actor_type: 'ADMIN',
+      actor_reference: adminUser.email,
+      description: `Candidate "${newCand.full_name}" registered for position "${positionRecord.name}" (Status: PENDING)`
+    });
+
+    return res.json({ success: true, candidate: newCand, message: 'Candidate added successfully.' });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: 'Error adding candidate.' });
   }
@@ -981,10 +1210,25 @@ electionRouter.put('/admin/elections/:id/candidates/:candidateId/status', requir
   try {
     const { id, candidateId } = req.params;
     const { status } = req.body;
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
 
     const validStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid candidate status.' });
+    }
+
+    // Verify election status permits status update
+    const { data: election } = await supabaseAdmin
+      .from('elections')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (election && ['CLOSED', 'RESULTS_PUBLISHED'].includes(election.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot update candidate status while election is ${election.status}.`
+      });
     }
 
     const { data: updated, error } = await supabaseAdmin
@@ -999,9 +1243,140 @@ electionRouter.put('/admin/elections/:id/candidates/:candidateId/status', requir
       return res.status(500).json({ success: false, message: error.message });
     }
 
-    return res.json({ success: true, candidate: updated });
+    // Audit log
+    await supabaseAdmin.from('election_audit_logs').insert({
+      election_id: id,
+      action: 'CANDIDATE_STATUS_UPDATED',
+      actor_type: 'ADMIN',
+      actor_reference: adminUser.email,
+      description: `Candidate "${updated.full_name}" status updated to ${status}`
+    });
+
+    return res.json({ success: true, candidate: updated, message: `Candidate status updated to ${status}.` });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: 'Error updating candidate status.' });
+  }
+});
+
+// PUT /api/election/admin/elections/:id/candidates/:candidateId - Update candidate details
+electionRouter.put('/admin/elections/:id/candidates/:candidateId', requireElectionAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id, candidateId } = req.params;
+    const { position_id, full_name, photograph_url, biography, candidate_statement, display_order } = req.body;
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
+
+    const { data: election } = await supabaseAdmin
+      .from('elections')
+      .select('status')
+      .eq('id', id)
+      .single();
+
+    if (election && ['OPEN', 'CLOSED', 'RESULTS_PUBLISHED'].includes(election.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot edit candidates while election status is ${election.status}.`
+      });
+    }
+
+    const updateFields: any = { updated_at: new Date().toISOString() };
+    if (position_id !== undefined) {
+      const { data: posRecord, error: posErr } = await supabaseAdmin
+        .from('election_positions')
+        .select('id, name')
+        .eq('id', position_id)
+        .eq('election_id', id)
+        .maybeSingle();
+
+      if (posErr || !posRecord) {
+        return res.status(400).json({ success: false, message: 'Selected position is not part of this election.' });
+      }
+      updateFields.position_id = position_id;
+    }
+    if (full_name !== undefined) updateFields.full_name = String(full_name).trim();
+    if (photograph_url !== undefined) updateFields.photo_url = photograph_url;
+    if (biography !== undefined) updateFields.profile = String(biography).trim();
+    if (candidate_statement !== undefined) updateFields.manifesto = String(candidate_statement).trim();
+    if (display_order !== undefined) updateFields.display_order = Number(display_order);
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('election_candidates')
+      .update(updateFields)
+      .eq('id', candidateId)
+      .eq('election_id', id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Audit log
+    await supabaseAdmin.from('election_audit_logs').insert({
+      election_id: id,
+      action: 'CANDIDATE_UPDATED',
+      actor_type: 'ADMIN',
+      actor_reference: adminUser.email,
+      description: `Candidate "${updated.full_name}" details updated`
+    });
+
+    return res.json({ success: true, candidate: updated });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: 'Error updating candidate.' });
+  }
+});
+
+// DELETE /api/election/admin/elections/:id/candidates/:candidateId - Delete candidate
+electionRouter.delete('/admin/elections/:id/candidates/:candidateId', requireElectionAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id, candidateId } = req.params;
+    const adminUser = (req as any).adminUser as VerifiedAdminUser;
+
+    const { data: election } = await supabaseAdmin
+      .from('elections')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (election && ['OPEN', 'CLOSED', 'RESULTS_PUBLISHED'].includes(election.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete candidates while election status is ${election.status}.`
+      });
+    }
+
+    const { data: candidate, error: fetchErr } = await supabaseAdmin
+      .from('election_candidates')
+      .select('full_name, position_id')
+      .eq('id', candidateId)
+      .eq('election_id', id)
+      .maybeSingle();
+
+    if (fetchErr || !candidate) {
+      return res.status(404).json({ success: false, message: 'Candidate not found.' });
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('election_candidates')
+      .delete()
+      .eq('id', candidateId)
+      .eq('election_id', id);
+
+    if (delErr) {
+      return res.status(500).json({ success: false, message: delErr.message });
+    }
+
+    // Audit log
+    await supabaseAdmin.from('election_audit_logs').insert({
+      election_id: id,
+      action: 'CANDIDATE_DELETED',
+      actor_type: 'ADMIN',
+      actor_reference: adminUser.email,
+      description: `Candidate "${candidate.full_name}" was deleted.`
+    });
+
+    return res.json({ success: true, message: 'Candidate deleted successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: 'Error deleting candidate.' });
   }
 });
 

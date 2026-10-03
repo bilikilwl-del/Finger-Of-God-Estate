@@ -18,6 +18,14 @@ export interface Election {
   year: number;
   description: string;
   status: ElectionStatus;
+  calculated_status?: 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'RESULTS_PUBLISHED' | 'PAUSED';
+  status_label?: string;
+  is_voting_open?: boolean;
+  is_scheduled?: boolean;
+  is_closed?: boolean;
+  voting_opens_display?: string;
+  voting_closes_display?: string;
+  server_time?: string;
   opening_at: string;
   closing_at: string;
   election_rules: string;

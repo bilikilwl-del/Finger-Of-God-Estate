@@ -245,6 +245,24 @@ export const electionService = {
     }
   },
 
+  async updatePosition(id: string, positionId: string, position: Partial<ElectionPosition>, token?: string): Promise<{
+    success: boolean;
+    position?: ElectionPosition;
+    message?: string;
+  }> {
+    try {
+      const headers = await getAdminAuthHeader(token);
+      const res = await fetch(`/api/election/admin/elections/${id}/positions/${positionId}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(position)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to update position.' };
+    }
+  },
+
   async addCandidate(id: string, candidate: Partial<ElectionCandidate>, token?: string): Promise<{
     success: boolean;
     candidate?: ElectionCandidate;
@@ -263,6 +281,24 @@ export const electionService = {
     }
   },
 
+  async updateCandidate(id: string, candidateId: string, candidate: Partial<ElectionCandidate>, token?: string): Promise<{
+    success: boolean;
+    candidate?: ElectionCandidate;
+    message?: string;
+  }> {
+    try {
+      const headers = await getAdminAuthHeader(token);
+      const res = await fetch(`/api/election/admin/elections/${id}/candidates/${candidateId}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(candidate)
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to update candidate.' };
+    }
+  },
+
   async updateCandidateStatus(id: string, candidateId: string, status: string, token?: string): Promise<{
     success: boolean;
     candidate?: ElectionCandidate;
@@ -278,6 +314,22 @@ export const electionService = {
       return await res.json();
     } catch (err: any) {
       return { success: false, message: err.message || 'Failed to update candidate status.' };
+    }
+  },
+
+  async deleteCandidate(id: string, candidateId: string, token?: string): Promise<{
+    success: boolean;
+    message?: string;
+  }> {
+    try {
+      const headers = await getAdminAuthHeader(token);
+      const res = await fetch(`/api/election/admin/elections/${id}/candidates/${candidateId}`, {
+        method: 'DELETE',
+        headers
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to delete candidate.' };
     }
   },
 

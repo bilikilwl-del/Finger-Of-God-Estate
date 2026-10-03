@@ -24,7 +24,11 @@ import {
   History,
   Sliders,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
+  User,
+  Info,
+  Filter
 } from 'lucide-react';
 import { 
   Election, 
@@ -44,13 +48,13 @@ interface AdminElectionViewProps {
   adminUser: { email: string; full_name?: string; role?: string } | null;
 }
 
-type AdminElectionSubTab = 'overview' | 'positions_candidates' | 'voters' | 'tally' | 'audit';
+type AdminElectionSubTab = 'candidates' | 'overview' | 'positions' | 'voters' | 'tally' | 'audit';
 
 export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
   estateSettings,
   adminUser
 }) => {
-  const [subTab, setSubTab] = useState<AdminElectionSubTab>('overview');
+  const [subTab, setSubTab] = useState<AdminElectionSubTab>('candidates');
   
   // Data
   const [elections, setElections] = useState<any[]>([]);
@@ -67,12 +71,25 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Modals & Forms
+  const [showCreateElectionModal, setShowCreateElectionModal] = useState(false);
+  const [createElectionForm, setCreateElectionForm] = useState({
+    title: '',
+    year: 2026,
+    description: '',
+    opening_at: '',
+    closing_at: '',
+    election_rules: '1. One accredited vote per estate plot (001–300).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
+    tie_resolution_rule: 'Run-off election within 7 days in accordance with Estate Electoral Guidelines.'
+  });
+
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [targetStatus, setTargetStatus] = useState<ElectionStatus>('OPEN');
   const [statusReason, setStatusReason] = useState('');
 
   const [showAddPositionModal, setShowAddPositionModal] = useState(false);
   const [newPosition, setNewPosition] = useState({ title: '', description: '', display_order: 1, max_selections: 1 });
+  const [showEditPositionModal, setShowEditPositionModal] = useState(false);
+  const [editingPosition, setEditingPosition] = useState<ElectionPosition | null>(null);
 
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
   const [newCandidate, setNewCandidate] = useState({
@@ -83,6 +100,17 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
     candidate_statement: '',
     display_order: 1
   });
+  const [showEditCandidateModal, setShowEditCandidateModal] = useState(false);
+  const [editingCandidate, setEditingCandidate] = useState<ElectionCandidate | null>(null);
+  const [viewingManifestoCandidate, setViewingManifestoCandidate] = useState<ElectionCandidate | null>(null);
+  const [candidateToDelete, setCandidateToDelete] = useState<ElectionCandidate | null>(null);
+  const [photoInputMode, setPhotoInputMode] = useState<'upload' | 'url'>('upload');
+  const [editPhotoInputMode, setEditPhotoInputMode] = useState<'upload' | 'url'>('upload');
+
+  const [showBallotPreviewModal, setShowBallotPreviewModal] = useState(false);
+  const [candidateSearchQuery, setCandidateSearchQuery] = useState('');
+  const [candidateFilterStatus, setCandidateFilterStatus] = useState<string>('all');
+  const [candidateFilterPosition, setCandidateFilterPosition] = useState<string>('all');
 
   const [showEditConfigModal, setShowEditConfigModal] = useState(false);
   const [configForm, setConfigForm] = useState({
@@ -198,6 +226,40 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
     }
   };
 
+  // Create New Election Handler
+  const handleCreateElection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createElectionForm.title.trim()) {
+      setMessage({ text: 'Election title is required.', type: 'error' });
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await electionService.createAdminElection(createElectionForm);
+      if (res.success && res.election) {
+        setMessage({ text: `Election "${res.election.title}" created successfully!`, type: 'success' });
+        setShowCreateElectionModal(false);
+        setCreateElectionForm({
+          title: '',
+          year: 2026,
+          description: '',
+          opening_at: '',
+          closing_at: '',
+          election_rules: '1. One accredited vote per estate plot (001–300).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
+          tie_resolution_rule: 'Run-off election within 7 days in accordance with Estate Electoral Guidelines.'
+        });
+        await loadElections();
+        loadElectionDetails(res.election.id);
+      } else {
+        setMessage({ text: res.message || 'Failed to create election.', type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error creating election.', type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Add Position
   const handleAddPosition = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,20 +282,118 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
     }
   };
 
+  // Edit Position
+  const handleEditPosition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedElection || !editingPosition) return;
+    setActionLoading(true);
+    try {
+      const res = await electionService.updatePosition(selectedElection.id, editingPosition.id, {
+        title: editingPosition.title,
+        description: editingPosition.description,
+        display_order: editingPosition.display_order,
+        max_selections: editingPosition.max_selections,
+        active: editingPosition.active
+      });
+      if (res.success) {
+        setMessage({ text: 'Position updated successfully', type: 'success' });
+        setShowEditPositionModal(false);
+        setEditingPosition(null);
+        loadElectionDetails(selectedElection.id);
+      } else {
+        setMessage({ text: res.message || 'Failed to update position', type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error updating position', type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Toggle Position Active/Inactive
+  const handleTogglePositionActive = async (pos: ElectionPosition) => {
+    if (!selectedElection) return;
+    if (selectedElection.status === 'OPEN' || selectedElection.status === 'RESULTS_PUBLISHED') {
+      setMessage({ text: `Cannot modify position status while election is ${selectedElection.status}.`, type: 'error' });
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const newActive = !pos.active;
+      const res = await electionService.updatePosition(selectedElection.id, pos.id, {
+        active: newActive
+      });
+      if (res.success) {
+        setMessage({ text: `Position "${pos.title}" ${newActive ? 'activated' : 'deactivated'}`, type: 'success' });
+        loadElectionDetails(selectedElection.id);
+      } else {
+        setMessage({ text: res.message || 'Failed to update position status', type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error updating position status', type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Photo upload helper
+  const handlePhotoUpload = (file: File, isEdit: boolean = false) => {
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ text: 'Image file size must be 2MB or less.', type: 'error' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      if (isEdit && editingCandidate) {
+        setEditingCandidate({ ...editingCandidate, photograph_url: dataUrl });
+      } else {
+        setNewCandidate({ ...newCandidate, photograph_url: dataUrl });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Open Add Candidate for specific position
+  const handleOpenAddCandidateForPosition = (posId?: string) => {
+    const targetPos = posId ? positions.find(p => p.id === posId) : positions[0];
+    const existingInPos = candidates.filter(c => c.position_id === (targetPos?.id || ''));
+    setNewCandidate({
+      position_id: targetPos?.id || '',
+      full_name: '',
+      photograph_url: '',
+      biography: '',
+      candidate_statement: '',
+      display_order: existingInPos.length + 1
+    });
+    setShowAddCandidateModal(true);
+  };
+
   // Add Candidate
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedElection) return;
     if (!newCandidate.position_id) {
-      setMessage({ text: 'Please select a position for the candidate', type: 'error' });
+      setMessage({ text: 'Please select an election position for the candidate.', type: 'error' });
+      return;
+    }
+    if (!newCandidate.full_name || !newCandidate.full_name.trim()) {
+      setMessage({ text: 'Candidate full name is required.', type: 'error' });
       return;
     }
 
     setActionLoading(true);
     try {
-      const res = await electionService.addCandidate(selectedElection.id, newCandidate);
+      const res = await electionService.addCandidate(selectedElection.id, {
+        position_id: newCandidate.position_id,
+        full_name: newCandidate.full_name.trim(),
+        photograph_url: newCandidate.photograph_url,
+        biography: newCandidate.biography.trim(),
+        candidate_statement: newCandidate.candidate_statement.trim(),
+        display_order: Number(newCandidate.display_order) || 1
+      });
       if (res.success) {
-        setMessage({ text: 'Candidate registered successfully', type: 'success' });
+        setMessage({ text: 'Candidate added successfully.', type: 'success' });
         setShowAddCandidateModal(false);
         setNewCandidate({
           position_id: '',
@@ -245,10 +405,47 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
         });
         loadElectionDetails(selectedElection.id);
       } else {
-        setMessage({ text: res.message || 'Failed to add candidate', type: 'error' });
+        setMessage({ text: res.message || 'Could not add candidate. Please verify the entered information.', type: 'error' });
       }
     } catch (err: any) {
-      setMessage({ text: err.message || 'Error adding candidate', type: 'error' });
+      setMessage({ text: err.message || 'Error adding candidate.', type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Edit Candidate
+  const handleEditCandidate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedElection || !editingCandidate) return;
+    if (!editingCandidate.position_id) {
+      setMessage({ text: 'Please select an election position.', type: 'error' });
+      return;
+    }
+    if (!editingCandidate.full_name || !editingCandidate.full_name.trim()) {
+      setMessage({ text: 'Candidate full name is required.', type: 'error' });
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await electionService.updateCandidate(selectedElection.id, editingCandidate.id, {
+        position_id: editingCandidate.position_id,
+        full_name: editingCandidate.full_name.trim(),
+        photograph_url: editingCandidate.photograph_url,
+        biography: (editingCandidate.biography || '').trim(),
+        candidate_statement: (editingCandidate.candidate_statement || '').trim(),
+        display_order: Number(editingCandidate.display_order) || 1
+      });
+      if (res.success) {
+        setMessage({ text: 'Candidate updated successfully.', type: 'success' });
+        setShowEditCandidateModal(false);
+        setEditingCandidate(null);
+        loadElectionDetails(selectedElection.id);
+      } else {
+        setMessage({ text: res.message || 'Could not update candidate.', type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error updating candidate.', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -257,17 +454,46 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
   // Candidate Status Toggle
   const handleCandidateStatus = async (candidateId: string, status: CandidateStatus) => {
     if (!selectedElection) return;
+    if (['CLOSED', 'RESULTS_PUBLISHED'].includes(selectedElection.status)) {
+      setMessage({ text: `Cannot modify candidate status while election is in ${selectedElection.status} status.`, type: 'error' });
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await electionService.updateCandidateStatus(selectedElection.id, candidateId, status);
       if (res.success) {
-        setMessage({ text: `Candidate status updated to ${status}`, type: 'success' });
+        setMessage({ text: `Candidate status updated to ${status}.`, type: 'success' });
         loadElectionDetails(selectedElection.id);
       } else {
-        setMessage({ text: res.message || 'Failed to update candidate', type: 'error' });
+        setMessage({ text: res.message || 'Failed to update candidate status.', type: 'error' });
       }
     } catch (err: any) {
-      setMessage({ text: err.message || 'Error updating status', type: 'error' });
+      setMessage({ text: err.message || 'Error updating candidate status.', type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Delete Candidate Confirmation handler
+  const handleDeleteCandidateConfirm = async () => {
+    if (!selectedElection || !candidateToDelete) return;
+    if (['OPEN', 'CLOSED', 'RESULTS_PUBLISHED'].includes(selectedElection.status)) {
+      setMessage({ text: `Cannot delete candidates while election is in ${selectedElection.status} status.`, type: 'error' });
+      setCandidateToDelete(null);
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await electionService.deleteCandidate(selectedElection.id, candidateToDelete.id);
+      if (res.success) {
+        setMessage({ text: `Candidate "${candidateToDelete.full_name}" was successfully removed.`, type: 'success' });
+        setCandidateToDelete(null);
+        loadElectionDetails(selectedElection.id);
+      } else {
+        setMessage({ text: res.message || 'Failed to delete candidate.', type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Error deleting candidate.', type: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -441,31 +667,64 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2.5">
+            {elections.length > 1 && (
+              <select
+                value={selectedElection?.id || ''}
+                onChange={(e) => {
+                  const found = elections.find(el => el.id === e.target.value);
+                  if (found) {
+                    setSelectedElection(found);
+                    loadElectionDetails(found.id);
+                  }
+                }}
+                className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                {elections.map((el) => (
+                  <option key={el.id} value={el.id}>
+                    {el.title} ({el.status})
+                  </option>
+                ))}
+              </select>
+            )}
+
             <button
-              onClick={() => {
-                if (selectedElection) {
-                  setTargetStatus(selectedElection.status);
-                  setShowStatusModal(true);
-                }
-              }}
+              onClick={() => setShowCreateElectionModal(true)}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-1.5"
             >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Change Status</span>
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create Election</span>
             </button>
 
-            <button
-              onClick={() => setShowEditConfigModal(true)}
-              disabled={selectedElection?.status === 'OPEN'}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
-              title={selectedElection?.status === 'OPEN' ? 'Cannot edit config while voting is OPEN' : 'Edit Rules and Dates'}
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Configuration</span>
-            </button>
+            {selectedElection && (
+              <button
+                onClick={() => {
+                  setTargetStatus(selectedElection.status);
+                  setShowStatusModal(true);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-slate-700 transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Change Status</span>
+              </button>
+            )}
+
+            {selectedElection && (
+              <button
+                onClick={() => setShowEditConfigModal(true)}
+                disabled={selectedElection.status === 'OPEN'}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                title={selectedElection.status === 'OPEN' ? 'Cannot edit config while voting is OPEN' : 'Edit Rules and Dates'}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Configuration</span>
+              </button>
+            )}
 
             <button
-              onClick={() => selectedElection && loadElectionDetails(selectedElection.id)}
+              onClick={() => {
+                loadElections();
+                if (selectedElection) loadElectionDetails(selectedElection.id);
+              }}
               className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors"
               title="Refresh Data"
             >
@@ -504,8 +763,45 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
         </div>
       </div>
 
-      {/* Sub-Navigation Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto pb-1 text-xs font-semibold">
+      {/* Sub-Navigation Tabs & Views or Empty State */}
+      {!selectedElection && !loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs space-y-4 max-w-lg mx-auto my-6">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-100">
+            <Vote className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-slate-900">No Election Configured Yet</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Create an official election to configure executive offices, review and approve candidate nominations, and initiate secure voting.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreateElectionModal(true)}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs inline-flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create First Election</span>
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Sub-Navigation Tabs */}
+          <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto pb-1 text-xs font-semibold">
+        <button
+          onClick={() => setSubTab('candidates')}
+          className={`px-4 py-2.5 rounded-t-xl transition-colors whitespace-nowrap flex items-center gap-2 ${
+            subTab === 'candidates'
+              ? 'bg-white text-emerald-700 border-t-2 border-emerald-600 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Candidates</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+            {candidates.length}
+          </span>
+        </button>
+
         <button
           onClick={() => setSubTab('overview')}
           className={`px-4 py-2.5 rounded-t-xl transition-colors whitespace-nowrap flex items-center gap-2 ${
@@ -516,18 +812,6 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
         >
           <Sliders className="w-4 h-4" />
           <span>Overview & Rules</span>
-        </button>
-
-        <button
-          onClick={() => setSubTab('positions_candidates')}
-          className={`px-4 py-2.5 rounded-t-xl transition-colors whitespace-nowrap flex items-center gap-2 ${
-            subTab === 'positions_candidates'
-              ? 'bg-white text-emerald-700 border-t-2 border-emerald-600 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Positions & Candidates ({candidates.length})</span>
         </button>
 
         <button
@@ -641,127 +925,336 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
       )}
 
       {/* ========================================================= */}
-      {/* SUB-TAB 2: POSITIONS & CANDIDATES */}
+      {/* SUB-TAB: CANDIDATES MANAGEMENT */}
       {/* ========================================================= */}
-      {subTab === 'positions_candidates' && (
+      {subTab === 'candidates' && (
         <div className="space-y-6">
-          {/* Header Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Positions & Candidate Roster</h3>
-              <p className="text-xs text-slate-500">Configure executive offices and approve candidate nominations.</p>
+          {/* Header & Primary Actions */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-bold text-slate-900">Candidates</h3>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {candidates.length} Registered
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Official Candidate Register for Finger of God Estate Executive Election 2026. Review nomination credentials, photographs, manifestos, and certify candidate status for the official ballot.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAddPositionModal(true)}
+                  className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Position</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const firstPos = [...positions].sort((a, b) => a.display_order - b.display_order)[0];
+                    setNewCandidate({
+                      position_id: firstPos?.id || '',
+                      full_name: '',
+                      photograph_url: '',
+                      biography: '',
+                      candidate_statement: '',
+                      display_order: 1
+                    });
+                    setShowAddCandidateModal(true);
+                  }}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Candidate</span>
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowAddPositionModal(true)}
-                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Position</span>
-              </button>
-              <button
-                onClick={() => setShowAddCandidateModal(true)}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Candidate</span>
-              </button>
+
+            {/* Filter & Search Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search candidate name, bio, or vision..."
+                  value={candidateSearchQuery}
+                  onChange={(e) => setCandidateSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <select
+                  value={candidateFilterPosition}
+                  onChange={(e) => setCandidateFilterPosition(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All 9 Executive Positions</option>
+                  {[...positions]
+                    .sort((a, b) => a.display_order - b.display_order)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.display_order}. {p.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={candidateFilterStatus}
+                  onChange={(e) => setCandidateFilterStatus(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="all">All Candidate Statuses</option>
+                  <option value="APPROVED">Approved (Appears on Ballot)</option>
+                  <option value="PENDING">Pending Review</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="WITHDRAWN">Withdrawn</option>
+                </select>
+
+                {(candidateSearchQuery || candidateFilterPosition !== 'all' || candidateFilterStatus !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setCandidateSearchQuery('');
+                      setCandidateFilterPosition('all');
+                      setCandidateFilterStatus('all');
+                    }}
+                    className="p-2 text-slate-500 hover:text-slate-800 bg-slate-100 rounded-xl text-xs font-medium shrink-0"
+                    title="Clear Filters"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Positions & Candidates List */}
           <div className="space-y-6">
-            {positions.map((pos) => {
-              const posCandidates = candidates.filter(c => c.position_id === pos.id);
+            {[...positions]
+              .sort((a, b) => a.display_order - b.display_order)
+              .filter(pos => candidateFilterPosition === 'all' || candidateFilterPosition === pos.id)
+              .map((pos) => {
+                const posCandidates = candidates
+                  .filter(c => c.position_id === pos.id)
+                  .filter(c => candidateFilterStatus === 'all' || c.status === candidateFilterStatus)
+                  .filter(c => {
+                    if (!candidateSearchQuery.trim()) return true;
+                    const q = candidateSearchQuery.toLowerCase();
+                    return (
+                      c.full_name.toLowerCase().includes(q) ||
+                      (c.biography && c.biography.toLowerCase().includes(q)) ||
+                      (c.candidate_statement && c.candidate_statement.toLowerCase().includes(q))
+                    );
+                  })
+                  .sort((a, b) => a.display_order - b.display_order);
 
-              return (
-                <div key={pos.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-400">#{pos.display_order}</span>
-                        <h4 className="text-base font-bold text-slate-900">{pos.title}</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          pos.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          {pos.active ? 'ACTIVE' : 'INACTIVE'}
-                        </span>
+                const totalInPos = candidates.filter(c => c.position_id === pos.id).length;
+
+                return (
+                  <div key={pos.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                    {/* Position Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-400">#{pos.display_order}</span>
+                          <h4 className="text-base font-bold text-slate-900">{pos.title}</h4>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            pos.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {pos.active ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                          <span className="text-[10px] font-medium text-slate-400">
+                            (Max selections: {pos.max_selections || 1})
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{pos.description}</p>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{pos.description}</p>
-                    </div>
-                    <span className="text-xs font-medium text-slate-500">
-                      {posCandidates.length} Nominee{posCandidates.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
 
-                  {/* Candidates in this position */}
-                  {posCandidates.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic py-2">
-                      No candidates registered for this position yet.
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-500 mr-1">
+                          {totalInPos} Nominee{totalInPos === 1 ? '' : 's'}
+                        </span>
+                        <button
+                          onClick={() => handleOpenAddCandidateForPosition(pos.id)}
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Candidate</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingPosition(pos);
+                            setShowEditPositionModal(true);
+                          }}
+                          disabled={selectedElection?.status === 'OPEN' || selectedElection?.status === 'RESULTS_PUBLISHED'}
+                          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors disabled:opacity-40"
+                          title={selectedElection?.status === 'OPEN' ? 'Cannot edit while voting is OPEN' : 'Edit Position'}
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleTogglePositionActive(pos)}
+                          disabled={selectedElection?.status === 'OPEN' || selectedElection?.status === 'RESULTS_PUBLISHED' || actionLoading}
+                          className={`text-[11px] font-semibold px-2 py-1 rounded-lg border transition-colors disabled:opacity-40 ${
+                            pos.active
+                              ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                              : 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                          title={selectedElection?.status === 'OPEN' ? 'Cannot change status while voting is OPEN' : ''}
+                        >
+                          {pos.active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {posCandidates.map((cand) => (
-                        <div key={cand.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-between space-y-3">
-                          <div className="flex items-start gap-3">
-                            {cand.photograph_url ? (
-                              <img src={cand.photograph_url} alt={cand.full_name} className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
-                            ) : (
-                              <div className="w-12 h-12 rounded-xl bg-slate-200 text-slate-500 font-bold flex items-center justify-center">
-                                {cand.full_name.charAt(0)}
+
+                    {/* Candidates in this position */}
+                    {posCandidates.length === 0 ? (
+                      <div className="p-6 bg-slate-50/60 rounded-xl border border-dashed border-slate-200 text-center space-y-2">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h5 className="text-xs font-bold text-slate-700">No candidates added yet for {pos.title}</h5>
+                          <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                            The executive office of {pos.title} currently has no registered nominees.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenAddCandidateForPosition(pos.id)}
+                          className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Register Candidate for {pos.title}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {posCandidates.map((cand) => (
+                          <div key={cand.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-xs flex flex-col justify-between space-y-3">
+                            <div className="flex items-start gap-3">
+                              {cand.photograph_url ? (
+                                <img
+                                  src={cand.photograph_url}
+                                  alt={cand.full_name}
+                                  className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+                                />
+                              ) : (
+                                <div className="w-14 h-14 rounded-xl bg-slate-100 text-slate-600 font-bold text-lg flex items-center justify-center border border-slate-200 shrink-0">
+                                  {cand.full_name.charAt(0)}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[10px] font-bold text-slate-400">Order #{cand.display_order}</span>
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    cand.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    cand.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                    cand.status === 'WITHDRAWN' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                    'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                    {cand.status === 'APPROVED' && <Check className="w-2.5 h-2.5" />}
+                                    {cand.status === 'PENDING' && <Clock className="w-2.5 h-2.5" />}
+                                    {cand.status}
+                                  </span>
+                                </div>
+                                <h5 className="text-sm font-bold text-slate-900 truncate mt-0.5" title={cand.full_name}>
+                                  {cand.full_name}
+                                </h5>
+                                <span className="text-[11px] font-medium text-emerald-700 block truncate">
+                                  {pos.title}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Biography */}
+                            {cand.biography && (
+                              <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 line-clamp-2">
+                                <span className="font-semibold text-slate-700 block text-[10px] uppercase tracking-wider mb-0.5">Bio</span>
+                                {cand.biography}
                               </div>
                             )}
-                            <div className="min-w-0 flex-1">
-                              <h5 className="text-xs sm:text-sm font-bold text-slate-900 truncate">{cand.full_name}</h5>
-                              <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
-                                cand.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' :
-                                cand.status === 'REJECTED' ? 'bg-rose-100 text-rose-800' :
-                                cand.status === 'WITHDRAWN' ? 'bg-slate-200 text-slate-700' :
-                                'bg-amber-100 text-amber-800'
-                              }`}>
-                                {cand.status}
-                              </span>
+
+                            {/* Manifesto */}
+                            {cand.candidate_statement && (
+                              <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="font-semibold text-slate-700 text-[10px] uppercase tracking-wider">Manifesto</span>
+                                  <button
+                                    onClick={() => setViewingManifestoCandidate(cand)}
+                                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700"
+                                  >
+                                    Read Full
+                                  </button>
+                                </div>
+                                <p className="line-clamp-2 italic text-slate-500 text-[11px]">
+                                  &ldquo;{cand.candidate_statement}&rdquo;
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Actions Bar */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingCandidate(cand);
+                                    setShowEditCandidateModal(true);
+                                  }}
+                                  disabled={selectedElection?.status === 'OPEN' || selectedElection?.status === 'RESULTS_PUBLISHED'}
+                                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors disabled:opacity-40"
+                                  title={selectedElection?.status === 'OPEN' ? 'Cannot edit while voting is OPEN' : 'Edit Candidate'}
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setCandidateToDelete(cand)}
+                                  disabled={selectedElection?.status === 'OPEN' || selectedElection?.status === 'RESULTS_PUBLISHED'}
+                                  className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors disabled:opacity-40"
+                                  title={selectedElection?.status === 'OPEN' ? 'Cannot delete while voting is OPEN' : 'Delete Candidate'}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                {cand.status !== 'APPROVED' && (
+                                  <button
+                                    onClick={() => handleCandidateStatus(cand.id, 'APPROVED')}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors"
+                                  >
+                                    Approve
+                                  </button>
+                                )}
+                                {cand.status !== 'REJECTED' && (
+                                  <button
+                                    onClick={() => handleCandidateStatus(cand.id, 'REJECTED')}
+                                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-semibold rounded-lg transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                                {cand.status !== 'WITHDRAWN' && (
+                                  <button
+                                    onClick={() => handleCandidateStatus(cand.id, 'WITHDRAWN')}
+                                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors"
+                                  >
+                                    Withdraw
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
-
-                          <p className="text-xs text-slate-600 line-clamp-2">
-                            {cand.biography || cand.candidate_statement}
-                          </p>
-
-                          {/* Candidate Actions */}
-                          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200 text-[11px] font-semibold">
-                            {cand.status !== 'APPROVED' && (
-                              <button
-                                onClick={() => handleCandidateStatus(cand.id, 'APPROVED')}
-                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex-1"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {cand.status !== 'REJECTED' && (
-                              <button
-                                onClick={() => handleCandidateStatus(cand.id, 'REJECTED')}
-                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors"
-                              >
-                                Reject
-                              </button>
-                            )}
-                            {cand.status !== 'WITHDRAWN' && (
-                              <button
-                                onClick={() => handleCandidateStatus(cand.id, 'WITHDRAWN')}
-                                className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                              >
-                                Withdraw
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
@@ -1049,6 +1542,8 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
           </div>
         </div>
       )}
+      </>
+      )}
 
       {/* ========================================================= */}
       {/* MODALS */}
@@ -1173,71 +1668,202 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
       {/* Add Candidate Modal */}
       {showAddCandidateModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-slate-900">Register Election Candidate</h3>
+          <div className="w-full max-w-xl bg-white rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Add Candidate</h3>
+                  <p className="text-[11px] text-slate-500">Register candidate profile, photograph, and manifesto for the official ballot.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddCandidateModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             
-            <form onSubmit={handleAddCandidate} className="space-y-3">
+            <form onSubmit={handleAddCandidate} className="space-y-4 text-xs">
+              {/* Position Selection */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Select Position:</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Election Position *
+                </label>
                 <select
                   value={newCandidate.position_id}
-                  onChange={(e) => setNewCandidate({ ...newCandidate, position_id: e.target.value })}
+                  onChange={(e) => {
+                    const posId = e.target.value;
+                    const existingInPos = candidates.filter(c => c.position_id === posId);
+                    setNewCandidate({
+                      ...newCandidate,
+                      position_id: posId,
+                      display_order: existingInPos.length + 1
+                    });
+                  }}
                   required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="">-- Choose Position --</option>
-                  {positions.map(p => (
-                    <option key={p.id} value={p.id}>{p.title}</option>
-                  ))}
+                  <option value="">-- Select Election Position (1 of 9) --</option>
+                  {[...positions]
+                    .sort((a, b) => a.display_order - b.display_order)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>
+                        #{p.display_order} - {p.title}
+                      </option>
+                    ))}
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Candidate Full Name:</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Chief John Doe"
-                  value={newCandidate.full_name}
-                  onChange={(e) => setNewCandidate({ ...newCandidate, full_name: e.target.value })}
-                  required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
-                />
+              {/* Full Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Candidate Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Chief Dr. Emmanuel Okafor"
+                    value={newCandidate.full_name}
+                    onChange={(e) => setNewCandidate({ ...newCandidate, full_name: e.target.value })}
+                    required
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Ballot Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={newCandidate.display_order}
+                    onChange={(e) => setNewCandidate({ ...newCandidate, display_order: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
               </div>
 
+              {/* Photograph Upload & Selection Area */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Photograph URL (optional):</label>
-                <input
-                  type="url"
-                  placeholder="https://example.com/photo.jpg"
-                  value={newCandidate.photograph_url}
-                  onChange={(e) => setNewCandidate({ ...newCandidate, photograph_url: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
-                />
+                <label className="font-bold text-slate-700 block mb-1">
+                  Candidate Photograph (Official Portrait)
+                </label>
+                {newCandidate.photograph_url ? (
+                  <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <img
+                      src={newCandidate.photograph_url}
+                      alt="Candidate Preview"
+                      className="w-16 h-16 rounded-xl object-cover border border-slate-300 shadow-2xs shrink-0"
+                    />
+                    <div className="space-y-1 min-w-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <Check className="w-3 h-3" /> Photograph Attached
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer">
+                          Change Photo
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePhotoUpload(file, false);
+                            }}
+                          />
+                        </label>
+                        <span className="text-slate-300">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setNewCandidate({ ...newCandidate, photograph_url: '' })}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                        >
+                          Remove Photo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoInputMode('upload')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors ${photoInputMode === 'upload' ? 'bg-slate-200 text-slate-900 font-bold' : 'hover:bg-slate-100'}`}
+                      >
+                        Upload Image File
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoInputMode('url')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors ${photoInputMode === 'url' ? 'bg-slate-200 text-slate-900 font-bold' : 'hover:bg-slate-100'}`}
+                      >
+                        Enter Image URL
+                      </button>
+                    </div>
+
+                    {photoInputMode === 'upload' ? (
+                      <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-xl cursor-pointer transition-colors group">
+                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-emerald-600 mb-1.5 transition-colors" />
+                        <span className="font-semibold text-slate-700 group-hover:text-emerald-700">Click or drag image file here</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, or WEBP (Max file size 2MB)</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file, false);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <input
+                        type="url"
+                        placeholder="https://example.com/portraits/candidate.jpg"
+                        value={newCandidate.photograph_url}
+                        onChange={(e) => setNewCandidate({ ...newCandidate, photograph_url: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    )}
+                  </div>
+                )}
               </div>
 
+              {/* Biography */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Biography & Track Record:</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Candidate Biography (Short Background & Career Record)
+                </label>
                 <textarea
-                  placeholder="Brief background..."
+                  placeholder="Enter candidate's professional background, residency tenure, and prior community service in Finger of God Estate..."
                   value={newCandidate.biography}
                   onChange={(e) => setNewCandidate({ ...newCandidate, biography: e.target.value })}
                   rows={2}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
+              {/* Manifesto / Vision Statement */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Candidate Manifesto / Vision Statement:</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Manifesto / Vision Statement (Pledges to Residents)
+                </label>
                 <textarea
-                  placeholder="My pledge to the estate community..."
+                  placeholder="Enter candidate's key campaign pledges, strategic priorities, security & infrastructure plans for the estate community..."
                   value={newCandidate.candidate_statement}
                   onChange={(e) => setNewCandidate({ ...newCandidate, candidate_statement: e.target.value })}
-                  rows={3}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  rows={4}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              {/* Form Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowAddCandidateModal(false)}
@@ -1248,9 +1874,10 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
                 >
-                  Save Candidate
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{actionLoading ? 'Saving...' : 'Save Candidate'}</span>
                 </button>
               </div>
             </form>
@@ -1376,6 +2003,531 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-xs"
               >
                 {actionLoading ? 'Publishing...' : 'Yes, Publish Official Results'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Election Modal */}
+      {showCreateElectionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <Vote className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Create New Estate Election</h3>
+                  <p className="text-[11px] text-slate-500">Initialize election metadata, timetable, and constitutional rules.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateElectionModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateElection} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1">Election Title / Name *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Finger of God Estate Executive Election 2026"
+                    value={createElectionForm.title}
+                    onChange={(e) => setCreateElectionForm({ ...createElectionForm, title: e.target.value })}
+                    required
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Election Year</label>
+                  <input
+                    type="number"
+                    min={2026}
+                    value={createElectionForm.year}
+                    onChange={(e) => setCreateElectionForm({ ...createElectionForm, year: parseInt(e.target.value, 10) || 2026 })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Description / Purpose</label>
+                <textarea
+                  placeholder="Official executive council elections for Finger of God Estate, Phase 1, Iyiaba, Asaba..."
+                  value={createElectionForm.description}
+                  onChange={(e) => setCreateElectionForm({ ...createElectionForm, description: e.target.value })}
+                  rows={2}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Opening Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={createElectionForm.opening_at ? new Date(createElectionForm.opening_at).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => setCreateElectionForm({ ...createElectionForm, opening_at: new Date(e.target.value).toISOString() })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Closing Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={createElectionForm.closing_at ? new Date(createElectionForm.closing_at).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => setCreateElectionForm({ ...createElectionForm, closing_at: new Date(e.target.value).toISOString() })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Constitutional Tie-Resolution Mandate</label>
+                <textarea
+                  value={createElectionForm.tie_resolution_rule}
+                  onChange={(e) => setCreateElectionForm({ ...createElectionForm, tie_resolution_rule: e.target.value })}
+                  rows={2}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">General Electoral Rules & Guidelines</label>
+                <textarea
+                  value={createElectionForm.election_rules}
+                  onChange={(e) => setCreateElectionForm({ ...createElectionForm, election_rules: e.target.value })}
+                  rows={3}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateElectionModal(false)}
+                  className="px-4 py-2 border border-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{actionLoading ? 'Creating...' : 'Create Election'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Position Modal */}
+      {showEditPositionModal && editingPosition && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900">Edit Position</h3>
+
+            <form onSubmit={handleEditPosition} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Position Title:</label>
+                <input
+                  type="text"
+                  value={editingPosition.title}
+                  onChange={(e) => setEditingPosition({ ...editingPosition, title: e.target.value })}
+                  required
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Mandate & Description:</label>
+                <textarea
+                  value={editingPosition.description || ''}
+                  onChange={(e) => setEditingPosition({ ...editingPosition, description: e.target.value })}
+                  rows={3}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Display Order:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingPosition.display_order}
+                    onChange={(e) => setEditingPosition({ ...editingPosition, display_order: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Max Selections:</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={editingPosition.max_selections || 1}
+                    onChange={(e) => setEditingPosition({ ...editingPosition, max_selections: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditPositionModal(false);
+                    setEditingPosition(null);
+                  }}
+                  className="px-4 py-2 border border-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl"
+                >
+                  {actionLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Candidate Modal */}
+      {showEditCandidateModal && editingCandidate && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Candidate Details</h3>
+                  <p className="text-[11px] text-slate-500">Update candidate credentials, photograph, biography, or manifesto.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditCandidateModal(false);
+                  setEditingCandidate(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditCandidate} className="space-y-4 text-xs">
+              {/* Position */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Election Position *
+                </label>
+                <select
+                  value={editingCandidate.position_id}
+                  onChange={(e) => setEditingCandidate({ ...editingCandidate, position_id: e.target.value })}
+                  required
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {[...positions]
+                    .sort((a, b) => a.display_order - b.display_order)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>
+                        #{p.display_order} - {p.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Full Name & Order */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Candidate Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingCandidate.full_name}
+                    onChange={(e) => setEditingCandidate({ ...editingCandidate, full_name: e.target.value })}
+                    required
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingCandidate.display_order}
+                    onChange={(e) => setEditingCandidate({ ...editingCandidate, display_order: parseInt(e.target.value, 10) || 1 })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Photograph Upload & Selection Area */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Candidate Photograph (Official Portrait)
+                </label>
+                {editingCandidate.photograph_url ? (
+                  <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <img
+                      src={editingCandidate.photograph_url}
+                      alt="Candidate Preview"
+                      className="w-16 h-16 rounded-xl object-cover border border-slate-300 shadow-2xs shrink-0"
+                    />
+                    <div className="space-y-1 min-w-0">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        <Check className="w-3 h-3" /> Photograph Attached
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer">
+                          Change Photo
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handlePhotoUpload(file, true);
+                            }}
+                          />
+                        </label>
+                        <span className="text-slate-300">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCandidate({ ...editingCandidate, photograph_url: '' })}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                        >
+                          Remove Photo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+                      <button
+                        type="button"
+                        onClick={() => setEditPhotoInputMode('upload')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors ${editPhotoInputMode === 'upload' ? 'bg-slate-200 text-slate-900 font-bold' : 'hover:bg-slate-100'}`}
+                      >
+                        Upload Image File
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditPhotoInputMode('url')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors ${editPhotoInputMode === 'url' ? 'bg-slate-200 text-slate-900 font-bold' : 'hover:bg-slate-100'}`}
+                      >
+                        Enter Image URL
+                      </button>
+                    </div>
+
+                    {editPhotoInputMode === 'upload' ? (
+                      <label className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-xl cursor-pointer transition-colors group">
+                        <Upload className="w-6 h-6 text-slate-400 group-hover:text-emerald-600 mb-1.5 transition-colors" />
+                        <span className="font-semibold text-slate-700 group-hover:text-emerald-700">Click or drag image file here</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, or WEBP (Max file size 2MB)</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePhotoUpload(file, true);
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <input
+                        type="url"
+                        placeholder="https://example.com/portraits/candidate.jpg"
+                        value={editingCandidate.photograph_url || ''}
+                        onChange={(e) => setEditingCandidate({ ...editingCandidate, photograph_url: e.target.value })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Biography */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Candidate Biography (Short Background & Career Record)
+                </label>
+                <textarea
+                  value={editingCandidate.biography || ''}
+                  onChange={(e) => setEditingCandidate({ ...editingCandidate, biography: e.target.value })}
+                  rows={2}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Manifesto */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Manifesto / Vision Statement (Pledges to Residents)
+                </label>
+                <textarea
+                  value={editingCandidate.candidate_statement || ''}
+                  onChange={(e) => setEditingCandidate({ ...editingCandidate, candidate_statement: e.target.value })}
+                  rows={4}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Form Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditCandidateModal(false);
+                    setEditingCandidate(null);
+                  }}
+                  className="px-4 py-2 border border-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{actionLoading ? 'Saving...' : 'Save Changes'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Candidate Confirmation Modal */}
+      {candidateToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900">Remove Candidate?</h3>
+              <p className="text-xs text-slate-600">
+                Are you sure you want to permanently remove <strong className="text-slate-900 font-semibold">{candidateToDelete.full_name}</strong> from the official election roster? This cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCandidateToDelete(null)}
+                className="px-4 py-2 border border-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCandidateConfirm}
+                disabled={actionLoading}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{actionLoading ? 'Deleting...' : 'Yes, Remove Candidate'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Manifesto Viewer Modal */}
+      {viewingManifestoCandidate && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3.5">
+                {viewingManifestoCandidate.photograph_url ? (
+                  <img
+                    src={viewingManifestoCandidate.photograph_url}
+                    alt={viewingManifestoCandidate.full_name}
+                    className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-slate-100 text-slate-600 font-bold text-xl flex items-center justify-center border border-slate-200 shrink-0">
+                    {viewingManifestoCandidate.full_name.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-slate-900">{viewingManifestoCandidate.full_name}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      viewingManifestoCandidate.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      viewingManifestoCandidate.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                      viewingManifestoCandidate.status === 'WITHDRAWN' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                      'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {viewingManifestoCandidate.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                    Nominee for {positions.find(p => p.id === viewingManifestoCandidate.position_id)?.title || 'Executive Office'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingManifestoCandidate(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Biography */}
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Biography & Track Record</span>
+              </h4>
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                {viewingManifestoCandidate.biography || 'No biography recorded for this candidate.'}
+              </div>
+            </div>
+
+            {/* Manifesto */}
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Official Manifesto & Vision Statement</span>
+              </h4>
+              <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100 text-xs text-slate-800 leading-relaxed whitespace-pre-line font-medium">
+                {viewingManifestoCandidate.candidate_statement || 'No manifesto submitted for this candidate.'}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setViewingManifestoCandidate(null)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl"
+              >
+                Close
               </button>
             </div>
           </div>

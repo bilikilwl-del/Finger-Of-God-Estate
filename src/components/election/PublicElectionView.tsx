@@ -61,6 +61,15 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
   // Active position tab filter for viewing candidates
   const [selectedPositionId, setSelectedPositionId] = useState<string>('all');
 
+  // Live countdown state for Scheduled election (Days, Hours, Minutes, Seconds)
+  const [countdown, setCountdown] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+    isZero: boolean;
+  }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isZero: false });
+
   const loadElectionData = useCallback(async () => {
     try {
       setError('');
@@ -71,14 +80,22 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
         setCandidates(data.candidates || []);
 
         // If results published, fetch results
-        if (data.election.status === 'RESULTS_PUBLISHED') {
+        if (data.election.status === 'RESULTS_PUBLISHED' || data.election.calculated_status === 'RESULTS_PUBLISHED') {
           const resData = await electionService.getElectionResults(data.election.id);
           if (resData.success && resData.results) {
             setResults(resData.results);
           }
         }
       } else {
-        setError(data.message || 'No election is currently scheduled.');
+        // Fallback: Check official election by ID
+        const fallback = await electionService.getElectionById('aee791a1-d88a-4292-b0d2-0e5f68ea7de8');
+        if (fallback.success && fallback.election) {
+          setElection(fallback.election);
+          setPositions(fallback.positions || []);
+          setCandidates(fallback.candidates || []);
+        } else {
+          setError(data.message || fallback.message || 'No election scheduled at this time.');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Network error fetching election details.');
@@ -92,58 +109,173 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
     loadElectionData();
   }, [loadElectionData]);
 
+  // Live countdown timer: recalculates remaining Days, Hours, Minutes, Seconds every 1 second
+  // Stops timer, cleans up on unmount, and transitions UI to Voting Open when reaching zero
+  useEffect(() => {
+    if (!election?.opening_at) return;
+
+    const targetTime = new Date(election.opening_at).getTime();
+    if (isNaN(targetTime)) return;
+
+    const serverOffset = election.server_time ? (new Date(election.server_time).getTime() - Date.now()) : 0;
+
+    const updateCountdown = () => {
+      const currentRefTime = Date.now() + serverOffset;
+      const diff = targetTime - currentRefTime;
+
+      // Prevent negative values and handle zero transition (00 Days 00 Hours 00 Minutes 00 Seconds)
+      if (diff <= 0) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0, isZero: true });
+        // Refresh election status immediately so UI transitions from Scheduled to Voting Open
+        loadElectionData();
+        return false;
+      }
+
+      const totalSeconds = Math.floor(diff / 1000);
+      const seconds = totalSeconds % 60;
+      const totalMinutes = Math.floor(totalSeconds / 60);
+      const minutes = totalMinutes % 60;
+      const totalHours = Math.floor(totalMinutes / 60);
+      const hours = totalHours % 24;
+      const days = Math.floor(totalHours / 24);
+
+      setCountdown({
+        days: Math.max(0, days),
+        hours: Math.max(0, hours),
+        minutes: Math.max(0, minutes),
+        seconds: Math.max(0, seconds),
+        isZero: false
+      });
+      return true;
+    };
+
+    // Calculate immediately on mount / election load
+    const isRunning = updateCountdown();
+    if (!isRunning) return;
+
+    // Update countdown every 1 second (1000ms)
+    const intervalId = setInterval(() => {
+      const active = updateCountdown();
+      if (!active) {
+        clearInterval(intervalId);
+      }
+    }, 1000);
+
+    // Clean up timer on unmount to prevent memory leaks or multiple timers
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [election?.opening_at, election?.server_time, loadElectionData]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadElectionData();
   };
 
-  // Helper for status badge styling
-  const getStatusBadge = (status: ElectionStatus) => {
-    switch (status) {
-      case 'OPEN':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 border border-emerald-500/30">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            VOTING ACTIVE & OPEN
-          </span>
-        );
-      case 'RESULTS_PUBLISHED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-700 border border-purple-500/30">
-            <Trophy className="w-3.5 h-3.5 text-purple-600" />
-            OFFICIAL RESULTS CERTIFIED
-          </span>
-        );
-      case 'UPCOMING':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-700 border border-blue-500/30">
-            <Calendar className="w-3.5 h-3.5 text-blue-600" />
-            UPCOMING ELECTION
-          </span>
-        );
-      case 'CLOSED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-700 border border-amber-500/30">
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
-            VOTING CONCLUDED
-          </span>
-        );
-      case 'PAUSED':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-700 border border-rose-500/30">
-            <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-            VOTING PAUSED
-          </span>
-        );
-      case 'DRAFT':
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-500/10 text-slate-700 border border-slate-500/30">
-            DRAFT STAGE
-          </span>
-        );
+  // Helper to format timestamps in WAT (West Africa Time, UTC+1)
+  const formatElectionWat = (dateStr?: string): string => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      const datePart = date.toLocaleDateString('en-US', {
+        timeZone: 'Africa/Lagos',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = date.toLocaleTimeString('en-US', {
+        timeZone: 'Africa/Lagos',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+      return `${datePart} – ${timePart} WAT`;
+    } catch {
+      return dateStr;
     }
   };
+
+  // Helper for dynamic election state based on database timestamps & server time
+  const getElectionState = () => {
+    if (!election) return null;
+
+    const referenceTime = election.server_time ? new Date(election.server_time) : new Date();
+    const startsAt = new Date(election.opening_at);
+    const endsAt = new Date(election.closing_at);
+
+    if (election.status === 'RESULTS_PUBLISHED' || election.calculated_status === 'RESULTS_PUBLISHED') {
+      return {
+        key: 'RESULTS_PUBLISHED' as const,
+        label: 'Status: Official Results Certified',
+        statusName: 'Official Results Certified',
+        isVotingOpen: false,
+        isScheduled: false,
+        isClosed: true,
+        badgeText: 'RESULTS CERTIFIED',
+        badgeBg: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+        dotClass: 'bg-purple-400'
+      };
+    }
+
+    if (election.status === 'PAUSED' || election.calculated_status === 'PAUSED') {
+      return {
+        key: 'PAUSED' as const,
+        label: 'Status: Voting Paused',
+        statusName: 'Voting Paused',
+        isVotingOpen: false,
+        isScheduled: false,
+        isClosed: false,
+        badgeText: 'VOTING PAUSED',
+        badgeBg: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+        dotClass: 'bg-rose-400'
+      };
+    }
+
+    // Dynamic database timestamp comparison:
+    if (referenceTime < startsAt) {
+      return {
+        key: 'SCHEDULED' as const,
+        label: 'Status: Scheduled — Voting Not Yet Open',
+        statusName: 'Scheduled — Voting Not Yet Open',
+        isVotingOpen: false,
+        isScheduled: true,
+        isClosed: false,
+        badgeText: 'SCHEDULED — VOTING NOT YET OPEN',
+        badgeBg: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+        dotClass: 'bg-amber-400'
+      };
+    }
+
+    if (referenceTime >= startsAt && referenceTime < endsAt) {
+      return {
+        key: 'OPEN' as const,
+        label: 'Status: Voting Open',
+        statusName: 'Voting Open',
+        isVotingOpen: true,
+        isScheduled: false,
+        isClosed: false,
+        badgeText: 'VOTING OPEN',
+        badgeBg: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50',
+        dotClass: 'bg-emerald-400 animate-pulse'
+      };
+    }
+
+    return {
+      key: 'CLOSED' as const,
+      label: 'Status: Voting Closed',
+      statusName: 'Voting Closed',
+      isVotingOpen: false,
+      isScheduled: false,
+      isClosed: true,
+      badgeText: 'VOTING CLOSED',
+      badgeBg: 'bg-slate-700/60 text-slate-300 border-slate-600',
+      dotClass: 'bg-slate-400'
+    };
+  };
+
+  const electionState = getElectionState();
+  const votingOpensDisplay = election?.voting_opens_display || formatElectionWat(election?.opening_at);
+  const votingClosesDisplay = election?.voting_closes_display || formatElectionWat(election?.closing_at);
 
   const activePositions = positions
     .filter(p => p.active)
@@ -180,39 +312,107 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-md border border-emerald-500/30">
                   Finger of God Estate · Electoral Committee
                 </span>
-                {election && getStatusBadge(election.status)}
+                {electionState && (
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${electionState.badgeBg}`}>
+                    <span className={`w-2 h-2 rounded-full ${electionState.dotClass}`} />
+                    {electionState.badgeText}
+                  </span>
+                )}
               </div>
 
               <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight">
-                {election ? election.title : 'Executive Committee Election 2026'}
+                {election ? election.title : 'Finger of God Estate Executive Election 2026'}
               </h1>
 
               <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
                 {election?.description || 'Democratic leadership election for Finger of God Estate. Accredited property secret ballot system.'}
               </p>
 
-              {/* Security & Key Metrics Row */}
-              <div className="pt-2 flex flex-wrap items-center gap-4 sm:gap-6 text-xs text-slate-300">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Accreditation: Plots 001–300</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Secret & Anonymous Ballot</span>
-                </div>
-                {election?.opening_at && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>Closes: {new Date(election.closing_at).toLocaleDateString()}</span>
+              {/* Official Election Schedule & Dynamic Status Card */}
+              {election && (
+                <div className="pt-2">
+                  <div className="bg-slate-800/95 border border-slate-700/80 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5 backdrop-blur-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-700/60 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                          Official Election Timetable
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold">
+                        <span className="text-slate-400">Current </span>
+                        <span className={electionState?.isVotingOpen ? 'text-emerald-400' : electionState?.isScheduled ? 'text-amber-400' : 'text-slate-300'}>
+                          {electionState?.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                      <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-3 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Opening Date & Time
+                        </span>
+                        <div className="font-bold text-white flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>Voting opens: {votingOpensDisplay}</span>
+                        </div>
+
+                        {/* Live Countdown Timer under Election Opening Information */}
+                        {electionState?.isScheduled && !countdown.isZero && (
+                          <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                            <span className="text-xs font-bold text-emerald-400 block tracking-wide">
+                              Voting begins in
+                            </span>
+                            <div className="text-xs sm:text-base font-extrabold text-white tracking-wide flex items-center flex-wrap gap-2">
+                              <span className="bg-emerald-950/90 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                                {String(countdown.days).padStart(2, '0')} Days
+                              </span>
+                              <span className="bg-emerald-950/90 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                                {String(countdown.hours).padStart(2, '0')} Hours
+                              </span>
+                              <span className="bg-emerald-950/90 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                                {String(countdown.minutes).padStart(2, '0')} Minutes
+                              </span>
+                              <span className="bg-emerald-950/90 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/30 font-mono">
+                                {String(countdown.seconds).padStart(2, '0')} Seconds
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-3 space-y-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Closing Date & Time
+                        </span>
+                        <div className="font-bold text-white flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>Voting closes: {votingClosesDisplay}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
+                      <div className="flex items-center gap-4">
+                        <span className="flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          Accreditation: Plots 001–300
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                          Secret Anonymous Ballot
+                        </span>
+                      </div>
+                      <span className="text-slate-400">Timezone: Africa/Lagos (WAT, UTC+1)</span>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* Call to action button */}
+            {/* Call to action column */}
             <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-3 shrink-0">
-              {election?.status === 'OPEN' ? (
+              {electionState?.isVotingOpen ? (
                 <button
                   onClick={() => setIsBallotModalOpen(true)}
                   className="w-full sm:w-auto px-7 py-3.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -221,7 +421,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                   <span>Cast Confidential Ballot</span>
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </button>
-              ) : election?.status === 'RESULTS_PUBLISHED' ? (
+              ) : electionState?.key === 'RESULTS_PUBLISHED' ? (
                 <a
                   href="#official-results"
                   className="w-full sm:w-auto px-6 py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
@@ -229,13 +429,44 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                   <Trophy className="w-5 h-5" />
                   <span>View Certified Results</span>
                 </a>
+              ) : electionState?.isScheduled ? (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-amber-200 max-w-xs space-y-2.5">
+                  <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span>Status: Scheduled — Voting Not Yet Open</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    Voting will automatically open on <strong className="text-white">October 24, 2026 at 8:00 AM WAT</strong>.
+                  </p>
+
+                  {/* Live Countdown in Status Callout */}
+                  {!countdown.isZero && (
+                    <div className="bg-slate-900/90 border border-amber-500/30 rounded-xl p-2.5 space-y-1">
+                      <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block">
+                        Voting begins in
+                      </span>
+                      <div className="text-xs sm:text-sm font-black text-white tracking-wide flex items-center flex-wrap gap-1">
+                        <span>{String(countdown.days).padStart(2, '0')} Days</span>
+                        <span>{String(countdown.hours).padStart(2, '0')} Hours</span>
+                        <span>{String(countdown.minutes).padStart(2, '0')} Minutes</span>
+                        <span className="text-amber-400 font-mono">{String(countdown.seconds).padStart(2, '0')} Seconds</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-amber-300/80 bg-amber-950/40 px-2 py-1 rounded border border-amber-500/20">
+                    Accredited plots 001–300 will be enabled to cast secret ballots.
+                  </div>
+                </div>
               ) : (
-                <div className="bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-300 max-w-xs">
-                  <span className="font-bold text-white block mb-0.5">Voting Status:</span>
-                  {election?.status === 'UPCOMING' && 'Voting opens soon. Review candidates below.'}
-                  {election?.status === 'CLOSED' && 'Voting has closed. Results compilation in progress.'}
-                  {election?.status === 'PAUSED' && 'Voting has been temporarily paused by electoral committee.'}
-                  {!election && 'No active election at this time.'}
+                <div className="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 text-xs text-slate-300 max-w-xs space-y-1.5">
+                  <div className="font-bold text-white flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>Status: Voting Closed</span>
+                  </div>
+                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                    Voting for the 2026 Executive Council officially closed on <strong className="text-slate-200">October 31, 2026 at 12:00 PM WAT</strong>.
+                  </p>
                 </div>
               )}
 
@@ -502,77 +733,84 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                       </div>
 
                       {/* Candidate Cards Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {posCandidates.map((candidate) => (
-                          <div
-                            key={candidate.id}
-                            className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-                          >
-                            <div className="space-y-4">
-                              <div className="flex items-start gap-3.5">
-                                {candidate.photograph_url ? (
-                                  <img
-                                    src={candidate.photograph_url}
-                                    alt={candidate.full_name}
-                                    className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0"
-                                  />
-                                ) : (
-                                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-500 shrink-0 font-bold border border-slate-200 shadow-inner">
-                                    <User className="w-8 h-8 text-slate-400" />
+                      {posCandidates.length === 0 ? (
+                        <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500 space-y-1">
+                          <p className="font-semibold text-slate-700">Nominations Under Review</p>
+                          <p className="text-slate-400">Candidate nominations for {position.title} are undergoing accreditation review by the Electoral Committee.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {posCandidates.map((candidate) => (
+                            <div
+                              key={candidate.id}
+                              className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                            >
+                              <div className="space-y-4">
+                                <div className="flex items-start gap-3.5">
+                                  {candidate.photograph_url ? (
+                                    <img
+                                      src={candidate.photograph_url}
+                                      alt={candidate.full_name}
+                                      className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-500 shrink-0 font-bold border border-slate-200 shadow-inner">
+                                      <User className="w-8 h-8 text-slate-400" />
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 inline-block mb-1">
+                                      Approved Candidate
+                                    </span>
+                                    <h4 className="text-base font-bold text-slate-900 truncate">
+                                      {candidate.full_name}
+                                    </h4>
+                                    <p className="text-xs text-slate-500 font-medium truncate">
+                                      Contesting: {position.title}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Bio Summary */}
+                                <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                                  {candidate.biography || 'Registered estate community member with dedicated service record.'}
+                                </p>
+
+                                {/* Manifesto Excerpt */}
+                                {candidate.candidate_statement && (
+                                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-700 italic line-clamp-2">
+                                    &ldquo;{candidate.candidate_statement}&rdquo;
                                   </div>
                                 )}
-
-                                <div className="min-w-0 flex-1">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60 inline-block mb-1">
-                                    Approved Candidate
-                                  </span>
-                                  <h4 className="text-base font-bold text-slate-900 truncate">
-                                    {candidate.full_name}
-                                  </h4>
-                                  <p className="text-xs text-slate-500 font-medium truncate">
-                                    Contesting: {position.title}
-                                  </p>
-                                </div>
                               </div>
 
-                              {/* Bio Summary */}
-                              <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                                {candidate.biography || 'Registered estate community member with dedicated service record.'}
-                              </p>
-
-                              {/* Manifesto Excerpt */}
-                              {candidate.candidate_statement && (
-                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-700 italic line-clamp-2">
-                                  &ldquo;{candidate.candidate_statement}&rdquo;
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Card Footer Actions */}
-                            <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                              <button
-                                onClick={() => {
-                                  setViewingCandidate(candidate);
-                                  setViewingCandidatePosition(position);
-                                }}
-                                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 transition-colors"
-                              >
-                                <span>Read Full Manifesto</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-
-                              {election?.status === 'OPEN' && (
+                              {/* Card Footer Actions */}
+                              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
                                 <button
-                                  onClick={() => setIsBallotModalOpen(true)}
-                                  className="text-xs font-semibold px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors"
+                                  onClick={() => {
+                                    setViewingCandidate(candidate);
+                                    setViewingCandidatePosition(position);
+                                  }}
+                                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 transition-colors"
                                 >
-                                  Vote
+                                  <span>Read Full Manifesto</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
                                 </button>
-                              )}
+
+                                {electionState?.isVotingOpen && (
+                                  <button
+                                    onClick={() => setIsBallotModalOpen(true)}
+                                    className="text-xs font-semibold px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Vote
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -583,7 +821,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
       </main>
 
       {/* Floating or Footer Call To Action Banner */}
-      {election?.status === 'OPEN' && (
+      {electionState?.isVotingOpen && (
         <div className="sticky bottom-0 z-30 bg-slate-900 text-white border-t border-slate-800 py-3.5 px-4 shadow-2xl backdrop-blur-md bg-slate-900/95">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div className="hidden sm:flex items-center gap-3">

@@ -1,15 +1,67 @@
 -- =========================================================================
 -- FINGER OF GOD ESTATE MANAGEMENT SYSTEM
--- STAGE 1: PRODUCTION ELECTION & SECRET BALLOT DATABASE MIGRATION
+-- PRODUCTION ELECTION & SECRET BALLOT DATABASE MIGRATION
 -- =========================================================================
 -- Target Database: PostgreSQL 15+ / Supabase
--- This migration creates the persistent schema for the Finger of God Estate
--- Election & Secret Ballot System with strict mathematical privacy separation.
+-- Target Schema: public
+-- File: /supabase_election_migration.sql
+-- 
+-- DESCRIPTION:
+-- Complete, self-contained, production-grade database migration for the
+-- Finger of God Estate Election & Secret Ballot System.
+--
+-- ARCHITECTURAL GUARANTEES:
+-- 1. Secret Ballot Separation:
+--    - public.election_ballots and public.election_ballot_choices NEVER
+--      contain voter identifiers (no voter_id, resident_id, resident_number,
+--      phone, email, auth_user_id, or session_id).
+--    - NO foreign keys connect ballot records to voter records.
+-- 2. One-Person-One-Vote:
+--    - Database-enforced UNIQUE constraint on (election_id, resident_number).
+--    - Row-level locking (FOR UPDATE) in cast_ballot() prevents double voting.
+-- 3. Atomicity & Race-Condition Safety:
+--    - cast_ballot() is an atomic PL/pgSQL transaction with SECURITY DEFINER
+--      and a fixed search_path = public, pg_temp.
+--    - Any failed check rolls back the entire transaction.
+-- 4. Audit Log Privacy:
+--    - Audit logs record generic system events with ZERO link to voter identity.
+-- 5. Non-Destructive:
+--    - Zero DROP TABLE, TRUNCATE, DELETE, or destructive ALTER operations.
+--    - Leaves existing resident, payment, road project, and levy data untouched.
 -- =========================================================================
 
--- Enable core extensions
+-- Enable core cryptographic and UUID extensions if not already present
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =========================================================================
+-- SUPPORTING SECURITY HELPER: is_admin()
+-- =========================================================================
+-- Returns TRUE if current Supabase Auth user is an active administrator in admin_users.
+-- Defined with SECURITY DEFINER and fixed search_path to prevent escalation attacks.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+STABLE
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'admin_users'
+  ) THEN
+    RETURN EXISTS (
+      SELECT 1 FROM public.admin_users
+      WHERE auth_user_id = auth.uid()
+        AND status = 'Active'
+    );
+  END IF;
+  RETURN FALSE;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated;
 
 -- =========================================================================
 -- 1. ELECTIONS TABLE
@@ -75,14 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_election_candidates_position ON public.election_c
 CREATE INDEX IF NOT EXISTS idx_election_candidates_status ON public.election_candidates(status);
 
 -- =========================================================================
--- 4. ELECTION VOTERS TABLE (Voter Accreditation & One-Vote Enforcement)
+-- 4. ELECTION VOTERS TABLE (Accreditation & One-Vote Enforcement)
 -- CRITICAL: Zero ballot choices or voting preferences are stored here.
 -- =========================================================================
 CREATE TABLE IF NOT EXISTS public.election_voters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     election_id UUID NOT NULL REFERENCES public.elections(id) ON DELETE CASCADE,
     resident_number VARCHAR(10) NOT NULL CHECK (resident_number ~ '^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$'),
-    resident_id UUID REFERENCES public.residents(id) ON DELETE SET NULL,
+    resident_id UUID,
     eligible BOOLEAN NOT NULL DEFAULT TRUE,
     eligibility_reason TEXT DEFAULT 'Registered Landlord in Good Standing',
     has_voted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -97,6 +149,23 @@ CREATE INDEX IF NOT EXISTS idx_election_voters_election ON public.election_voter
 CREATE INDEX IF NOT EXISTS idx_election_voters_res_num ON public.election_voters(resident_number);
 CREATE INDEX IF NOT EXISTS idx_election_voters_has_voted ON public.election_voters(has_voted);
 CREATE INDEX IF NOT EXISTS idx_election_voters_eligible ON public.election_voters(eligible);
+
+-- Link read-only foreign key to public.residents if residents table exists
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'residents'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_election_voters_resident'
+    ) THEN
+        ALTER TABLE public.election_voters 
+        ADD CONSTRAINT fk_election_voters_resident 
+        FOREIGN KEY (resident_id) REFERENCES public.residents(id) ON DELETE SET NULL;
+    END IF;
+END;
+$$;
 
 -- =========================================================================
 -- 5. ELECTION VOTING SESSIONS TABLE (Temporary OTP Authentication)
@@ -202,7 +271,7 @@ CREATE INDEX IF NOT EXISTS idx_election_audit_action ON public.election_audit_lo
 CREATE INDEX IF NOT EXISTS idx_election_audit_created ON public.election_audit_logs(created_at DESC);
 
 -- =========================================================================
--- 10. ROW LEVEL SECURITY (RLS) POLICIES FOR ELECTION SYSTEM
+-- 10. ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================================
 
 -- Enable RLS on all 9 election tables
@@ -271,14 +340,24 @@ CREATE POLICY "Admin full access on election voting sessions"
     USING (public.is_admin())
     WITH CHECK (public.is_admin());
 
--- 6. Election Ballots Policies (No Direct Anonymous Modification)
+-- 6. Election Ballots Policies (No Direct Public Modification)
+DROP POLICY IF EXISTS "Deny direct public read of individual ballots" ON public.election_ballots;
+CREATE POLICY "Deny direct public read of individual ballots"
+    ON public.election_ballots FOR SELECT
+    USING (false);
+
 DROP POLICY IF EXISTS "Admin read on election ballots" ON public.election_ballots;
 CREATE POLICY "Admin read on election ballots"
     ON public.election_ballots FOR SELECT
     TO authenticated
     USING (public.is_admin());
 
--- 7. Election Ballot Choices Policies (No Direct Anonymous Modification)
+-- 7. Election Ballot Choices Policies (No Direct Public Modification)
+DROP POLICY IF EXISTS "Deny direct public read of ballot choices" ON public.election_ballot_choices;
+CREATE POLICY "Deny direct public read of ballot choices"
+    ON public.election_ballot_choices FOR SELECT
+    USING (false);
+
 DROP POLICY IF EXISTS "Admin read on election ballot choices" ON public.election_ballot_choices;
 CREATE POLICY "Admin read on election ballot choices"
     ON public.election_ballot_choices FOR SELECT
@@ -313,7 +392,9 @@ CREATE POLICY "Admin insert election audit logs"
 
 -- =========================================================================
 -- 11. ATOMIC SECRET BALLOT CASTING STORED PROCEDURE (RPC)
--- Ensures single-transaction atomicity and strict privacy dissociation
+-- Ensures single-transaction atomicity and strict privacy dissociation.
+-- Configured with SECURITY DEFINER and a fixed search_path to prevent
+-- search-path spoofing and privilege escalation attacks.
 -- =========================================================================
 CREATE OR REPLACE FUNCTION public.cast_ballot(
     p_election_id UUID,
@@ -486,143 +567,14 @@ EXCEPTION
     WHEN OTHERS THEN
         RETURN jsonb_build_object(
             'success', false,
-            'message', 'Ballot submission failed: ' || SQLERRM
+            'message', 'Failed to record ballot securely: ' || SQLERRM
         );
 END;
 $$;
 
+-- Grant execution permissions
 GRANT EXECUTE ON FUNCTION public.cast_ballot(UUID, TEXT, TEXT, JSONB) TO anon, authenticated;
-
--- =========================================================================
--- 12. SEED BASELINE 2026 EXECUTIVE COMMITTEE ELECTION
--- =========================================================================
-DO $$
-DECLARE
-    v_elec_id UUID;
-    v_pos_chair UUID;
-    v_pos_vchair UUID;
-    v_pos_sec UUID;
-    v_pos_fin UUID;
-    v_pos_treas UUID;
-    v_pos_secu UUID;
-BEGIN
-    -- Insert Election
-    INSERT INTO public.elections (
-        election_code,
-        name,
-        description,
-        status,
-        starts_at,
-        ends_at,
-        constitution_rules,
-        tie_breaking_rule,
-        created_by
-    )
-    VALUES (
-        'FOG-ELEC-2026',
-        'Finger of God Estate Executive Committee Election 2026',
-        'Official democratic election for the executive governing committee of Finger of God Estate, Phase 1, Asaba. Only verified landlords and accredited residents are eligible to cast one vote per accredited property.',
-        'OPEN',
-        NOW(),
-        NOW() + INTERVAL '14 days',
-        '1. Only verified residents/landlords in good standing with an assigned Estate Number (001–300) are eligible to vote.
-2. Voting is strictly one vote per accredited property.
-3. Ballots are completely anonymous and secret; choices cannot be traced to voter identity.
-4. Each voter selects exactly one candidate per approved position.
-5. In the event of a tie, the Estate Constitution Article 8 tie-breaking procedure shall apply.',
-        'In the event of an equal number of votes between leading candidates for any position, the Electoral Committee shall convene an extraordinary general assembly of eligible voters within 7 days to conduct a run-off election between the tied candidates.',
-        'Estate Electoral Committee'
-    )
-    ON CONFLICT (election_code) DO UPDATE SET updated_at = NOW()
-    RETURNING id INTO v_elec_id;
-
-    IF v_elec_id IS NOT NULL THEN
-        -- 1. Chairman
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'Chairman', 'Chief executive officer of the estate responsible for overall leadership, security oversight, and government liaison.', 1, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_chair;
-
-        -- 2. Vice Chairman
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'Vice Chairman', 'Assists the Chairman and oversees estate maintenance, infrastructure, and contractor management.', 2, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_vchair;
-
-        -- 3. General Secretary
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'General Secretary', 'Manages official correspondence, records of meetings, announcements, and resident register.', 3, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_sec;
-
-        -- 4. Financial Secretary
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'Financial Secretary', 'Manages billing, security levy records, road modernization contributions, and financial audits.', 4, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_fin;
-
-        -- 5. Treasurer
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'Treasurer', 'Custody of estate bank accounts, fund disbursements, payment reconciliation, and expenditure receipts.', 5, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_treas;
-
-        -- 6. Security Coordinator
-        INSERT INTO public.election_positions (election_id, name, description, display_order, is_active, max_selections)
-        VALUES (v_elec_id, 'Security Coordinator', 'Supervises gate personnel, access control technology, visitor tracking, and armed police liaisons.', 6, TRUE, 1)
-        ON CONFLICT (election_id, name) DO UPDATE SET updated_at = NOW()
-        RETURNING id INTO v_pos_secu;
-
-        -- Candidates for Chairman
-        IF v_pos_chair IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_chair, 'Engr. Babatunde Adeleke', 'Civil engineer and Phase 1 resident since 2020. Successfully led the Phase 1 road project committee.', 'My commitment is modernizing estate infrastructure, expanding solar street lighting, and establishing automated smart gate clearance.', 'APPROVED', 1),
-            (v_elec_id, v_pos_chair, 'Chief Okey Nwosu', 'Retired civil servant and estate elder. Longstanding advocate for transparent financial accountability.', 'I pledge an open-door administration with quarterly audited financial reports and reinforced round-the-clock security patrols.', 'APPROVED', 2)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-        -- Candidates for Vice Chairman
-        IF v_pos_vchair IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_vchair, 'Dr. Chioma Okonkwo', 'Medical director and resident advocate with over a decade in public health and community leadership.', 'Promoting a peaceful, family-friendly estate with organized emergency response and prompt infrastructure repairs.', 'APPROVED', 1),
-            (v_elec_id, v_pos_vchair, 'Alhaji Usman Bello', 'Business executive and resident of Boulevard Way. Passionate about contractor oversight and value for money.', 'Rigorous vendor evaluation, zero tolerance for delayed repairs, and transparent community project management.', 'APPROVED', 2)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-        -- Candidates for General Secretary
-        IF v_pos_sec IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_sec, 'Barrister Nnamdi Eze', 'Corporate legal counsel. Drafted the Finger of God Estate Landlord Association constitution bylaws.', 'Timely announcements, digital voting archives, prompt meeting minutes, and legal protection of estate property boundaries.', 'APPROVED', 1)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-        -- Candidates for Financial Secretary
-        IF v_pos_fin IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_fin, 'Mrs. Funke Adeyemi', 'Fellow Chartered Accountant (FCA) with 15 years in commercial banking and revenue assurance.', '100% digital receipting, monthly ledger publication, and zero leakages in security levy management.', 'APPROVED', 1)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-        -- Candidates for Treasurer
-        IF v_pos_treas IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_treas, 'Mr. Emmanuel Chukwuma', 'Certified auditor and resident since 2019. Headed the 2025 revenue reconciliation audit.', 'Strict dual-signatory escrow controls and instant public verification of all road project and levy collections.', 'APPROVED', 1)
-            ON CONFLICT DO NOTHING;
-        END IF;
-
-        -- Candidates for Security Coordinator
-        IF v_pos_secu IS NOT NULL THEN
-            INSERT INTO public.election_candidates (election_id, position_id, full_name, profile, manifesto, status, display_order)
-            VALUES 
-            (v_elec_id, v_pos_secu, 'Capt. Daniel Briggs (Rtd)', 'Former military intelligence officer with extensive experience in perimeter security and tactical defense.', 'Rapid-response perimeter patrols, digital vehicle gate passes, and complete elimination of unauthorized estate trespassing.', 'APPROVED', 1)
-            ON CONFLICT DO NOTHING;
-        END IF;
-    END IF;
-END;
-$$;
-
+GRANT SELECT ON public.elections TO anon, authenticated;
+GRANT SELECT ON public.election_positions TO anon, authenticated;
+GRANT SELECT ON public.election_candidates TO anon, authenticated;
+GRANT SELECT ON public.election_results TO anon, authenticated;
