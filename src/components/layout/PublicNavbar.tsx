@@ -13,7 +13,8 @@ import {
   Sparkles,
   MapPin,
   CheckCircle2,
-  Users
+  Users,
+  Vote
 } from 'lucide-react';
 import { NavigationTab, EstateSettings, Resident } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
@@ -58,6 +59,11 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
       tab: 'estate_levy' as NavigationTab,
       label: 'Estate Levy',
       icon: CreditCard
+    },
+    {
+      tab: 'election' as NavigationTab,
+      label: 'Election',
+      icon: Vote
     },
     {
       tab: 'resident_portal' as NavigationTab,

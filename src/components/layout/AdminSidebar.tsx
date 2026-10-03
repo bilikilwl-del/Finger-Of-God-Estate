@@ -15,7 +15,8 @@ import {
   X,
   DoorOpen,
   Coins,
-  ArrowLeft
+  ArrowLeft,
+  Vote
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
@@ -54,6 +55,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'payments', label: 'Payment Ledger', icon: CreditCard },
     { id: 'road_project_admin', label: 'Road Project Ledger', icon: Coins },
     { id: 'reports', label: 'Financial Reports', icon: FileText },
+    { id: 'admin_election', label: 'Estate Elections', icon: Vote },
     { id: 'sms', label: 'SMS Broadcasts', icon: MessageSquare },
     { id: 'announcements', label: 'Announcements', icon: Bell }
   ];

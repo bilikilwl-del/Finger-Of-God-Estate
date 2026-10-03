@@ -43,7 +43,8 @@ import {
   DoorOpen,
   UserPlus,
   Pin,
-  Paperclip
+  Paperclip,
+  Vote
 } from 'lucide-react';
 import { 
   Resident, 
@@ -82,6 +83,7 @@ interface ResidentDashboardViewProps {
   onNavigateToHome?: () => void;
   onNavigateToRoadProject?: () => void;
   onNavigateToSecurity?: () => void;
+  onNavigateToElection?: () => void;
   onClosePortal?: () => void;
   estateSettings?: EstateSettings;
 }
@@ -94,6 +96,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   onNavigateToHome,
   onNavigateToRoadProject,
   onNavigateToSecurity,
+  onNavigateToElection,
   onClosePortal,
   estateSettings
 }) => {
@@ -523,6 +526,15 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                 className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 font-medium transition-colors cursor-pointer border border-slate-700"
               >
                 Verify Receipt
+              </button>
+            )}
+            {onNavigateToElection && (
+              <button
+                onClick={onNavigateToElection}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/40 flex items-center gap-1.5"
+              >
+                <Vote className="w-3.5 h-3.5" />
+                <span>Estate Election</span>
               </button>
             )}
             {onNavigateToHome && (

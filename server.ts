@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
+import { electionRouter } from './src/server/electionServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser } from './src/server/database.ts';
 
 dotenv.config();
@@ -4173,6 +4174,11 @@ app.post('/api/deliveries', (req: Request, res: Response) => {
 // 6.5. ROAD PROJECT FINANCIAL DASHBOARD & VERIFIED LEDGER API
 // -------------------------------------------------------------
 app.use('/api/road-project', roadProjectRouter);
+
+// -------------------------------------------------------------
+// 6.6. ESTATE ELECTION & SECRET BALLOT VOTING SYSTEM API
+// -------------------------------------------------------------
+app.use('/api/election', electionRouter);
 
 // -------------------------------------------------------------
 // 7. HEALTH CHECK

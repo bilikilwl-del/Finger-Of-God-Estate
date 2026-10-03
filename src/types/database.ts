@@ -424,6 +424,8 @@ export type NavigationTab =
   | 'verify_receipt'
   | 'system_administration'
   | 'admin_login'
+  | 'election'
+  | 'admin_election'
   | 'not_found';
 
 export interface MonthlyFinancialSummary {

@@ -55,6 +55,8 @@ import { PublicContactView } from './components/public/PublicContactView';
 import { PublicAnnouncementsView } from './components/public/PublicAnnouncementsView';
 import { AnnouncementDetailView } from './components/public/AnnouncementDetailView';
 import { PublicResidentsView } from './components/public/PublicResidentsView';
+import { PublicElectionView } from './components/election/PublicElectionView';
+import { AdminElectionView } from './components/admin/AdminElectionView';
 import { NotFoundView } from './components/common/NotFoundView';
 
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
@@ -99,6 +101,9 @@ function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: strin
   if (path === '/verify-receipt' || path === '/verify_receipt') {
     return { tab: 'verify_receipt', slug: '' };
   }
+  if (path === '/election' || path === '/elections' || path === '/vote') {
+    return { tab: 'election', slug: '' };
+  }
   // Private Admin Routes
   if (path === '/admin-login' || path === '/admin/login' || path === '/admin' || path === '/admin/dashboard' || path === '/dashboard') {
     return { tab: 'dashboard', slug: '' };
@@ -122,6 +127,8 @@ function getPathnameFromTab(tab: NavigationTab, slug?: string): string {
     case 'contact': return '/contact';
     case 'public_residents': return '/residents';
     case 'verify_receipt': return '/verify-receipt';
+    case 'election': return '/election';
+    case 'admin_election':
     case 'admin_login':
     case 'dashboard':
     case 'residents':
@@ -567,6 +574,7 @@ export default function App() {
             onNavigateToHome={() => navigateTo('home')}
             onNavigateToRoadProject={() => navigateTo('road_project')}
             onNavigateToSecurity={() => navigateTo('security_public')}
+            onNavigateToElection={() => navigateTo('election')}
             onClosePortal={() => navigateTo('home')}
             estateSettings={estateSettings}
           />
@@ -822,6 +830,23 @@ export default function App() {
   }
 
   // ----------------------------------------------------
+  // 10.5. PUBLIC ROUTE: ESTATE ELECTION 2026
+  // ----------------------------------------------------
+  if (currentTab === 'election') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {renderToast()}
+        <PublicElectionView
+          estateSettings={estateSettings}
+          currentResident={currentResident}
+          onNavigate={navigateTo}
+          onOpenResidentLogin={handleOpenResidentLogin}
+        />
+      </div>
+    );
+  }
+
+  // ----------------------------------------------------
   // 11. 404 NOT FOUND PAGE
   // ----------------------------------------------------
   if (currentTab === 'not_found') {
@@ -1007,6 +1032,13 @@ export default function App() {
             {currentTab === 'reports' && (
               <FinancialReportsView
                 estateSettings={estateSettings}
+              />
+            )}
+
+            {currentTab === 'admin_election' && (
+              <AdminElectionView
+                estateSettings={estateSettings}
+                adminUser={adminUser}
               />
             )}
 
