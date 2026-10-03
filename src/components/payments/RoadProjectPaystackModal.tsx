@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Coins,
   X,
@@ -7,16 +7,13 @@ import {
   User,
   Phone,
   Mail,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   Lock,
-  ArrowRight,
-  ShieldCheck
+  ArrowRight
 } from 'lucide-react';
 import { EstateSettings, RoadProjectCategory, RoadProjectTransaction } from '../../types/database';
 import { dbService } from '../../lib/supabase';
-import { getPaystackConfig, loadPaystackInlineScript } from '../../lib/paystack';
 
 interface RoadProjectPaystackModalProps {
   isOpen: boolean;
@@ -49,23 +46,11 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
   const [category, setCategory] = useState<RoadProjectCategory>('Building Contribution');
   const [selectedPreset, setSelectedPreset] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState('');
-  const [paystackPublicKey, setPaystackPublicKey] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successTx, setSuccessTx] = useState<RoadProjectTransaction | null>(null);
 
   const [isAnonymous, setIsAnonymous] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      getPaystackConfig().then(cfg => {
-        if (cfg?.publicKey) setPaystackPublicKey(cfg.publicKey);
-      });
-      loadPaystackInlineScript();
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -115,77 +100,25 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
       } as any);
 
       if (!initRes.success || !initRes.reference) {
-        throw new Error(initRes.message || 'Payment gateway is temporarily unavailable. Please try again later.');
-      }
-
-      const reference = initRes.reference;
-      const paystackWin = window as any;
-
-      // Verify if genuine Paystack public key is configured (never use placeholder/fake keys)
-      const hasValidPublicKey = Boolean(
-        paystackPublicKey && 
-        paystackPublicKey.startsWith('pk_') && 
-        !paystackPublicKey.includes('sample') && 
-        !paystackPublicKey.includes('mock')
-      );
-
-      // Branch 1: Paystack Inline Popup if supported & valid key is present
-      if (typeof paystackWin.PaystackPop !== 'undefined' && hasValidPublicKey) {
-        const handler = paystackWin.PaystackPop.setup({
-          key: paystackPublicKey,
-          email: email.trim() || `donor.${Date.now()}@fingerofgodestate.ng`,
-          amount: Math.round(currentAmount * 100),
-          ref: reference,
-          callback: async (response: any) => {
-            // ONLY after user completes real Paystack checkout:
-            setVerifying(true);
-            try {
-              const verifyRes = await dbService.verifyRoadPaystackPayment({
-                reference: response.reference || reference,
-                amount: currentAmount,
-                buildingNumber: buildingNumber.trim(),
-                payerName: effectiveDisplayName
-              });
-
-              setVerifying(false);
-              setLoading(false);
-              if (verifyRes.success && verifyRes.transaction) {
-                setSuccessTx(verifyRes.transaction);
-                onPaymentVerified(verifyRes.transaction);
-              } else {
-                setErrorMsg(verifyRes.message || 'Payment received. Server is finalizing verification via webhook.');
-              }
-            } catch (vErr: any) {
-              setVerifying(false);
-              setLoading(false);
-              setErrorMsg(vErr.message || 'Error verifying completed transaction.');
-            }
-          },
-          onClose: () => {
-            setLoading(false);
-            setVerifying(false);
-          }
-        });
-        handler.openIframe();
-      } else if (initRes.authorization_url && (initRes.authorization_url.startsWith('https://') || initRes.authorization_url.startsWith('http://'))) {
-        // Branch 2: Standard Paystack Hosted Checkout URL
-        window.location.href = initRes.authorization_url;
-      } else {
-        // No automatic fake simulation: inform user cleanly if gateway is unavailable
         setLoading(false);
-        setVerifying(false);
-        setErrorMsg('Payment gateway is temporarily unavailable. Please try again later.');
+        setErrorMsg(initRes.message || 'Payment gateway is temporarily unavailable. Please try again later.');
+        return;
       }
+
+      const authorizationUrl = String(initRes.authorization_url || '').trim();
+
+      if (!authorizationUrl || !/^https:\/\/checkout\.paystack\.com\//i.test(authorizationUrl)) {
+        setLoading(false);
+        setErrorMsg('Payment gateway is temporarily unavailable. Please try again later.');
+        return;
+      }
+
+      // Redirect to official Paystack hosted checkout URL
+      window.location.assign(authorizationUrl);
     } catch (err: any) {
       setLoading(false);
-      setVerifying(false);
       setErrorMsg(err.message || 'Payment gateway is temporarily unavailable. Please try again later.');
     }
-  };
-
-  const handleFinish = () => {
-    onClose();
-    setSuccessTx(null);
   };
 
   return (
@@ -223,65 +156,15 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {successTx ? (
-            /* Success Screen */
-            <div className="text-center py-4 space-y-4">
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                <CheckCircle2 className="w-10 h-10" />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-800 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{errorMsg}</span>
               </div>
-              <div>
-                <h4 className="text-xl font-black text-slate-900 font-display">
-                  Road Project Contribution Successful
-                </h4>
-                <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto font-medium">
-                  Thank you for contributing to the Finger of God Estate Road Modernization Project.
-                </p>
-              </div>
+            )}
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2.5 text-xs">
-                <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-medium">Amount Paid:</span>
-                  <span className="font-bold text-emerald-700 text-base font-mono">₦{successTx.amount.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-medium">Reference:</span>
-                  <span className="font-mono font-bold text-slate-800">{successTx.reference}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-medium">Project:</span>
-                  <span className="font-semibold text-slate-900">Finger of God Estate Road Modernization Project</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-medium">Contributor:</span>
-                  <span className="font-semibold text-slate-900">{successTx.payer_or_vendor || (successTx.building_number ? `Resident ${successTx.building_number}` : 'Resident Contributor')}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-500 font-medium">Status:</span>
-                  <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    Verified &amp; Recorded
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
-              >
-                Close &amp; View on Live Ledger
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {errorMsg && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-800 text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              {/* Amount Presets */}
+            {/* Amount Presets */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-bold text-slate-700">
@@ -426,20 +309,20 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 flex items-start gap-2">
                 <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold text-slate-900">Automated Server Verification:</span> Your transaction is verified on the backend before being recorded. Once confirmed, the website total credit and available balance will update instantly via live SSE.
+                  <span className="font-bold text-slate-900">Official Paystack Hosted Checkout:</span> You will be securely redirected to Paystack to complete your contribution. Once confirmed server-side, the public ledger and balances update in real-time.
                 </div>
               </div>
 
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading || verifying || currentAmount <= 0}
+                disabled={loading || currentAmount <= 0}
                 className="w-full py-3.5 px-4 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                {loading || verifying ? (
+                {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{verifying ? 'Verifying with Paystack...' : 'Connecting Gateway...'}</span>
+                    <span>Redirecting to Paystack...</span>
                   </>
                 ) : (
                   <>
@@ -450,7 +333,6 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
                 )}
               </button>
             </form>
-          )}
         </div>
       </div>
     </div>

@@ -36,7 +36,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Activity,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import {
   EstateSettings,
@@ -101,6 +102,14 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
   // Paystack Quick Online Contribution
   const [isPaystackModalOpen, setIsPaystackModalOpen] = useState(false);
 
+  // Paystack Return Reference Verification state
+  const [verifyingRef, setVerifyingRef] = useState<string | null>(null);
+  const [verificationResult, setVerificationResult] = useState<{
+    status: 'success' | 'failed';
+    transaction?: RoadProjectTransaction;
+    message?: string;
+  } | null>(null);
+
   // Near real-time SSE stream hook
   const { isConnected: isStreamConnected, lastNotification, dismissNotification } = useRoadProjectStream({
     onRefreshNeeded: () => {
@@ -110,6 +119,41 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
   useEffect(() => {
     loadRoadData();
+
+    // Check for Paystack callback reference in URL (e.g. ?reference=FOG-RD-PAY-...)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ref = urlParams.get('reference') || urlParams.get('trxref');
+      
+      if (ref && (ref.startsWith('FOG-RD-') || ref.startsWith('FOG-'))) {
+        // Clean up URL immediately to prevent repeated verification on page refresh
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        setVerifyingRef(ref);
+        dbService.verifyRoadPaystackPayment({ reference: ref }).then((res) => {
+          setVerifyingRef(null);
+          if (res.success && res.transaction) {
+            setVerificationResult({
+              status: 'success',
+              transaction: res.transaction
+            });
+            loadRoadData();
+          } else {
+            setVerificationResult({
+              status: 'failed',
+              message: res.message || 'Payment was not completed or could not be verified on Paystack. No transaction was added to the ledger.'
+            });
+          }
+        }).catch((err) => {
+          setVerifyingRef(null);
+          setVerificationResult({
+            status: 'failed',
+            message: err.message || 'Server error verifying payment. If you were debited, the official webhook will confirm your payment.'
+          });
+        });
+      }
+    }
   }, []);
 
   const loadRoadData = async () => {
@@ -1046,6 +1090,98 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           estateSettings={estateSettings}
           onPaymentVerified={() => loadRoadData()}
         />
+      )}
+
+      {/* 9. PAYSTACK RETURN VERIFICATION IN PROGRESS MODAL */}
+      {verifyingRef && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 font-display">Verifying Road Contribution</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Please wait while we securely confirm your payment with Paystack for reference <strong className="font-mono text-slate-900">{verifyingRef}</strong>...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 10. PAYSTACK RETURN VERIFICATION RESULT MODAL */}
+      {verificationResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95">
+            {verificationResult.status === 'success' && verificationResult.transaction ? (
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div>
+                  <h4 className="text-xl font-black text-slate-900 font-display">
+                    Road Project Contribution Successful
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto font-medium">
+                    Thank you for contributing to the Finger of God Estate Road Modernization Project.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2.5 text-xs">
+                  <div className="flex justify-between py-1 border-b border-slate-200/80">
+                    <span className="text-slate-500 font-medium">Amount Paid:</span>
+                    <span className="font-bold text-emerald-700 text-base font-mono">₦{verificationResult.transaction.amount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-200/80">
+                    <span className="text-slate-500 font-medium">Reference:</span>
+                    <span className="font-mono font-bold text-slate-800">{verificationResult.transaction.reference}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-200/80">
+                    <span className="text-slate-500 font-medium">Contributor:</span>
+                    <span className="font-semibold text-slate-900">{verificationResult.transaction.contributor_display_name || verificationResult.transaction.payer_or_vendor || 'Anonymous Contributor'}</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-500 font-medium">Status:</span>
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      Verified &amp; Recorded
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setVerificationResult(null)}
+                  className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  Close &amp; View on Live Ledger
+                </button>
+              </div>
+            ) : (
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <AlertCircle className="w-10 h-10" />
+                </div>
+                <div>
+                  <h4 className="text-xl font-black text-slate-900 font-display">
+                    Payment Not Confirmed
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                    {verificationResult.message || 'Payment was not completed on Paystack or could not be verified. No contribution was recorded to the ledger.'}
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-left text-[11px] text-amber-800">
+                  <strong>Notice:</strong> Only genuinely successful Paystack transactions are credited to the road project ledger. If you were debited, the official webhook will process your confirmation automatically.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVerificationResult(null)}
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Footer */}

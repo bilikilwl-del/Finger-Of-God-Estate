@@ -671,6 +671,10 @@ roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Respons
       ]
     };
 
+    const origin = req.get('origin') || (req.get('referer') ? new URL(req.get('referer')!).origin : `${req.protocol}://${req.get('host')}`);
+    const baseUrl = (process.env.APP_URL || origin).replace(/\/$/, '');
+    const callbackUrl = `${baseUrl}/road-project?reference=${encodeURIComponent(reference)}`;
+
     const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: {
@@ -682,7 +686,7 @@ roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Respons
         amount: amountKobo,
         reference,
         metadata,
-        callback_url: `${process.env.APP_URL || ''}/road-project?reference=${reference}`
+        callback_url: callbackUrl
       })
     });
 
