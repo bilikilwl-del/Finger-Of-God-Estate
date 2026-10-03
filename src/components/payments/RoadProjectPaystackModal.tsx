@@ -25,6 +25,17 @@ interface RoadProjectPaystackModalProps {
   onPaymentVerified: (tx: RoadProjectTransaction) => void;
 }
 
+export const MIN_ROAD_CONTRIBUTION = 100;
+
+const ROAD_CONTRIBUTION_PRESETS = [
+  { label: '₦100', val: 100, desc: 'Supporter' },
+  { label: '₦500', val: 500, desc: 'Community' },
+  { label: '₦1,000', val: 1000, desc: 'Friend' },
+  { label: '₦5,000', val: 5000, desc: 'Active' },
+  { label: '₦10,000', val: 10000, desc: 'Pillar' },
+  { label: '₦100,000', val: 100000, desc: 'Assessment' }
+];
+
 export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> = ({
   isOpen,
   onClose,
@@ -36,7 +47,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [category, setCategory] = useState<RoadProjectCategory>('Building Contribution');
-  const [selectedPreset, setSelectedPreset] = useState<number>(100000);
+  const [selectedPreset, setSelectedPreset] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState('');
   const [paystackPublicKey, setPaystackPublicKey] = useState<string>('');
   
@@ -82,8 +93,8 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
       setErrorMsg('Please enter Contributor or Landlord Name, or select Anonymous Contributor.');
       return;
     }
-    if (currentAmount < 5000) {
-      setErrorMsg('Minimum contribution amount is ₦5,000.');
+    if (isNaN(currentAmount) || currentAmount < MIN_ROAD_CONTRIBUTION) {
+      setErrorMsg(`Minimum contribution amount is ₦${MIN_ROAD_CONTRIBUTION.toLocaleString()}.`);
       return;
     }
 
@@ -99,72 +110,76 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
         buildingNumber: buildingNumber.trim(),
         payerName: effectiveDisplayName,
         phone: phoneNumber.trim() || undefined,
-        category
-      });
+        category,
+        is_anonymous: isAnonymous
+      } as any);
 
       if (!initRes.success || !initRes.reference) {
-        throw new Error(initRes.message || 'Failed to initialize Paystack contribution session.');
+        throw new Error(initRes.message || 'Payment gateway is temporarily unavailable. Please try again later.');
       }
 
       const reference = initRes.reference;
-
-      // Check if Paystack Inline SDK is loaded in window
       const paystackWin = window as any;
-      if (typeof paystackWin.PaystackPop !== 'undefined' && initRes.access_code && !initRes.authorization_url?.includes('paystack_simulation')) {
-        const effectiveKey = paystackPublicKey || (window as any).__PAYSTACK_KEY__ || 'pk_test_sample';
+
+      // Verify if genuine Paystack public key is configured (never use placeholder/fake keys)
+      const hasValidPublicKey = Boolean(
+        paystackPublicKey && 
+        paystackPublicKey.startsWith('pk_') && 
+        !paystackPublicKey.includes('sample') && 
+        !paystackPublicKey.includes('mock')
+      );
+
+      // Branch 1: Paystack Inline Popup if supported & valid key is present
+      if (typeof paystackWin.PaystackPop !== 'undefined' && hasValidPublicKey) {
         const handler = paystackWin.PaystackPop.setup({
-          key: effectiveKey,
+          key: paystackPublicKey,
           email: email.trim() || `donor.${Date.now()}@fingerofgodestate.ng`,
           amount: Math.round(currentAmount * 100),
           ref: reference,
           callback: async (response: any) => {
+            // ONLY after user completes real Paystack checkout:
             setVerifying(true);
-            const verifyRes = await dbService.verifyRoadPaystackPayment({
-              reference: response.reference || reference,
-              amount: currentAmount,
-              buildingNumber: buildingNumber.trim(),
-              payerName: effectiveDisplayName
-            });
+            try {
+              const verifyRes = await dbService.verifyRoadPaystackPayment({
+                reference: response.reference || reference,
+                amount: currentAmount,
+                buildingNumber: buildingNumber.trim(),
+                payerName: effectiveDisplayName
+              });
 
-            setVerifying(false);
-            if (verifyRes.success && verifyRes.transaction) {
-              setSuccessTx(verifyRes.transaction);
-              onPaymentVerified(verifyRes.transaction);
-            } else {
-              setErrorMsg(verifyRes.message || 'Payment received. Server is finalizing verification via webhook.');
+              setVerifying(false);
+              setLoading(false);
+              if (verifyRes.success && verifyRes.transaction) {
+                setSuccessTx(verifyRes.transaction);
+                onPaymentVerified(verifyRes.transaction);
+              } else {
+                setErrorMsg(verifyRes.message || 'Payment received. Server is finalizing verification via webhook.');
+              }
+            } catch (vErr: any) {
+              setVerifying(false);
+              setLoading(false);
+              setErrorMsg(vErr.message || 'Error verifying completed transaction.');
             }
           },
           onClose: () => {
             setLoading(false);
+            setVerifying(false);
           }
         });
         handler.openIframe();
+      } else if (initRes.authorization_url && (initRes.authorization_url.startsWith('https://') || initRes.authorization_url.startsWith('http://'))) {
+        // Branch 2: Standard Paystack Hosted Checkout URL
+        window.location.href = initRes.authorization_url;
       } else {
-        // Simulation or Sandbox Verification Flow
-        setVerifying(true);
-        setTimeout(async () => {
-          const verifyRes = await dbService.verifyRoadPaystackPayment({
-            reference,
-            amount: currentAmount,
-            buildingNumber: buildingNumber.trim(),
-            payerName: effectiveDisplayName
-          });
-
-          setLoading(false);
-          setVerifying(false);
-
-          if (verifyRes.success && verifyRes.transaction) {
-            setSuccessTx(verifyRes.transaction);
-            onPaymentVerified(verifyRes.transaction);
-          } else {
-            setErrorMsg(verifyRes.message || 'Verification failed. Please contact administration.');
-          }
-        }, 1200);
+        // No automatic fake simulation: inform user cleanly if gateway is unavailable
+        setLoading(false);
+        setVerifying(false);
+        setErrorMsg('Payment gateway is temporarily unavailable. Please try again later.');
       }
     } catch (err: any) {
       setLoading(false);
       setVerifying(false);
-      setErrorMsg(err.message || 'Error processing online contribution.');
+      setErrorMsg(err.message || 'Payment gateway is temporarily unavailable. Please try again later.');
     }
   };
 
@@ -268,27 +283,28 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
 
               {/* Amount Presets */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Select Contribution Amount:
-                </label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {[
-                    { label: '₦50,000', val: 50000, desc: 'Half Assessment' },
-                    { label: '₦100,000', val: 100000, desc: 'Full Assessment' },
-                    { label: '₦200,000', val: 200000, desc: 'Double Assessment' }
-                  ].map((opt) => (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700">
+                    Select Contribution Amount:
+                  </label>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Minimum contribution: ₦100
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {ROAD_CONTRIBUTION_PRESETS.map((opt) => (
                     <button
                       key={opt.val}
                       type="button"
                       onClick={() => handlePresetSelect(opt.val)}
-                      className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center ${
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                         selectedPreset === opt.val
-                          ? 'border-emerald-600 bg-emerald-50/80 text-emerald-900 shadow-2xs font-bold ring-2 ring-emerald-500/20'
+                          ? 'border-emerald-600 bg-emerald-50/90 text-emerald-950 shadow-2xs font-bold ring-2 ring-emerald-500/20'
                           : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50'
                       }`}
                     >
-                      <span className="text-sm font-black">{opt.label}</span>
-                      <span className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</span>
+                      <span className="text-xs font-black">{opt.label}</span>
+                      <span className="text-[9px] text-slate-500 mt-0.5 leading-tight">{opt.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -299,7 +315,8 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₦</span>
                     <input
                       type="number"
-                      placeholder="Or enter custom amount (minimum ₦5,000)..."
+                      min={MIN_ROAD_CONTRIBUTION}
+                      placeholder="Or enter custom amount (minimum ₦100)..."
                       value={customAmount}
                       onChange={(e) => handleCustomChange(e.target.value)}
                       className={`w-full pl-8 pr-3 py-2 text-xs border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500 ${
@@ -307,6 +324,9 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
                       }`}
                     />
                   </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Enter any amount of at least ₦100 (e.g. ₦200, ₦500, ₦1,000, ₦50,000, ₦100,000).
+                  </p>
                 </div>
               </div>
 

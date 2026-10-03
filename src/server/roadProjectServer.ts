@@ -109,6 +109,8 @@ export interface ServerRoadBankReconciliationItem {
 // -----------------------------------------------------------------
 // SERVER-SIDE IN-MEMORY STATE & IDEMPOTENCY ENGINES
 // -----------------------------------------------------------------
+export const MIN_ROAD_CONTRIBUTION = 100;
+
 const roadTransactionsStore = new Map<string, ServerRoadProjectTransaction>();
 const roadProcessedReferences = new Set<string>(); // Idempotency check for Paystack / Bank References
 const roadProcessedProviderIds = new Set<string>(); // Idempotency check for Paystack / Bank Transaction IDs
@@ -345,15 +347,19 @@ export function processVerifiedRoadPaystackEvent(data: any): {
   }
 
   const amountNaira = Number(data.amount) / 100;
-  if (isNaN(amountNaira) || amountNaira <= 0) {
-    return { success: false, message: 'Invalid transaction amount' };
+  if (isNaN(amountNaira) || amountNaira < MIN_ROAD_CONTRIBUTION) {
+    console.warn(`[Road Project Paystack] Amount below minimum or invalid: ₦${amountNaira}`);
+    return { success: false, message: `Invalid transaction amount or below minimum ₦${MIN_ROAD_CONTRIBUTION}` };
   }
 
   const meta = data.metadata || {};
   const residentNumber = meta.resident_number || meta.building_number || extractBuildingNumber(meta.description || meta.notes || '') || null;
   const residentId = meta.resident_id || null;
+  const isAnonymous = meta.is_anonymous === true || meta.contributor_display_name === 'Anonymous Contributor' || meta.payer_name === 'Anonymous Contributor';
   const rawPayerName = meta.contributor_display_name || meta.payer_name || (data.customer?.first_name ? `${data.customer.first_name} ${data.customer.last_name || ''}`.trim() : (data.customer?.email || 'Resident Contributor'));
-  const contributorDisplayName = residentNumber ? `Resident ${residentNumber}` : (rawPayerName || 'Resident Contributor');
+  const contributorDisplayName = isAnonymous 
+    ? 'Anonymous Contributor' 
+    : (rawPayerName && rawPayerName !== 'Resident Contributor' ? rawPayerName : (residentNumber ? `Resident ${residentNumber}` : 'Resident Contributor'));
   const category: RoadProjectCategory = meta.category || 'Building Contribution';
   const paidAt = data.paid_at || new Date().toISOString();
   const txDate = paidAt.split('T')[0];
@@ -618,29 +624,39 @@ roadProjectRouter.get('/ledger', (_req: Request, res: Response) => {
 // 3. INITIALIZE PAYSTACK ROAD CONTRIBUTION
 roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Response) => {
   try {
-    const { amount, email, buildingNumber, resident_number, payerName, contributor_display_name, phone, category } = req.body;
+    const { amount, email, buildingNumber, resident_number, payerName, contributor_display_name, phone, category, is_anonymous } = req.body;
 
     const amt = Number(amount);
-    if (isNaN(amt) || amt <= 0) {
-      return res.status(400).json({ success: false, message: 'Valid contribution amount is required' });
+    if (isNaN(amt) || amt < MIN_ROAD_CONTRIBUTION) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Minimum contribution amount is ₦${MIN_ROAD_CONTRIBUTION}. Blank or lower amounts are rejected.` 
+      });
     }
 
     const cleanEmail = (email && String(email).includes('@')) ? String(email).trim() : `road.contributor.${Date.now()}@fingerofgodestate.ng`;
     const cleanResidentNum = String(resident_number || buildingNumber || '').trim();
-    const cleanPayer = String(contributor_display_name || payerName || '').trim() || (cleanResidentNum ? `Resident ${cleanResidentNum}` : 'Resident Contributor');
+    const isAnon = is_anonymous === true || contributor_display_name === 'Anonymous Contributor' || payerName === 'Anonymous Contributor';
+    const cleanPayer = isAnon ? 'Anonymous Contributor' : (String(contributor_display_name || payerName || '').trim() || (cleanResidentNum ? `Resident ${cleanResidentNum}` : 'Resident Contributor'));
     
     // Unique reference: FOG-RD-PAY-<TIMESTAMP>-<RAND>
     const reference = `FOG-RD-PAY-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const amountKobo = Math.round(amt * 100);
 
     const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
-    const isConfigured = secretKey.startsWith('sk_');
+    if (!secretKey || !secretKey.startsWith('sk_')) {
+      return res.status(503).json({
+        success: false,
+        message: 'Payment gateway is temporarily unavailable. Please try again later.'
+      });
+    }
 
     // Strict Paystack metadata explicitly identifying the Road Modernization Project
     const metadata = {
       project_type: 'road_modernization',
       project_name: 'Finger of God Estate Road Modernization Project',
       project: 'road_project',
+      is_anonymous: isAnon,
       resident_number: cleanResidentNum,
       building_number: cleanResidentNum,
       contributor_display_name: cleanPayer,
@@ -655,39 +671,34 @@ roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Respons
       ]
     };
 
-    if (isConfigured) {
-      const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${secretKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: cleanEmail,
-          amount: amountKobo,
-          reference,
-          metadata,
-          callback_url: `${process.env.APP_URL || ''}/road-project?reference=${reference}`
-        })
-      });
+    const paystackRes = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secretKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email: cleanEmail,
+        amount: amountKobo,
+        reference,
+        metadata,
+        callback_url: `${process.env.APP_URL || ''}/road-project?reference=${reference}`
+      })
+    });
 
-      const pData = await paystackRes.json();
-      if (paystackRes.ok && pData.status) {
-        return res.json({
-          success: true,
-          reference,
-          authorization_url: pData.data.authorization_url,
-          access_code: pData.data.access_code
-        });
-      }
+    const pData = await paystackRes.json();
+    if (paystackRes.ok && pData.status && pData.data?.authorization_url) {
+      return res.json({
+        success: true,
+        reference,
+        authorization_url: pData.data.authorization_url,
+        access_code: pData.data.access_code
+      });
     }
 
-    // Direct sandbox/test response if secret key not active
-    return res.json({
-      success: true,
-      reference,
-      authorization_url: `/?road_paystack_simulation=true&reference=${reference}&amount=${amt}&building=${encodeURIComponent(cleanResidentNum)}&payer=${encodeURIComponent(cleanPayer)}`,
-      access_code: `mock_road_code_${Date.now()}`
+    return res.status(400).json({
+      success: false,
+      message: pData?.message || 'Payment gateway is temporarily unavailable. Please try again later.'
     });
   } catch (err: any) {
     console.error('[Road Project Paystack Init Error]', err);
@@ -698,7 +709,7 @@ roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Respons
 // 4. VERIFY PAYSTACK ROAD CONTRIBUTION (SERVER-SIDE VERIFICATION)
 roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) => {
   try {
-    const { reference, amount, buildingNumber, resident_number, payerName, contributor_display_name } = req.body;
+    const { reference, amount } = req.body;
     if (!reference) {
       return res.status(400).json({ success: false, message: 'Reference is required' });
     }
@@ -719,49 +730,44 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
     }
 
     const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
-    const isConfigured = secretKey.startsWith('sk_');
-
-    if (isConfigured) {
-      const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(cleanRef)}`, {
-        headers: {
-          'Authorization': `Bearer ${secretKey}`
-        }
-      });
-      const pData = await paystackRes.json();
-
-      if (!paystackRes.ok || !pData.status) {
-        return res.status(400).json({ success: false, message: pData.message || 'Paystack verification failed' });
-      }
-
-      const txResult = processVerifiedRoadPaystackEvent(pData.data);
-      if (!txResult.success) {
-        return res.status(400).json({ success: false, message: txResult.message || 'Could not record verified transaction' });
-      }
-
-      return res.json({
-        success: true,
-        transaction: txResult.transaction,
-        summary: computeRoadProjectSummary()
+    if (!secretKey || !secretKey.startsWith('sk_')) {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'Payment gateway is temporarily unavailable. Server verification cannot be performed without valid gateway configuration.' 
       });
     }
 
-    // In test/simulation mode: safely process with verified payload
-    const mockVerifiedData = {
-      status: 'success',
-      currency: 'NGN',
-      reference: cleanRef,
-      amount: Math.round(Number(amount || 50000) * 100),
-      paid_at: new Date().toISOString(),
-      id: `pstk_test_${Date.now()}`,
-      metadata: {
-        project_type: 'road_modernization',
-        project_name: 'Finger of God Estate Road Modernization Project',
-        resident_number: resident_number || buildingNumber || '',
-        contributor_display_name: contributor_display_name || payerName || 'Resident Contributor'
+    const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(cleanRef)}`, {
+      headers: {
+        'Authorization': `Bearer ${secretKey}`
       }
-    };
+    });
+    const pData = await paystackRes.json();
 
-    const txResult = processVerifiedRoadPaystackEvent(mockVerifiedData);
+    if (!paystackRes.ok || !pData.status) {
+      return res.status(400).json({ success: false, message: pData.message || 'Paystack verification failed' });
+    }
+
+    if (pData.data?.status !== 'success') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Transaction status is '${pData.data?.status || 'unpaid'}'. A payment must be completed successfully on Paystack to be recorded.` 
+      });
+    }
+
+    const paidNaira = Number(pData.data.amount) / 100;
+    if (paidNaira < MIN_ROAD_CONTRIBUTION) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Payment amount ₦${paidNaira} is below the minimum road contribution of ₦${MIN_ROAD_CONTRIBUTION}.` 
+      });
+    }
+
+    const txResult = processVerifiedRoadPaystackEvent(pData.data);
+    if (!txResult.success) {
+      return res.status(400).json({ success: false, message: txResult.message || 'Could not record verified transaction' });
+    }
+
     return res.json({
       success: true,
       transaction: txResult.transaction,
