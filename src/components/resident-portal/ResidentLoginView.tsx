@@ -135,6 +135,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   }, []);
 
+  // Lock background page scroll when modal is active, restore on unmount
+  useEffect(() => {
+    if (!isModal) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isModal]);
+
   // Cooldown Countdown Timer for Resend OTP
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -481,7 +491,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   };
 
   const containerContent = (
-    <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden mx-auto transition-all">
+    <div className="w-full max-w-[480px] sm:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden mx-auto transition-all flex flex-col max-h-[calc(100dvh-16px)] sm:max-h-[calc(100dvh-32px)]">
       {!isModal && (
         <SEOHead
           title="Resident Portal Login & Account Activation — Finger of God Estate"
@@ -492,20 +502,20 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         />
       )}
 
-      {/* Brand Card Header */}
-      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white p-6 sm:p-7 relative border-b border-slate-800">
+      {/* Brand Card Header (Fixed at top of portal modal/card) */}
+      <div className="flex-shrink-0 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white px-3.5 py-2.5 sm:px-5 sm:py-3.5 relative border-b border-slate-800">
         <button
           onClick={handleClosePortal}
-          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer border border-slate-700/60"
+          className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 w-10 h-10 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/90 active:bg-slate-700 transition-colors cursor-pointer border border-slate-700/70 flex items-center justify-center z-20 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
           title="Close Resident Portal"
           aria-label="Close Resident Portal"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center pr-12">
           <EstateLogo
-            size="md"
+            size="sm"
             variant="horizontal"
             theme="dark"
             estateName={estateSettings?.estate_name || 'Finger of God Estate'}
@@ -513,28 +523,25 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
           />
         </div>
 
-        <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-          <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+        <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <h2 id="resident-portal-heading" className="text-sm sm:text-base font-extrabold text-white tracking-tight flex items-center gap-1.5">
               <span>Resident Portal</span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold tracking-normal border border-emerald-500/30">
-                SECURE
-              </span>
             </h2>
-            <p className="text-xs text-slate-300 font-medium mt-0.5">
-              Secure access to your estate account
-            </p>
+            <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-mono font-bold tracking-wider border border-emerald-500/30 uppercase">
+              SECURITY
+            </span>
           </div>
 
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] font-mono text-emerald-400 font-semibold block">Estate ID 001–300</span>
-            <span className="text-[10px] text-slate-400">256-Bit TLS Protected</span>
+          <div className="text-right flex items-center gap-1.5">
+            <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-semibold">Estate ID 001–300</span>
+            <span className="text-[9px] text-slate-400 hidden sm:inline">• 256-Bit TLS</span>
           </div>
         </div>
       </div>
 
-      {/* Tabs Switcher: OTP Verification vs Account Activation */}
-      <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50/90 text-xs font-bold">
+      {/* Tabs Switcher: Resident Login vs Account Activation (Fixed under header) */}
+      <div className="flex-shrink-0 grid grid-cols-2 border-b border-slate-200 bg-slate-50/95 text-xs font-bold">
         <button
           type="button"
           onClick={() => {
@@ -543,14 +550,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
             setErrorMessage(null);
             setSuccessMessage(null);
           }}
-          className={`py-3.5 px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-2 ${
+          className={`py-2.5 sm:py-3 px-3 sm:px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-1.5 sm:gap-2 min-h-[40px] ${
             activeTab === 'login' || activeTab === 'password_login'
               ? 'bg-white text-emerald-800 border-emerald-700 shadow-2xs font-extrabold'
               : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100/70'
           }`}
         >
-          <KeyRound className="w-4 h-4 text-emerald-600" />
-          <span>Resident Login</span>
+          <KeyRound className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="truncate">Resident Login</span>
         </button>
 
         <button
@@ -561,22 +568,22 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
             setErrorMessage(null);
             setSuccessMessage(null);
           }}
-          className={`py-3.5 px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-2 ${
+          className={`py-2.5 sm:py-3 px-3 sm:px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-1.5 sm:gap-2 min-h-[40px] ${
             activeTab === 'activate'
               ? 'bg-white text-emerald-800 border-emerald-700 shadow-2xs font-extrabold'
               : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100/70'
           }`}
         >
-          <UserCheck className="w-4 h-4 text-emerald-600" />
-          <span>Activate Account</span>
+          <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="truncate">Activate Account</span>
         </button>
       </div>
 
-      {/* Main Form Content Area */}
-      <div className="p-6 sm:p-8 space-y-5">
+      {/* Main Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-3 sm:space-y-3.5">
         {/* Security Lockout Banner */}
         {lockoutTimer > 0 && (
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-3 animate-in fade-in">
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5 animate-in fade-in">
             <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">Security Protection Active</p>
@@ -590,7 +597,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in duration-200">
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in duration-200">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-bold">Verification Notice</p>
@@ -601,7 +608,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
         {/* Success Alert */}
         {successMessage && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2.5 animate-in fade-in duration-200">
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2.5 animate-in fade-in duration-200">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-bold">Confirmed</p>
@@ -616,10 +623,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         {activeTab === 'login' && (
           <div>
             {otpStep === 'enter_details' ? (
-              <form onSubmit={handleSendOtp} className="space-y-4">
-                <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-2xl text-xs text-emerald-950">
-                  <div className="flex items-center gap-2 font-bold text-emerald-900 mb-1">
-                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
+              <form onSubmit={handleSendOtp} className="space-y-3 sm:space-y-3.5">
+                <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-950">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
                     <span>Resident Verification</span>
                   </div>
                   <p className="text-emerald-800 leading-relaxed text-[11px]">
@@ -629,14 +636,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
                 {/* Estate Number Field (001 – 300) */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
                       Estate Number
                     </label>
-                    <span className="text-[11px] font-mono font-semibold text-emerald-800">Range: 001 – 300</span>
+                    <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">Range: 001 – 300</span>
                   </div>
                   <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
                       #
                     </div>
                     <input
@@ -650,21 +657,21 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       maxLength={3}
                       required
                       disabled={isLoading || lockoutTimer > 0}
-                      className="w-full pl-9 pr-4 py-3.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                      className="w-full pl-8 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-0.5">
                     Enter your registered estate number (e.g. 024 or 001).
                   </p>
                 </div>
 
                 {/* Registered Phone Number Field */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Registered Phone Number
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="tel"
                       value={phoneNumber}
@@ -672,16 +679,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       placeholder="080XXXXXXXX"
                       required
                       disabled={isLoading || lockoutTimer > 0}
-                      className="w-full pl-10 pr-4 py-3.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-0.5">
                     Must match your official telephone number on the estate resident register.
                   </p>
                 </div>
 
                 {/* Remember Device Checkbox */}
-                <div className="pt-1">
+                <div className="pt-0.5">
                   <label className="flex items-start gap-2.5 cursor-pointer group">
                     <input
                       type="checkbox"
@@ -690,10 +697,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       className="w-4 h-4 mt-0.5 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
                     />
                     <div className="text-xs">
-                      <span className="font-bold text-slate-800 group-hover:text-emerald-800 transition-colors">
+                      <span className="font-bold text-slate-800 group-hover:text-emerald-800 transition-colors text-[11px] sm:text-xs">
                         Remember this device
                       </span>
-                      <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                      <p className="text-[10px] sm:text-[11px] text-slate-500 leading-tight mt-0.5">
                         Only select this on your trusted personal phone or computer.
                       </p>
                     </div>
@@ -704,7 +711,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading || lockoutTimer > 0}
-                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-3"
+                  className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-1"
                 >
                   {isLoading ? (
                     <span className="flex items-center gap-2">
@@ -721,7 +728,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </button>
 
                 {/* Alternative: Switch to Email + Password Login */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
                   <span>Prefer password login?</span>
                   <button
                     type="button"
@@ -730,7 +737,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       setErrorMessage(null);
                       setSuccessMessage(null);
                     }}
-                    className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer"
+                    className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline cursor-pointer text-xs"
                   >
                     Sign in with Password
                   </button>
@@ -738,10 +745,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               </form>
             ) : (
               /* STEP 2: ENTER OTP CODE */
-              <form onSubmit={handleVerifyOtp} className="space-y-5">
-                <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-xs text-emerald-950">
+              <form onSubmit={handleVerifyOtp} className="space-y-3.5 sm:space-y-4">
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-extrabold text-emerald-900 text-sm">Enter Verification Code</span>
+                    <span className="font-extrabold text-emerald-900 text-xs sm:text-sm">Enter Verification Code</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -754,16 +761,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       <ArrowLeft className="w-3 h-3" /> Change Number
                     </button>
                   </div>
-                  <p className="text-emerald-800 text-xs leading-relaxed">
+                  <p className="text-emerald-800 text-[11px] sm:text-xs leading-relaxed">
                     We dispatched a 6-digit code to registered resident contact{' '}
                     <span className="font-bold text-emerald-950">{maskedPhone}</span> (Estate #{estateNumber.padStart(3, '0')}).
                   </p>
 
                   {/* Dev / Demo Mode Safe Hint */}
                   {demoOtpHint && (
-                    <div className="mt-2.5 pt-2 border-t border-emerald-200/60 flex items-center justify-between text-[11px]">
+                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[11px]">
                       <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5" /> Instant Test Code:
+                        <Info className="w-3.5 h-3.5" /> Test Code:
                       </span>
                       <button
                         type="button"
@@ -781,10 +788,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
                 {/* 6-Box OTP Input */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5 text-center">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 text-center">
                     6-Digit Verification Code
                   </label>
-                  <div className="flex items-center justify-center gap-2 sm:gap-3">
+                  <div className="flex items-center justify-center gap-1.5 sm:gap-2.5">
                     {otpCode.map((digit, idx) => (
                       <input
                         key={idx}
@@ -796,37 +803,37 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                         onChange={(e) => handleOtpChange(idx, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                         disabled={isLoading || lockoutTimer > 0}
-                        className="w-11 h-13 sm:w-12 sm:h-14 text-center font-mono text-xl sm:text-2xl font-extrabold text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:border-emerald-500 shadow-2xs transition-all"
+                        className="w-10 h-11 sm:w-11 sm:h-12 text-center font-mono text-lg sm:text-xl font-extrabold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:border-emerald-500 shadow-2xs transition-all"
                       />
                     ))}
                   </div>
-                  <p className="text-[11px] text-slate-500 text-center mt-2">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 text-center mt-1.5">
                     Code expires in 10 minutes. Do not disclose this code to anyone.
                   </p>
                 </div>
 
                 {/* Resend OTP Section */}
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-slate-600">Didn't receive the SMS?</span>
+                <div className="flex items-center justify-between text-xs pt-0.5">
+                  <span className="text-slate-600 text-[11px] sm:text-xs">Didn't receive the SMS?</span>
                   {resendCooldown > 0 ? (
                     <span className="font-mono text-slate-500 text-[11px]">
-                      Resend available in <span className="font-bold text-slate-800">{resendCooldown}s</span>
+                      Resend in <span className="font-bold text-slate-800">{resendCooldown}s</span>
                     </span>
                   ) : (
                     <button
                       type="button"
                       onClick={handleResendOtp}
                       disabled={isLoading || lockoutTimer > 0}
-                      className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      className="font-bold text-emerald-700 hover:text-emerald-800 hover:underline inline-flex items-center gap-1 cursor-pointer text-[11px] sm:text-xs"
                     >
-                      <RotateCw className="w-3.5 h-3.5" />
+                      <RotateCw className="w-3 h-3" />
                       <span>Resend OTP Code</span>
                     </button>
                   )}
                 </div>
 
                 {/* Submit & Back Buttons */}
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -834,7 +841,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       setErrorMessage(null);
                       setSuccessMessage(null);
                     }}
-                    className="w-full sm:w-auto px-4 py-3.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs"
+                    className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs min-h-[40px]"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
                     <span>Back</span>
@@ -842,7 +849,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   <button
                     type="submit"
                     disabled={isLoading || lockoutTimer > 0 || otpCode.join('').length !== 6}
-                    className="w-full sm:flex-1 py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                    className="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
                   >
                     {isLoading ? (
                       <span className="flex items-center gap-2">
@@ -866,9 +873,9 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         {/* TAB 2: ALTERNATIVE EMAIL + PASSWORD LOGIN */}
         {/* ============================================================ */}
         {activeTab === 'password_login' && (
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-700 flex items-center justify-between">
-              <span className="font-semibold text-slate-800">Password Sign In</span>
+          <form onSubmit={handlePasswordLogin} className="space-y-3 sm:space-y-3.5">
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 flex items-center justify-between">
+              <span className="font-semibold text-slate-800 text-[11px] sm:text-xs">Password Sign In</span>
               <button
                 type="button"
                 onClick={() => {
@@ -879,31 +886,31 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 }}
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1 cursor-pointer"
               >
-                <Smartphone className="w-3.5 h-3.5" />
+                <Smartphone className="w-3 h-3" />
                 <span>Use Phone OTP Login</span>
               </button>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                 Registered Email Address
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   placeholder="resident@example.com"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
                   Password
                 </label>
                 <button
@@ -920,14 +927,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
@@ -935,7 +942,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-2"
+              className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-1"
             >
               {isLoading ? (
                 <span>Verifying Credentials...</span>
@@ -955,10 +962,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         {activeTab === 'activate' && (
           <div>
             {actStep === 'verify' ? (
-              <form onSubmit={handleVerifyForActivation} className="space-y-4">
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950">
+              <form onSubmit={handleVerifyForActivation} className="space-y-3 sm:space-y-3.5">
+                <div className="p-2.5 sm:p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-900">Step 1 of 2: Locate Resident Record</span>
+                    <span className="font-bold text-emerald-900 text-xs">Step 1 of 2: Locate Resident Record</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -968,20 +975,20 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       }}
                       className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1 cursor-pointer transition-colors"
                     >
-                      <ArrowLeft className="w-3 h-3" /> Back to Login
+                      <ArrowLeft className="w-3 h-3" /> Back
                     </button>
                   </div>
-                  <p className="mt-1 text-emerald-800 text-[11px]">
+                  <p className="mt-0.5 text-emerald-800 text-[11px]">
                     Enter your 3-digit Estate Number (001–300) and registered phone number to verify your record.
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Resident / Estate Number
                   </label>
                   <div className="relative">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
                       #
                     </div>
                     <input
@@ -994,31 +1001,31 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       placeholder="024"
                       maxLength={3}
                       required
-                      className="w-full pl-9 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-8 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">Your estate registration identifier (001 – 300)</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Your estate registration identifier (001 – 300)</p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Registered Phone Number or Email
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={actIdentifier}
                       onChange={(e) => setActIdentifier(e.target.value)}
                       placeholder="080XXXXXXXX or email"
                       required
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">Must match the contact registered with estate management</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Must match the contact registered with estate management</p>
                 </div>
 
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -1026,15 +1033,15 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       setErrorMessage(null);
                       setSuccessMessage(null);
                     }}
-                    className="w-full sm:w-auto px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs"
+                    className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs min-h-[40px]"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Back to Login</span>
+                    <span>Back</span>
                   </button>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                    className="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
                   >
                     {isLoading ? (
                       <span>Verifying Record...</span>
@@ -1048,10 +1055,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleCompleteActivation} className="space-y-4">
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950">
+              <form onSubmit={handleCompleteActivation} className="space-y-3 sm:space-y-3.5">
+                <div className="p-2.5 sm:p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-900">Step 2 of 2: Set Security Credentials</span>
+                    <span className="font-bold text-emerald-900 text-xs">Step 2 of 2: Set Security Credentials</span>
                     <button
                       type="button"
                       onClick={() => setActStep('verify')}
@@ -1060,35 +1067,35 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       <ArrowLeft className="w-3 h-3" /> Back
                     </button>
                   </div>
-                  <p className="mt-1 font-semibold text-slate-900">
+                  <p className="mt-0.5 font-semibold text-slate-900 text-[11px]">
                     Resident: <span className="text-emerald-900 font-bold">#{actResidentNumber.padStart(3, '0')}</span> • {verifiedData?.residentName}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Account Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="email"
                       value={actEmail}
                       onChange={(e) => setActEmail(e.target.value)}
                       placeholder="your.email@example.com"
                       required
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">This email can be used for receipts and notices</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">This email can be used for receipts and notices</p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Create Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
                       value={actPassword}
@@ -1096,17 +1103,17 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       placeholder="Minimum 6 characters"
                       required
                       minLength={6}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     Confirm Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
                       value={actConfirmPassword}
@@ -1114,16 +1121,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       placeholder="Re-enter your password"
                       required
                       minLength={6}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
 
-                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setActStep('verify')}
-                    className="w-full sm:w-auto px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs"
+                    className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs min-h-[40px]"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
                     <span>Back</span>
@@ -1131,7 +1138,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                    className="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
                   >
                     {isLoading ? (
                       <span>Activating Account...</span>
@@ -1152,32 +1159,32 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         {/* TAB 4: FORGOT PASSWORD */}
         {/* ============================================================ */}
         {activeTab === 'forgot' && (
-          <form onSubmit={handleForgotPassword} className="space-y-4">
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-700">
+          <form onSubmit={handleForgotPassword} className="space-y-3 sm:space-y-3.5">
+            <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
               <p className="font-bold text-slate-900">Reset Your Security Password</p>
-              <p className="mt-0.5 text-slate-600">
+              <p className="mt-0.5 text-slate-600 text-[11px]">
                 Enter your registered resident email address and we'll dispatch a secure recovery link.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                 Registered Email Address
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   placeholder="resident@example.com"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -1185,7 +1192,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   setErrorMessage(null);
                   setSuccessMessage(null);
                 }}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs"
+                className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer order-2 sm:order-1 shadow-2xs min-h-[40px]"
               >
                 <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
                 <span>Back to Login</span>
@@ -1193,7 +1200,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                className="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
               >
                 {isLoading ? (
                   <span>Dispatching Reset Link...</span>
@@ -1211,40 +1218,40 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         {/* ============================================================ */}
         {/* LOGIN HELP SECTION */}
         {/* ============================================================ */}
-        <div className="pt-3 border-t border-slate-100">
-          <div className="bg-slate-50/80 rounded-2xl p-3.5 border border-slate-200/80 text-xs">
+        <div className="pt-2 border-t border-slate-100">
+          <div className="bg-slate-50/80 rounded-xl p-2.5 sm:p-3 border border-slate-200/80 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <HelpCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px] sm:text-xs">
+                <HelpCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Need help accessing your account?</span>
               </span>
               <button
                 type="button"
                 onClick={() => setShowHelpModal(!showHelpModal)}
-                className="text-emerald-700 hover:text-emerald-800 font-bold underline cursor-pointer"
+                className="text-emerald-700 hover:text-emerald-800 font-bold underline cursor-pointer text-[11px] sm:text-xs"
               >
                 {showHelpModal ? 'Hide Help' : 'View Support'}
               </button>
             </div>
 
             {showHelpModal && (
-              <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-2.5 text-slate-600 text-[11px] leading-relaxed animate-in fade-in">
+              <div className="mt-2.5 pt-2 border-t border-slate-200/60 space-y-2 text-slate-600 text-[11px] leading-relaxed animate-in fade-in">
                 <p>
                   If you recently changed your phone number or cannot receive verification SMS, contact estate administration or visit the Phase 1 Security Desk.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
                   <a
                     href="tel:08023456789"
-                    className="p-2.5 rounded-xl bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs"
+                    className="p-2 rounded-lg bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs text-[11px]"
                   >
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Estate Desk: 0802 345 6789</span>
+                    <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Desk: 0802 345 6789</span>
                   </a>
                   <a
                     href="mailto:support@fingerofgodestate.ng"
-                    className="p-2.5 rounded-xl bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs"
+                    className="p-2 rounded-lg bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs text-[11px]"
                   >
-                    <Mail className="w-3.5 h-3.5 text-emerald-600" />
+                    <Mail className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>Email Support Desk</span>
                   </a>
                 </div>
@@ -1254,45 +1261,54 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         </div>
 
         {/* Quick Test Demo Selection */}
-        <div className="pt-2 border-t border-slate-100 space-y-2">
+        <div className="pt-2 border-t border-slate-100 space-y-1.5">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
             Instant Test Resident Profiles:
           </span>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             <button
               type="button"
               onClick={() => handleQuickSelect('001', '08023456789')}
-              className="text-left p-2 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/70 transition-colors cursor-pointer text-xs"
+              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
+              title="Test Profile 001 - Engr. Babatunde"
             >
-              <span className="font-mono font-bold text-emerald-950 block">#001</span>
-              <span className="font-semibold text-emerald-900 block truncate">Engr. Babatunde</span>
-              <span className="text-[10px] text-emerald-700">08023456789</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-emerald-950 text-[11px] sm:text-xs">#001</span>
+                <span className="text-[9px] font-mono text-emerald-700 hidden sm:inline">0802...</span>
+              </div>
+              <span className="font-semibold text-emerald-900 text-[10px] sm:text-[11px] truncate block leading-tight">Engr. Babatunde</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleQuickSelect('002', '08098765432')}
-              className="text-left p-2 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/70 transition-colors cursor-pointer text-xs"
+              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
+              title="Test Profile 002 - Dr. Chioma"
             >
-              <span className="font-mono font-bold text-emerald-950 block">#002</span>
-              <span className="font-semibold text-emerald-900 block truncate">Dr. Chioma</span>
-              <span className="text-[10px] text-emerald-700">08098765432</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-emerald-950 text-[11px] sm:text-xs">#002</span>
+                <span className="text-[9px] font-mono text-emerald-700 hidden sm:inline">0809...</span>
+              </div>
+              <span className="font-semibold text-emerald-900 text-[10px] sm:text-[11px] truncate block leading-tight">Dr. Chioma</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleQuickSelect('003', '08123459876')}
-              className="text-left p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer text-xs"
+              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
+              title="Test Profile 003 - Alhaji Usman"
             >
-              <span className="font-mono font-bold text-slate-900 block">#003</span>
-              <span className="font-semibold text-slate-800 block truncate">Alhaji Usman</span>
-              <span className="text-[10px] text-slate-500">08123459876</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono font-bold text-slate-900 text-[11px] sm:text-xs">#003</span>
+                <span className="text-[9px] font-mono text-slate-500 hidden sm:inline">0812...</span>
+              </div>
+              <span className="font-semibold text-slate-800 text-[10px] sm:text-[11px] truncate block leading-tight">Alhaji Usman</span>
             </button>
           </div>
         </div>
 
         {/* Security & RLS Privacy Guarantee Notice */}
-        <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 pt-1">
+        <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 pt-0.5 pb-0.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
           <span>RLS security restricts access strictly to your individual estate records.</span>
         </div>
@@ -1302,8 +1318,13 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
   if (isModal) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
-        <div className="relative my-6 w-full max-w-lg">
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 md:p-4 bg-slate-950/80 backdrop-blur-xs overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="resident-portal-heading"
+      >
+        <div className="w-full max-w-[480px] sm:max-w-lg flex flex-col justify-center my-auto">
           {containerContent}
         </div>
       </div>
@@ -1312,14 +1333,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
   // Full Page Standalone Layout for /login route
   return (
-    <div className="min-h-screen bg-slate-100/90 py-10 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-slate-100/90 py-3 sm:py-6 px-2 sm:px-4 flex flex-col items-center justify-center">
       {onNavigateToHome && (
-        <div className="w-full max-w-lg mb-4 flex items-center justify-between">
+        <div className="w-full max-w-[480px] sm:max-w-lg mb-2 flex items-center justify-between">
           <button
             onClick={onNavigateToHome}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50/50 shadow-2xs transition-all cursor-pointer group"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50/50 shadow-2xs transition-all cursor-pointer group"
           >
-            <ArrowLeft className="w-4 h-4 text-emerald-600 group-hover:-translate-x-0.5 transition-transform" />
+            <ArrowLeft className="w-3.5 h-3.5 text-emerald-600 group-hover:-translate-x-0.5 transition-transform" />
             <span>Back to Estate Home</span>
           </button>
           <span className="text-xs font-bold text-slate-600">Finger of God Estate</span>

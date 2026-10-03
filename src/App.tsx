@@ -571,18 +571,18 @@ export default function App() {
             estateSettings={estateSettings}
           />
         ) : (
-          <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100 font-sans relative">
+          <div className="min-h-screen flex items-center justify-center p-3 sm:p-4 bg-slate-100 font-sans relative">
             <button
               onClick={() => navigateTo('home')}
-              className="absolute top-6 right-6 p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-500 hover:text-slate-900 shadow-sm hover:shadow transition-all cursor-pointer"
+              className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-900 shadow-sm hover:shadow transition-all cursor-pointer flex items-center justify-center z-10"
               title="Close Resident Portal"
               aria-label="Close Resident Portal"
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="bg-white p-8 sm:p-10 rounded-3xl shadow-xl max-w-md w-full text-center space-y-5 border border-slate-200">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
-                <CheckCircle2 className="w-8 h-8" />
+            <div className="bg-white p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-xl max-w-md w-full text-center space-y-4 border border-slate-200 my-auto">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto shadow-md">
+                <CheckCircle2 className="w-7 h-7" />
               </div>
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-display">Resident Portal Sign In</h2>
@@ -592,13 +592,13 @@ export default function App() {
               </div>
               <button
                 onClick={() => setIsResidentLoginOpen(true)}
-                className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs tracking-wider uppercase transition-all shadow-sm hover:shadow cursor-pointer"
+                className="w-full py-3 rounded-xl min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs tracking-wider uppercase transition-all shadow-sm hover:shadow cursor-pointer"
               >
                 Sign In to Resident Portal
               </button>
               <button
                 onClick={() => navigateTo('home')}
-                className="text-xs text-slate-500 hover:text-slate-800 hover:underline block mx-auto cursor-pointer"
+                className="text-xs text-slate-500 hover:text-slate-800 hover:underline block mx-auto cursor-pointer pt-1"
               >
                 Return to Public Homepage
               </button>
