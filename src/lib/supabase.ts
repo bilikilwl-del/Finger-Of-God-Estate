@@ -854,353 +854,7 @@ const INITIAL_RECEIPTS_SEED: Receipt[] = [
   }
 ];
 
-const INITIAL_ROAD_TRANSACTIONS_SEED: Omit<RoadProjectTransaction, 'running_balance'>[] = [
-  {
-    id: 'rd-tx-001',
-    reference: 'FOG-RD-2026-001',
-    date: '2026-10-01',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 001 (Plot 4A) Road Project levy',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 001 (Plot 4A)',
-    building_number: '001',
-    approved_by: 'Road Committee Financial Secretary',
-    receipt_or_invoice_ref: 'RCP-RD-2026-001',
-    provider_transaction_id: 'BNK-ZEN-9920101',
-    notes: 'Verified electronic bank transfer to Road Escrow Account',
-    verified_at: '2026-10-01T10:15:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-002',
-    reference: 'FOG-RD-2026-002',
-    date: '2026-10-02',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 005 (House 12) Phase 1 contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 005 (House 12)',
-    building_number: '005',
-    approved_by: 'Road Committee Financial Secretary',
-    receipt_or_invoice_ref: 'RCP-RD-2026-002',
-    provider_transaction_id: 'BNK-ZEN-9920102',
-    notes: 'Direct deposit confirmed by Zenith Bank ledger',
-    verified_at: '2026-10-02T11:30:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-003',
-    reference: 'FOG-RD-2026-003',
-    date: '2026-10-03',
-    type: 'CREDIT',
-    source: 'Paystack',
-    description: 'Building 018 (Acacia Close) Landlord levy',
-    category: 'Landlord Levy',
-    amount: 100000,
-    payer_or_vendor: 'Building 018 (Acacia Close)',
-    building_number: '018',
-    approved_by: 'Paystack Automated Gateway (Server Verified)',
-    receipt_or_invoice_ref: 'RCP-RD-2026-003',
-    provider_transaction_id: 'pstk_tx_304910',
-    notes: 'Full road assessment paid in advance via Paystack',
-    verified_at: '2026-10-03T14:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-004',
-    reference: 'FOG-RD-2026-004',
-    date: '2026-10-05',
-    type: 'CREDIT',
-    source: 'Bank API',
-    description: 'Building 024 contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 024 (Plot 14B)',
-    building_number: '024',
-    approved_by: 'Zenith Open Banking Feed',
-    receipt_or_invoice_ref: 'RCP-RD-2026-004',
-    provider_transaction_id: 'BNK-ZEN-9920104',
-    notes: 'Mandatory road construction levy - verified via Open Banking feed',
-    verified_at: '2026-10-05T09:20:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-005',
-    reference: 'FOG-RD-2026-005',
-    date: '2026-10-07',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 031 contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 031 (Plot 21)',
-    building_number: '031',
-    approved_by: 'Road Committee Chairman',
-    receipt_or_invoice_ref: 'RCP-RD-2026-005',
-    provider_transaction_id: 'BNK-ZEN-9920105',
-    notes: 'Resident road contribution payment verified',
-    verified_at: '2026-10-07T13:45:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-006',
-    reference: 'FOG-RD-2026-006',
-    date: '2026-10-08',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Palm View Boulevard Landlords Association matching grant',
-    category: 'Special Donation',
-    amount: 750000,
-    payer_or_vendor: 'Palm View Boulevard Landlords Forum',
-    approved_by: 'Estate Executive Council & Road Lead',
-    receipt_or_invoice_ref: 'RCP-RD-2026-006',
-    provider_transaction_id: 'BNK-ZEN-9920106',
-    notes: 'Zonal joint community development fund counterpart contribution',
-    verified_at: '2026-10-08T16:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-007',
-    reference: 'FOG-RD-2026-007',
-    date: '2026-10-10',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: 'Road materials',
-    category: 'Drainage Construction',
-    amount: 50000,
-    payer_or_vendor: 'Dangote Cement Depot & BRC Hardware',
-    approved_by: 'Site Civil Engineer & Project Treasurer',
-    receipt_or_invoice_ref: 'INV-MAT-1082',
-    notes: 'Purchase of 50 bags Portland cement and binding wire for side drain foundation',
-    verified_at: '2026-10-10T10:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-008',
-    reference: 'FOG-RD-2026-008',
-    date: '2026-10-12',
-    type: 'CREDIT',
-    source: 'Paystack',
-    description: 'Building 014 (Plot 22) contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 014 (Plot 22)',
-    building_number: '014',
-    approved_by: 'Paystack Automated Gateway (Server Verified)',
-    receipt_or_invoice_ref: 'RCP-RD-2026-007',
-    provider_transaction_id: 'pstk_tx_304918',
-    notes: 'Direct online payment verified via Paystack',
-    verified_at: '2026-10-12T11:20:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-009',
-    reference: 'FOG-RD-2026-009',
-    date: '2026-10-14',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: 'Heavy equipment rental & earthwork grading (Phase 1)',
-    category: 'Earthwork & Grading',
-    amount: 320000,
-    payer_or_vendor: 'Delta Heavy Civil Equipment Rentals Ltd',
-    approved_by: 'Site Supervising Engineer',
-    receipt_or_invoice_ref: 'INV-EQP-491',
-    notes: 'Caterpillar 140K Motor Grader and Bomag Vibratory Roller 2-day hire',
-    verified_at: '2026-10-14T17:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-010',
-    reference: 'FOG-RD-2026-010',
-    date: '2026-10-15',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 042 (Plot 9C) road contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 042 (Plot 9C)',
-    building_number: '042',
-    approved_by: 'Road Committee Auditor',
-    receipt_or_invoice_ref: 'RCP-RD-2026-008',
-    provider_transaction_id: 'BNK-ZEN-9920110',
-    notes: 'Verified against Stanbic IBTC bank alert',
-    verified_at: '2026-10-15T09:10:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-011',
-    reference: 'FOG-RD-2026-011',
-    date: '2026-10-17',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Diaspora Residents Infrastructure Support Grant',
-    category: 'Special Donation',
-    amount: 1250000,
-    payer_or_vendor: 'Finger of God Estate Diaspora Initiative',
-    approved_by: 'Estate Executive Council',
-    receipt_or_invoice_ref: 'RCP-RD-2026-009',
-    provider_transaction_id: 'BNK-ZEN-9920111',
-    notes: 'Special donor intervention for stormwater canal drainage line',
-    verified_at: '2026-10-17T12:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-012',
-    reference: 'FOG-RD-2026-012',
-    date: '2026-10-18',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: 'Precast concrete U-drains & reinforced cover slabs',
-    category: 'Culvert & Crossing Slab',
-    amount: 480000,
-    payer_or_vendor: 'Western Precast Concrete Works',
-    approved_by: 'Project Civil Engineer',
-    receipt_or_invoice_ref: 'INV-WPC-892',
-    notes: 'Supply and installation of 40 units 600mm x 600mm precast drainage gutters',
-    verified_at: '2026-10-18T15:30:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-013',
-    reference: 'FOG-RD-2026-013',
-    date: '2026-10-19',
-    type: 'CREDIT',
-    source: 'Bank API',
-    description: 'Building 009 (Flat 3, Block C) Contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 009 (Block C)',
-    building_number: '009',
-    approved_by: 'Zenith Open Banking Feed',
-    receipt_or_invoice_ref: 'RCP-RD-2026-010',
-    provider_transaction_id: 'BNK-ZEN-9920113',
-    notes: 'Block assessment contribution confirmed',
-    verified_at: '2026-10-19T10:40:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-014',
-    reference: 'FOG-RD-2026-014',
-    date: '2026-10-20',
-    type: 'CREDIT',
-    source: 'Paystack',
-    description: 'Building 028 (Plot 11) Infrastructure levy',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 028 (Plot 11)',
-    building_number: '028',
-    approved_by: 'Paystack Automated Gateway (Server Verified)',
-    receipt_or_invoice_ref: 'RCP-RD-2026-011',
-    provider_transaction_id: 'pstk_tx_304924',
-    notes: 'Annual road modernization levy verified',
-    verified_at: '2026-10-20T14:15:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-015',
-    reference: 'FOG-RD-2026-015',
-    date: '2026-10-21',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: 'Granite stone base & compacted quarry dust (4 triaxle loads)',
-    category: 'Stone Base & Aggregates',
-    amount: 380000,
-    payer_or_vendor: 'Apex Quarry Supplies Asaba',
-    approved_by: 'Site Works Supervisor',
-    receipt_or_invoice_ref: 'INV-APX-3019',
-    notes: 'Delivery of 120 tonnes graded crushed stone base for Main Boulevard roadbed',
-    verified_at: '2026-10-21T16:45:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-016',
-    reference: 'FOG-RD-2026-016',
-    date: '2026-10-22',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 036 (Plot 17A) Road contribution',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 036 (Plot 17A)',
-    building_number: '036',
-    approved_by: 'Road Committee Chairman',
-    receipt_or_invoice_ref: 'RCP-RD-2026-012',
-    provider_transaction_id: 'BNK-ZEN-9920116',
-    notes: 'Verified electronic transfer',
-    verified_at: '2026-10-22T08:50:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-017',
-    reference: 'FOG-RD-2026-017',
-    date: '2026-10-23',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: 'Site labor, drainage trenching & compaction test fee',
-    category: 'Project Supervision & Testing',
-    amount: 115000,
-    payer_or_vendor: 'Civil Testing Lab & Artisan Union',
-    approved_by: 'Resident Committee Auditor',
-    receipt_or_invoice_ref: 'VOUCH-LAB-044',
-    notes: 'Independent California Bearing Ratio (CBR) soil compaction test and artisan wages',
-    verified_at: '2026-10-23T16:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-018',
-    reference: 'FOG-RD-2026-018',
-    date: '2026-10-24',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Building 019 (Plot 3) Road assessment levy',
-    category: 'Building Contribution',
-    amount: 100000,
-    payer_or_vendor: 'Building 019 (Plot 3)',
-    building_number: '019',
-    approved_by: 'Road Committee Auditor',
-    receipt_or_invoice_ref: 'RCP-RD-2026-013',
-    provider_transaction_id: 'BNK-ZEN-9920118',
-    notes: 'Confirmed by Zenith Bank estate statement',
-    verified_at: '2026-10-24T11:00:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-019',
-    reference: 'FOG-RD-2026-019',
-    date: '2026-10-25',
-    type: 'CREDIT',
-    source: 'Bank Transfer',
-    description: 'Commercial Plaza & Pharmacy store infrastructure levy',
-    category: 'Commercial Store Levy',
-    amount: 250000,
-    payer_or_vendor: 'Phase 1 Commercial Complex',
-    approved_by: 'Estate Executive Committee',
-    receipt_or_invoice_ref: 'RCP-RD-2026-014',
-    provider_transaction_id: 'BNK-ZEN-9920119',
-    notes: 'Commercial vehicle impact assessment fee',
-    verified_at: '2026-10-25T15:20:00Z',
-    status: 'VERIFIED'
-  },
-  {
-    id: 'rd-tx-020',
-    reference: 'FOG-RD-2026-020',
-    date: '2026-10-26',
-    type: 'DEBIT',
-    source: 'Admin-authorized expenditure',
-    description: '60mm heavy-duty interlocking paving stones deposit (Phase 1)',
-    category: 'Interlocking Paving',
-    amount: 750000,
-    payer_or_vendor: 'Niger Paving Stones & Ceramics Ltd',
-    approved_by: 'Project Chairman & Civil Engineer',
-    receipt_or_invoice_ref: 'INV-NPS-7741',
-    notes: 'Advance deposit for 1,200 square meters of 40MPa hydraulically pressed interlocking pavers',
-    verified_at: '2026-10-26T12:00:00Z',
-    status: 'VERIFIED'
-  }
-];
+const INITIAL_ROAD_TRANSACTIONS_SEED: Omit<RoadProjectTransaction, 'running_balance'>[] = [];
 
 const INITIAL_ROAD_MILESTONES_SEED: RoadProjectMilestone[] = [
   {
@@ -6132,7 +5786,7 @@ export const dbService = {
     return [...list].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.reference.localeCompare(b.reference));
   },
 
-  async getRoadProjectSummary(targetBudget: number = 35000000): Promise<RoadProjectSummary> {
+  async getRoadProjectSummary(targetBudget?: number): Promise<RoadProjectSummary> {
     try {
       const res = await fetch('/api/road-project/ledger');
       if (res.ok) {
@@ -6162,12 +5816,15 @@ export const dbService = {
     }
 
     const currentBalance = totalCredits - totalDebits;
-    const outstanding = Math.max(0, targetBudget - totalCredits);
-    const collectionPercentage = targetBudget > 0 ? Math.min(100, Math.round((totalCredits / targetBudget) * 100)) : 0;
+    const effectiveBudget = typeof targetBudget === 'number' && targetBudget > 0 ? targetBudget : 0;
+    const hasOfficialTarget = effectiveBudget > 0;
+    const outstanding = hasOfficialTarget ? Math.max(0, effectiveBudget - totalCredits) : 0;
+    const collectionPercentage = hasOfficialTarget ? Math.min(100, Math.round((totalCredits / effectiveBudget) * 100)) : 0;
 
     return {
-      project_name: 'Phase 1 & Phase 2 Boulevard Road Paving & Drainage Modernization',
-      target_budget: targetBudget,
+      project_name: 'Finger of God Estate Road Modernization Project',
+      target_budget: effectiveBudget,
+      has_official_target: hasOfficialTarget,
       total_collected: totalCredits,
       total_spent: totalDebits,
       current_balance: currentBalance,
@@ -6182,6 +5839,23 @@ export const dbService = {
         bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)'
       }
     };
+  },
+
+  async updateRoadProjectTarget(target: number): Promise<{ success: boolean; target_budget?: number; message?: string }> {
+    try {
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+      const res = await fetch('/api/road-project/target', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+        },
+        body: JSON.stringify({ target_budget: target })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to update target' };
+    }
   },
 
   async getRoadProjectMilestones(): Promise<RoadProjectMilestone[]> {

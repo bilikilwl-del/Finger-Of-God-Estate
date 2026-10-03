@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   Coins,
@@ -13,7 +13,8 @@ import {
   Building2,
   TrendingUp
 } from 'lucide-react';
-import { EstateSettings, NavigationTab, Resident } from '../../types/database';
+import { EstateSettings, NavigationTab, Resident, RoadProjectSummary } from '../../types/database';
+import { dbService } from '../../lib/supabase';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
 import { SEOHead } from '../common/SEOHead';
@@ -31,17 +32,31 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
   onNavigate,
   onOpenResidentLogin
 }) => {
+  const [roadSummary, setRoadSummary] = useState<RoadProjectSummary | null>(null);
+
+  useEffect(() => {
+    async function loadRoadSummary() {
+      try {
+        const sum = await dbService.getRoadProjectSummary(35000000);
+        setRoadSummary(sum);
+      } catch (e) {
+        console.warn('Failed to load road summary:', e);
+      }
+    }
+    loadRoadSummary();
+  }, []);
+
   const projects = [
     {
       id: 'road',
       title: 'Road Paving & Interlocking Project',
       category: 'Civil & Infrastructure',
-      targetBudget: 35000000,
-      collectedAmount: 22400000,
-      spentAmount: 14850000,
-      currentBalance: 7550000,
-      progressPercentage: 64,
-      status: 'Active (Phase 1 Paving)',
+      targetBudget: roadSummary?.target_budget || 35000000,
+      collectedAmount: roadSummary?.total_collected || 0,
+      spentAmount: roadSummary?.total_spent || 0,
+      currentBalance: roadSummary?.current_balance || 0,
+      progressPercentage: roadSummary?.collection_percentage || 0,
+      status: (roadSummary?.total_collected || 0) > 0 ? 'Active (Phase 1 Paving)' : 'Active (Contributions Open)',
       statusColor: 'bg-amber-100 text-amber-800 border-amber-200',
       description: 'Comprehensive road grading, reinforced concrete drainage channels, and heavy-duty 80mm interlocking stone paving across Phase 1 Main Boulevard and connecting residential closes.',
       highlights: [
@@ -59,10 +74,10 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
       title: 'Central Stormwater Drainage Modernization',
       category: 'Flood Prevention & Civil',
       targetBudget: 12000000,
-      collectedAmount: 4800000,
-      spentAmount: 2100000,
-      currentBalance: 2700000,
-      progressPercentage: 40,
+      collectedAmount: 0,
+      spentAmount: 0,
+      currentBalance: 0,
+      progressPercentage: 0,
       status: 'Engineering Survey Completed',
       statusColor: 'bg-blue-100 text-blue-800 border-blue-200',
       description: 'Expansion and de-silting of the main collector canal linking Finger of God Estate to the Asaba municipal stormwater discharge corridor, preventing seasonal flash floods.',
@@ -81,10 +96,10 @@ export const PublicProjectsOverviewView: React.FC<PublicProjectsOverviewViewProp
       title: 'Automated RFID Gate Barrier & Security System',
       category: 'Security & Access Tech',
       targetBudget: 8500000,
-      collectedAmount: 5100000,
-      spentAmount: 3200000,
-      currentBalance: 1900000,
-      progressPercentage: 60,
+      collectedAmount: 0,
+      spentAmount: 0,
+      currentBalance: 0,
+      progressPercentage: 0,
       status: 'Pilot Gate Testing',
       statusColor: 'bg-purple-100 text-purple-800 border-purple-200',
       description: 'Automated dual-lane boom barriers with resident RFID windshield tags, automatic number plate recognition (ANPR) cameras, and digital visitor QR code scanner at Main Gate.',

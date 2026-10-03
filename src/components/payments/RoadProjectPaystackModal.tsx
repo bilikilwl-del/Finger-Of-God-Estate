@@ -212,35 +212,35 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
               </div>
               <div>
                 <h4 className="text-xl font-black text-slate-900 font-display">
-                  Contribution Verified & Recorded!
+                  Road Project Contribution Successful
                 </h4>
-                <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto">
-                  Thank you! Your payment has been server-verified and automatically entered into the Road Project transparent ledger.
+                <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto font-medium">
+                  Thank you for contributing to the Finger of God Estate Road Modernization Project.
                 </p>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2 text-xs">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2.5 text-xs">
                 <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500">Transaction Reference:</span>
+                  <span className="text-slate-500 font-medium">Amount Paid:</span>
+                  <span className="font-bold text-emerald-700 text-base font-mono">₦{successTx.amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-200/80">
+                  <span className="text-slate-500 font-medium">Reference:</span>
                   <span className="font-mono font-bold text-slate-800">{successTx.reference}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500">Amount Credited:</span>
-                  <span className="font-bold text-emerald-700 text-sm">₦{successTx.amount.toLocaleString()}</span>
+                  <span className="text-slate-500 font-medium">Project:</span>
+                  <span className="font-semibold text-slate-900">Finger of God Estate Road Modernization Project</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500">Building / Compound:</span>
-                  <span className="font-semibold text-slate-900">{successTx.building_number || 'General'}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-slate-200/80">
-                  <span className="text-slate-500">Contributor:</span>
-                  <span className="font-semibold text-slate-900">{successTx.payer_or_vendor}</span>
+                  <span className="text-slate-500 font-medium">Contributor:</span>
+                  <span className="font-semibold text-slate-900">{successTx.payer_or_vendor || (successTx.building_number ? `Resident ${successTx.building_number}` : 'Resident Contributor')}</span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span className="text-slate-500">Verification Source:</span>
-                  <span className="inline-flex items-center gap-1 font-bold text-emerald-800">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    Paystack Verified (Server Ledger)
+                  <span className="text-slate-500 font-medium">Status:</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    Verified &amp; Recorded
                   </span>
                 </div>
               </div>
@@ -250,7 +250,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
                 onClick={handleFinish}
                 className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
               >
-                Close & View on Live Ledger
+                Close &amp; View on Live Ledger
               </button>
             </div>
           ) : (

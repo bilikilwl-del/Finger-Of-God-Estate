@@ -527,17 +527,21 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
           <div className="space-y-2.5">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Latest Credits</span>
-            {creditsList.slice(0, 3).map((c) => (
-              <div key={c.id} className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-bold text-slate-900 truncate max-w-[200px]">{c.description}</p>
-                  <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(c.date)} • {formatTxTime(c.verified_at || c.date)}</p>
+            {creditsList.length === 0 ? (
+              <p className="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded-xl">No road project contributions yet.</p>
+            ) : (
+              creditsList.slice(0, 3).map((c) => (
+                <div key={c.id} className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-slate-900 truncate max-w-[200px]">{c.description}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(c.date)} • {formatTxTime(c.verified_at || c.date)}</p>
+                  </div>
+                  <div className="text-right font-mono font-bold text-emerald-700">
+                    +{formatNaira(c.amount)}
+                  </div>
                 </div>
-                <div className="text-right font-mono font-bold text-emerald-700">
-                  +{formatNaira(c.amount)}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <button
@@ -568,17 +572,21 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
           <div className="space-y-2.5">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Latest Expenditures</span>
-            {debitsList.slice(0, 3).map((d) => (
-              <div key={d.id} className="p-3 rounded-xl bg-rose-50/60 border border-rose-100 flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-bold text-slate-900 truncate max-w-[200px]">{d.description}</p>
-                  <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(d.date)} • {formatTxTime(d.verified_at || d.date)}</p>
+            {debitsList.length === 0 ? (
+              <p className="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded-xl">No project expenditures recorded yet.</p>
+            ) : (
+              debitsList.slice(0, 3).map((d) => (
+                <div key={d.id} className="p-3 rounded-xl bg-rose-50/60 border border-rose-100 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-slate-900 truncate max-w-[200px]">{d.description}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(d.date)} • {formatTxTime(d.verified_at || d.date)}</p>
+                  </div>
+                  <div className="text-right font-mono font-bold text-rose-600">
+                    -{formatNaira(d.amount)}
+                  </div>
                 </div>
-                <div className="text-right font-mono font-bold text-rose-600">
-                  -{formatNaira(d.amount)}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <button
@@ -608,23 +616,27 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           </div>
 
           <div className="space-y-3 overflow-y-auto max-h-[220px] pr-1">
-            {transactions.slice(0, 4).map((tx) => {
-              const timeStr = formatTxTime(tx.verified_at || tx.date);
-              const isCredit = tx.type === 'CREDIT';
-              return (
-                <div key={tx.id} className="flex items-start gap-3 text-xs border-b border-slate-100 pb-2.5 last:border-0">
-                  <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
-                    {timeStr}
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-800 leading-tight">
-                      {isCredit ? 'Credit received from' : 'Disbursement for'} {tx.payer_or_vendor}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">{tx.description}</p>
+            {transactions.length === 0 ? (
+              <p className="text-xs text-slate-500 py-4 text-center">No transactions recorded yet.</p>
+            ) : (
+              transactions.slice(0, 4).map((tx) => {
+                const timeStr = formatTxTime(tx.verified_at || tx.date);
+                const isCredit = tx.type === 'CREDIT';
+                return (
+                  <div key={tx.id} className="flex items-start gap-3 text-xs border-b border-slate-100 pb-2.5 last:border-0">
+                    <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
+                      {timeStr}
+                    </span>
+                    <div className="flex-1">
+                      <p className="font-semibold text-slate-800 leading-tight">
+                        {isCredit ? 'Credit received from' : 'Disbursement for'} {tx.payer_or_vendor}
+                      </p>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{tx.description}</p>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           <div className="pt-2">

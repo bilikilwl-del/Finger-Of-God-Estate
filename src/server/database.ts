@@ -44,7 +44,8 @@ const DEFAULT_ESTATE_SETTINGS = {
   contact_phone: '08023456789',
   contact_email: 'admin@fingerofgodestate.ng',
   sms_sender_name: 'FINGEROFGOD',
-  first_payment_month: 'October 2026'
+  first_payment_month: 'October 2026',
+  road_project_target: 35000000
 };
 
 const DEFAULT_RESIDENTS = [
@@ -529,6 +530,31 @@ export const serverDb = {
   },
 
   // ROAD PROJECT
+  getRoadTransactionsSync(): any[] {
+    return localDb.road_project_transactions || [];
+  },
+
+  getEstateSettingsSync(): any {
+    return localDb.estate_settings;
+  },
+
+  async updateRoadProjectTarget(target: number): Promise<any> {
+    localDb.estate_settings = {
+      ...localDb.estate_settings,
+      road_project_target: target
+    };
+    saveDbToFile(localDb);
+    try {
+      await supabaseAdmin.from('estate_settings').upsert({
+        ...localDb.estate_settings,
+        updated_at: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn('Supabase estate_settings sync queued locally:', e);
+    }
+    return localDb.estate_settings;
+  },
+
   async getRoadTransactions(): Promise<any[]> {
     try {
       const { data, error } = await supabaseAdmin.from('road_project_transactions').select('*').order('date', { ascending: false });

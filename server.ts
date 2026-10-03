@@ -872,9 +872,14 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
         return res.sendStatus(200);
       }
 
-      // Check if this payment belongs to the Road Project infrastructure fund
-      if (reference.startsWith('FOG-RD-') || data.metadata?.project === 'road_project') {
-        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Project ledger...`);
+      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security/estate levies)
+      const isRoadPayment = 
+        data.metadata?.project_type === 'road_modernization' ||
+        data.metadata?.project === 'road_project' ||
+        String(reference).startsWith('FOG-RD-');
+
+      if (isRoadPayment) {
+        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
         processVerifiedRoadPaystackEvent(data);
         return res.sendStatus(200);
       }

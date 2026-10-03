@@ -41,6 +41,7 @@ export interface EstateSettings {
   contact_email: string;
   sms_sender_name: string;
   first_payment_month: string; // Default 'October 2026'
+  road_project_target?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -1034,6 +1035,7 @@ export interface RoadProjectMilestone {
 export interface RoadProjectSummary {
   project_name: string;
   target_budget: number;
+  has_official_target?: boolean;
   total_collected: number; // Sum of CREDITS
   total_spent: number; // Sum of DEBITS
   current_balance: number; // total_collected - total_spent (strictly computed)

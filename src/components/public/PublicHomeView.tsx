@@ -549,19 +549,19 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                   <div>
                     <p className="text-[11px] text-amber-800 uppercase font-semibold">Total Credit</p>
                     <p className="font-bold text-amber-950 font-mono text-sm sm:text-base">
-                      ₦{roadSummary ? roadSummary.total_collected.toLocaleString() : '22,400,000'}
+                      ₦{roadSummary ? roadSummary.total_collected.toLocaleString() : '0'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] text-rose-800 uppercase font-semibold">Total Debit</p>
                     <p className="font-bold text-rose-950 font-mono text-sm sm:text-base">
-                      ₦{roadSummary ? roadSummary.total_spent.toLocaleString() : '14,850,000'}
+                      ₦{roadSummary ? roadSummary.total_spent.toLocaleString() : '0'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] text-emerald-800 uppercase font-semibold">Balance</p>
                     <p className="font-bold text-emerald-950 font-mono text-sm sm:text-base">
-                      ₦{roadSummary ? roadSummary.current_balance.toLocaleString() : '7,550,000'}
+                      ₦{roadSummary ? roadSummary.current_balance.toLocaleString() : '0'}
                     </p>
                   </div>
                 </div>
