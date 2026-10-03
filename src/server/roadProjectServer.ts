@@ -82,8 +82,9 @@ export interface ServerRoadSummary {
   debits_count: number;
   last_updated: string;
   sync_status: {
-    paystack: string;
-    bank_sync: string;
+    paystack?: string;
+    gateway?: string;
+    bank_sync?: string;
     last_sync_time: string;
     active_sse_connections: number;
   };
@@ -252,7 +253,7 @@ export function computeRoadProjectSummary(overrideBudget?: number): ServerRoadSu
     last_updated: new Date().toISOString(),
     sync_status: {
       paystack: 'ACTIVE (Real-Time Webhook Verified)',
-      bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)',
+      gateway: 'ACTIVE (Paystack Online Processing)',
       last_sync_time: new Date().toISOString(),
       active_sse_connections: roadSseClients.length
     }
@@ -587,7 +588,7 @@ roadProjectRouter.get('/summary', (_req: Request, res: Response) => {
     milestones: serverDb.getRoadMilestones ? serverDb.getRoadMilestones() : [],
     sync_status: {
       paystack: 'ACTIVE (Real-Time Webhook Verified)',
-      bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)',
+      gateway: 'ACTIVE (Paystack Online Processing)',
       last_sync_time: new Date().toISOString(),
       active_sse_connections: roadSseClients.length
     }
@@ -607,7 +608,7 @@ roadProjectRouter.get('/ledger', (_req: Request, res: Response) => {
     milestones: [],
     sync_status: {
       paystack: 'ACTIVE (Real-Time Webhook Verified)',
-      bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)',
+      gateway: 'ACTIVE (Paystack Online Processing)',
       last_sync_time: new Date().toISOString(),
       active_sse_connections: roadSseClients.length
     }

@@ -97,23 +97,9 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
   // Modal states
   const [selectedTx, setSelectedTx] = useState<RoadProjectTransaction | null>(null);
-  const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
-  const [isSubmitProofModalOpen, setIsSubmitProofModalOpen] = useState(false);
-  const [proofSubmitted, setProofSubmitted] = useState(false);
-  const [proofData, setProofData] = useState({
-    buildingNumber: '',
-    donorName: '',
-    phone: '',
-    amount: '',
-    paymentDate: '',
-    bankReference: '',
-    notes: ''
-  });
 
   // Paystack Quick Online Contribution
   const [isPaystackModalOpen, setIsPaystackModalOpen] = useState(false);
-  const [onlineContributionAmount, setOnlineContributionAmount] = useState<number>(100000);
-  const [isSubmittingProof, setIsSubmittingProof] = useState(false);
 
   // Near real-time SSE stream hook
   const { isConnected: isStreamConnected, lastNotification, dismissNotification } = useRoadProjectStream({
@@ -155,16 +141,18 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
     });
   };
 
-  // Filter transactions
+  // Filter transactions strictly for road_modernization project records
   const filteredTransactions = transactions.filter(tx => {
+    // Only records tagged with road_modernization
+    if (tx.project_type && tx.project_type !== 'road_modernization') return false;
     if (typeFilter !== 'ALL' && tx.type !== typeFilter) return false;
     if (categoryFilter !== 'ALL' && tx.category !== categoryFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchDesc = tx.description.toLowerCase().includes(q);
-      const matchRef = tx.reference.toLowerCase().includes(q);
-      const matchPayer = tx.payer_or_vendor.toLowerCase().includes(q);
-      const matchCat = tx.category.toLowerCase().includes(q);
+      const matchDesc = tx.description?.toLowerCase().includes(q);
+      const matchRef = tx.reference?.toLowerCase().includes(q);
+      const matchPayer = (tx.contributor_display_name || tx.payer_or_vendor || '').toLowerCase().includes(q);
+      const matchCat = tx.category?.toLowerCase().includes(q);
       const matchRec = tx.receipt_or_invoice_ref?.toLowerCase().includes(q);
       if (!matchDesc && !matchRef && !matchPayer && !matchCat && !matchRec) return false;
     }
@@ -173,7 +161,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
   const handleExportCSV = () => {
     if (transactions.length === 0) return;
-    const headers = ['Date', 'Time', 'Reference', 'Type', 'Description', 'Category', 'Payer/Vendor', 'Credit (NGN)', 'Debit (NGN)', 'Running Balance (NGN)', 'Approved By'];
+    const headers = ['Date', 'Time', 'Reference', 'Type', 'Description', 'Category', 'Contributor/Vendor', 'Credit (NGN)', 'Debit (NGN)', 'Running Balance (NGN)', 'Approved By'];
     const rows = transactions.map(tx => [
       tx.date,
       new Date(tx.verified_at || tx.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -181,7 +169,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
       tx.type,
       `"${tx.description.replace(/"/g, '""')}"`,
       `"${tx.category}"`,
-      `"${tx.payer_or_vendor}"`,
+      `"${tx.contributor_display_name || tx.payer_or_vendor || 'Anonymous Contributor'}"`,
       tx.type === 'CREDIT' ? tx.amount : 0,
       tx.type === 'DEBIT' ? tx.amount : 0,
       tx.running_balance,
@@ -196,49 +184,6 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const handleProofSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingProof(true);
-    try {
-      const amt = parseFloat(proofData.amount);
-      if (isNaN(amt) || amt <= 0) {
-        alert('Please enter a valid amount.');
-        setIsSubmittingProof(false);
-        return;
-      }
-
-      await dbService.simulateBankTransferWebhook({
-        bank_transaction_id: proofData.bankReference?.trim() || `PROOF-${Date.now()}`,
-        amount: amt,
-        date: proofData.paymentDate || new Date().toISOString().split('T')[0],
-        narration: `Resident bank payment reported: ${proofData.donorName} (${proofData.buildingNumber}). Notes: ${proofData.notes || 'None'}`,
-        sender_name: proofData.donorName,
-        bank_name: 'Zenith Bank PLC',
-        source_type: 'Bank Transfer'
-      });
-
-      setProofSubmitted(true);
-      setTimeout(() => {
-        setProofSubmitted(false);
-        setIsSubmitProofModalOpen(false);
-        setProofData({
-          buildingNumber: '',
-          donorName: '',
-          phone: '',
-          amount: '',
-          paymentDate: '',
-          bankReference: '',
-          notes: ''
-        });
-        loadRoadData();
-      }, 2000);
-    } catch (err: any) {
-      alert(err.message || 'Failed to submit proof');
-    } finally {
-      setIsSubmittingProof(false);
-    }
   };
 
   const formatNaira = (amt: number) => `₦${(amt || 0).toLocaleString()}`;
@@ -654,30 +599,23 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/30 text-emerald-300 text-xs font-bold border border-emerald-400/30">
               <Coins className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Direct Community Contribution Portal</span>
+              <span>Contribute to Road Project</span>
             </div>
-            <h3 className="text-xl sm:text-2xl font-black text-white font-display">
-              Contribute to the Road Modernization Project
+            <h3 className="text-2xl sm:text-4xl font-black text-white font-display">
+              Finger of God Estate Road Modernization
             </h3>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Support the estate's heavy-duty interlocking and drainage project. Pay online instantly with Paystack or report your bank transfer for instant audit verification.
+            <p className="text-sm sm:text-base text-slate-200 leading-relaxed">
+              Make your contribution securely online using Paystack.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
             <button
-              onClick={() => setIsContributeModalOpen(true)}
-              className="px-6 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition-all text-center cursor-pointer flex items-center justify-center gap-2"
+              onClick={() => setIsPaystackModalOpen(true)}
+              className="px-8 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg hover:shadow-emerald-500/20 transition-all text-center cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.02]"
             >
-              <Coins className="w-4 h-4" />
-              <span>Contribute Online</span>
-            </button>
-            <button
-              onClick={() => setIsSubmitProofModalOpen(true)}
-              className="px-6 py-3.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs uppercase tracking-wider transition-all text-center cursor-pointer flex items-center justify-center gap-2"
-            >
-              <FileText className="w-4 h-4 text-emerald-400" />
-              <span>Report Bank Transfer</span>
+              <Coins className="w-5 h-5 text-slate-950" />
+              <span>Contribute Now</span>
             </button>
           </div>
         </div>
@@ -693,14 +631,14 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 font-display">
-                    LIVE TRANSACTION ACTIVITY
+                    Road Project Public Ledger
                   </h2>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs">
-                    {filteredTransactions.length} Filtered Records
+                    {filteredTransactions.length} Confirmed Records
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1">
-                  Chronological financial ledger with running balance. Every transaction displays exact date, time, reference, type, description, amount, and status.
+                  Chronological financial ledger with running balance. Every transaction displays exact contributor, date, reference, description, amount, and confirmed status.
                 </p>
               </div>
 
@@ -763,7 +701,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search by building, ref, description..."
+                    placeholder="Search by contributor, ref, description..."
                     className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   {searchQuery && (
@@ -800,13 +738,12 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             <table className="w-full text-left text-xs border-collapse hidden md:table">
               <thead>
                 <tr className="bg-slate-100/80 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-3.5 px-4 font-semibold">Contributor</th>
+                  <th className="py-3.5 px-4 text-right font-semibold text-emerald-800">Amount (₦)</th>
                   <th className="py-3.5 px-4 font-semibold">Date & Time</th>
                   <th className="py-3.5 px-3 font-semibold">Reference</th>
                   <th className="py-3.5 px-3 font-semibold">Type</th>
-                  <th className="py-3.5 px-4 font-semibold min-w-[220px]">Description</th>
-                  <th className="py-3.5 px-3 font-semibold">Category</th>
-                  <th className="py-3.5 px-4 text-right font-semibold text-emerald-800">Credit (₦)</th>
-                  <th className="py-3.5 px-4 text-right font-semibold text-rose-800">Debit (₦)</th>
+                  <th className="py-3.5 px-4 font-semibold min-w-[200px]">Description</th>
                   <th className="py-3.5 px-4 text-right font-semibold text-slate-900 bg-slate-50/80">Running Balance</th>
                   <th className="py-3.5 px-3 text-center font-semibold">Status</th>
                 </tr>
@@ -814,7 +751,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
               <tbody className="divide-y divide-slate-100 font-sans">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-500">
+                    <td colSpan={8} className="py-12 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Coins className="w-6 h-6 text-emerald-600 animate-spin" />
                         <span className="text-xs font-semibold">Loading verified financial ledger...</span>
@@ -823,16 +760,11 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                   </tr>
                 ) : filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-500">
+                    <td colSpan={8} className="py-12 text-center text-slate-500">
                       <div className="max-w-sm mx-auto space-y-2">
                         <AlertCircle className="w-8 h-8 text-slate-400 mx-auto" />
-                        <p className="font-semibold text-slate-700">No transactions match your search</p>
-                        <button
-                          onClick={() => { setTypeFilter('ALL'); setCategoryFilter('ALL'); setSearchQuery(''); }}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs"
-                        >
-                          Reset Filters
-                        </button>
+                        <p className="font-semibold text-slate-700">No road project contributions yet.</p>
+                        <p className="text-xs text-slate-500">Be the first to make an online contribution via Paystack!</p>
                       </div>
                     </td>
                   </tr>
@@ -841,12 +773,34 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                     const isCredit = tx.type === 'CREDIT';
                     const txDate = formatTxDate(tx.date);
                     const txTime = formatTxTime(tx.verified_at || tx.date);
+                    const contributorDisplayName = tx.contributor_display_name || tx.payer_or_vendor || (tx.building_number ? `Resident ${tx.building_number}` : 'Anonymous Contributor');
                     return (
                       <tr 
                         key={tx.id} 
                         className="hover:bg-slate-50/90 transition-colors group cursor-pointer"
                         onClick={() => setSelectedTx(tx)}
                       >
+                        {/* Contributor */}
+                        <td className="py-3.5 px-4 font-medium text-slate-900">
+                          <div className="font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                            {contributorDisplayName}
+                          </div>
+                          {tx.building_number && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-mono text-[9px] font-bold inline-block mt-0.5">
+                              Bldg {tx.building_number}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap">
+                          {isCredit ? (
+                            <span className="text-emerald-700">+{formatNaira(tx.amount)}</span>
+                          ) : (
+                            <span className="text-rose-600">-{formatNaira(tx.amount)}</span>
+                          )}
+                        </td>
+
                         {/* Date & Time */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="font-mono font-bold text-slate-800">{txDate}</div>
@@ -875,34 +829,12 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
                         {/* Description */}
                         <td className="py-3.5 px-4 font-medium text-slate-900">
-                          <div className="font-semibold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                          <div className="text-slate-800">
                             {tx.description}
                           </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                            <span className="font-medium text-slate-700">{tx.payer_or_vendor}</span>
-                            {tx.building_number && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-mono text-[9px] font-bold">
-                                Bldg {tx.building_number}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Category */}
-                        <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] inline-block mt-0.5">
                             {tx.category}
                           </span>
-                        </td>
-
-                        {/* Credit */}
-                        <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap">
-                          {isCredit ? <span className="text-emerald-700">+{formatNaira(tx.amount)}</span> : <span className="text-slate-300">—</span>}
-                        </td>
-
-                        {/* Debit */}
-                        <td className="py-3.5 px-4 text-right font-mono font-bold whitespace-nowrap">
-                          {!isCredit ? <span className="text-rose-600">-{formatNaira(tx.amount)}</span> : <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* Running Balance */}
@@ -913,7 +845,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                         {/* Status */}
                         <td className="py-3.5 px-3 text-center whitespace-nowrap">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            Verified
+                            Confirmed
                           </span>
                         </td>
                       </tr>
@@ -925,41 +857,49 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
             {/* Mobile Responsive Transaction Cards View */}
             <div className="block md:hidden divide-y divide-slate-200">
-              {filteredTransactions.map((tx) => {
-                const isCredit = tx.type === 'CREDIT';
-                const txDate = formatTxDate(tx.date);
-                const txTime = formatTxTime(tx.verified_at || tx.date);
-                return (
-                  <div 
-                    key={tx.id} 
-                    onClick={() => setSelectedTx(tx)}
-                    className="p-4 space-y-2.5 hover:bg-slate-50 cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono text-slate-500 font-semibold">{txDate} • {txTime}</span>
-                      {isCredit ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">CREDIT</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">DEBIT</span>
-                      )}
+              {filteredTransactions.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 space-y-1">
+                  <AlertCircle className="w-6 h-6 text-slate-400 mx-auto" />
+                  <p className="font-semibold text-xs">No road project contributions yet.</p>
+                </div>
+              ) : (
+                filteredTransactions.map((tx) => {
+                  const isCredit = tx.type === 'CREDIT';
+                  const txDate = formatTxDate(tx.date);
+                  const txTime = formatTxTime(tx.verified_at || tx.date);
+                  const contributorDisplayName = tx.contributor_display_name || tx.payer_or_vendor || (tx.building_number ? `Resident ${tx.building_number}` : 'Anonymous Contributor');
+                  return (
+                    <div 
+                      key={tx.id} 
+                      onClick={() => setSelectedTx(tx)}
+                      className="p-4 space-y-2.5 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono text-slate-500 font-semibold">{txDate} • {txTime}</span>
+                        {isCredit ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">CREDIT</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">DEBIT</span>
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs">{contributorDisplayName}</h4>
+                        <p className="text-[11px] text-slate-600 mt-0.5">{tx.description}</p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono">
+                        <span className="text-slate-500 font-semibold">Ref: {tx.reference}</span>
+                        <span className={`font-black ${isCredit ? 'text-emerald-700' : 'text-rose-600'}`}>
+                          {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 bg-slate-50 p-2 rounded-lg font-mono">
+                        <span>Running Balance:</span>
+                        <strong className="text-slate-900">{formatNaira(tx.running_balance)}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-xs">{tx.description}</h4>
-                      <p className="text-[11px] text-slate-600 mt-0.5">{tx.payer_or_vendor}</p>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-mono">
-                      <span className="text-slate-500 font-semibold">Ref: {tx.reference}</span>
-                      <span className={`font-black ${isCredit ? 'text-emerald-700' : 'text-rose-600'}`}>
-                        {isCredit ? '+' : '-'}{formatNaira(tx.amount)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 bg-slate-50 p-2 rounded-lg font-mono">
-                      <span>Running Balance:</span>
-                      <strong className="text-slate-900">{formatNaira(tx.running_balance)}</strong>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -1066,6 +1006,10 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="bg-slate-50 p-3 rounded-xl">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Contributor / Payer</span>
+                  <span className="font-semibold text-slate-800">{selectedTx.contributor_display_name || selectedTx.payer_or_vendor || 'Anonymous Contributor'}</span>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-xl">
                   <span className="text-slate-400 text-[10px] uppercase font-bold block">Date & Time</span>
                   <span className="font-semibold text-slate-800 font-mono">{selectedTx.date} • {formatTxTime(selectedTx.verified_at || selectedTx.date)}</span>
                 </div>
@@ -1074,12 +1018,8 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
                   <span className="font-semibold text-slate-800">{selectedTx.category}</span>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Payer / Vendor</span>
-                  <span className="font-semibold text-slate-800">{selectedTx.payer_or_vendor}</span>
-                </div>
-                <div className="bg-slate-50 p-3 rounded-xl">
-                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Receipt Ref</span>
-                  <span className="font-semibold font-mono text-slate-800">{selectedTx.receipt_or_invoice_ref || 'N/A'}</span>
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Payment Gateway</span>
+                  <span className="font-semibold text-slate-800">{selectedTx.source || 'Paystack'}</span>
                 </div>
               </div>
 
@@ -1098,180 +1038,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
         </div>
       )}
 
-      {/* 8. CONTRIBUTE MODAL */}
-      {isContributeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                  <Coins className="w-5 h-5 text-emerald-700" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-base font-display">Contribute to Road Project</h3>
-                  <p className="text-xs text-slate-500">Finger of God Estate Road Modernization</p>
-                </div>
-              </div>
-              <button onClick={() => setIsContributeModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="py-4 space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 space-y-2">
-                <div className="font-bold flex items-center gap-1.5 text-amber-800">
-                  <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Direct Bank Transfer Details:</span>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-amber-200/80 font-mono text-slate-800 space-y-1">
-                  <div className="flex justify-between"><span className="text-slate-500">Bank:</span><span className="font-bold">Zenith Bank PLC</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Account Number:</span><span className="font-black text-emerald-700 text-sm">1018899201</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Account Name:</span><span className="font-bold">FOG Road Project Committee</span></div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  setIsContributeModalOpen(false);
-                  setIsPaystackModalOpen(true);
-                }}
-                className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <CreditCard className="w-4 h-4" />
-                <span>Pay Online with Paystack (Instant Credit)</span>
-              </button>
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={() => {
-                    setIsContributeModalOpen(false);
-                    setIsSubmitProofModalOpen(true);
-                  }}
-                  className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer"
-                >
-                  Already made a bank transfer? Submit payment proof here &rarr;
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 9. SUBMIT PROOF MODAL */}
-      {isSubmitProofModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-emerald-700" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-base font-display">Submit Road Contribution Proof</h3>
-                  <p className="text-xs text-slate-500">Notify audit committee to verify your ledger credit</p>
-                </div>
-              </div>
-              <button onClick={() => setIsSubmitProofModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {proofSubmitted ? (
-              <div className="py-8 text-center space-y-3">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-                <h4 className="font-black text-slate-900 text-lg">Contribution Proof Received!</h4>
-                <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                  Thank you! The audit committee will verify your bank transfer and credit the public ledger shortly.
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleProofSubmit} className="py-4 space-y-3.5 text-xs">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Building / Plot Number *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Building 024"
-                      value={proofData.buildingNumber}
-                      onChange={(e) => setProofData({ ...proofData, buildingNumber: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Contributor Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Chief Adeleke"
-                      value={proofData.donorName}
-                      onChange={(e) => setProofData({ ...proofData, donorName: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Amount Paid (₦) *</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="100000"
-                      value={proofData.amount}
-                      onChange={(e) => setProofData({ ...proofData, amount: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Phone Number *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="080XXXXXXXX"
-                      value={proofData.phone}
-                      onChange={(e) => setProofData({ ...proofData, phone: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Transfer Date *</label>
-                    <input
-                      type="date"
-                      required
-                      value={proofData.paymentDate}
-                      onChange={(e) => setProofData({ ...proofData, paymentDate: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">Bank Reference / Session ID</label>
-                    <input
-                      type="text"
-                      placeholder="Ref..."
-                      value={proofData.bankReference}
-                      onChange={(e) => setProofData({ ...proofData, bankReference: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-[11px]"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2 flex gap-3">
-                  <button type="button" onClick={() => setIsSubmitProofModalOpen(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold rounded-xl">Cancel</button>
-                  <button type="submit" className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-xs">Submit Proof</button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 10. PAYSTACK MODAL */}
+      {/* 8. PAYSTACK MODAL */}
       {isPaystackModalOpen && (
         <RoadProjectPaystackModal
           isOpen={isPaystackModalOpen}

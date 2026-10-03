@@ -5836,7 +5836,7 @@ export const dbService = {
       last_updated: new Date().toISOString(),
       sync_status: {
         paystack: 'ACTIVE (Real-Time Webhook Verified)',
-        bank_sync: 'ACTIVE (Zenith Bank Escrow Feed)'
+        gateway: 'ACTIVE (Paystack Online Processing)'
       }
     };
   },

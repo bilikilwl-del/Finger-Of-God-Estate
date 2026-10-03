@@ -45,6 +45,8 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
   const [errorMsg, setErrorMsg] = useState('');
   const [successTx, setSuccessTx] = useState<RoadProjectTransaction | null>(null);
 
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       getPaystackConfig().then(cfg => {
@@ -76,8 +78,8 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
       setErrorMsg('Please enter your Building or Compound Number (e.g., Plot 14B, Bldg 024).');
       return;
     }
-    if (!payerName.trim()) {
-      setErrorMsg('Please enter Contributor or Landlord Name.');
+    if (!isAnonymous && !payerName.trim()) {
+      setErrorMsg('Please enter Contributor or Landlord Name, or select Anonymous Contributor.');
       return;
     }
     if (currentAmount < 5000) {
@@ -88,12 +90,14 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
     setLoading(true);
     setErrorMsg('');
 
+    const effectiveDisplayName = isAnonymous ? 'Anonymous Contributor' : payerName.trim();
+
     try {
       const initRes = await dbService.initializeRoadPaystackPayment({
         amount: currentAmount,
         email: email.trim() || undefined,
         buildingNumber: buildingNumber.trim(),
-        payerName: payerName.trim(),
+        payerName: effectiveDisplayName,
         phone: phoneNumber.trim() || undefined,
         category
       });
@@ -119,7 +123,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
               reference: response.reference || reference,
               amount: currentAmount,
               buildingNumber: buildingNumber.trim(),
-              payerName: payerName.trim()
+              payerName: effectiveDisplayName
             });
 
             setVerifying(false);
@@ -127,7 +131,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
               setSuccessTx(verifyRes.transaction);
               onPaymentVerified(verifyRes.transaction);
             } else {
-              setErrorMsg(verifyRes.message || 'Payment received but verification pending. It will update momentarily via webhook.');
+              setErrorMsg(verifyRes.message || 'Payment received. Server is finalizing verification via webhook.');
             }
           },
           onClose: () => {
@@ -143,7 +147,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
             reference,
             amount: currentAmount,
             buildingNumber: buildingNumber.trim(),
-            payerName: payerName.trim()
+            payerName: effectiveDisplayName
           });
 
           setLoading(false);
@@ -153,7 +157,7 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
             setSuccessTx(verifyRes.transaction);
             onPaymentVerified(verifyRes.transaction);
           } else {
-            setErrorMsg(verifyRes.message || 'Verification failed. Please contact admin.');
+            setErrorMsg(verifyRes.message || 'Verification failed. Please contact administration.');
           }
         }, 1200);
       }
@@ -327,16 +331,28 @@ export const RoadProjectPaystackModal: React.FC<RoadProjectPaystackModalProps> =
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                     <User className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Contributor / Landlord Name *</span>
+                    <span>Contributor / Landlord Name {!isAnonymous && '*'}</span>
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Chief Adeleke"
-                    value={payerName}
+                    required={!isAnonymous}
+                    disabled={isAnonymous}
+                    placeholder={isAnonymous ? "Anonymous Contributor" : "e.g. Chief Adeleke"}
+                    value={isAnonymous ? "" : payerName}
                     onChange={(e) => setPayerName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    className={`w-full px-3 py-2 text-xs border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-emerald-500 ${
+                      isAnonymous ? 'bg-slate-100 border-slate-300 text-slate-500 italic' : 'bg-white border-slate-200'
+                    }`}
                   />
+                  <label className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isAnonymous}
+                      onChange={(e) => setIsAnonymous(e.target.checked)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    />
+                    <span>Display as <strong>Anonymous Contributor</strong> on public ledger</span>
+                  </label>
                 </div>
               </div>
 

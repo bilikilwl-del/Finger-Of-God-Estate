@@ -1002,13 +1002,22 @@ export type RoadProjectCategory =
 
 export interface RoadProjectTransaction {
   id: string;
+  project_type?: string;
+  project_name?: string;
+  resident_id?: string | null;
+  resident_number?: string | null;
+  contributor_display_name?: string;
   reference: string; // e.g. "FOG-RD-2026-001" or Paystack / Bank ref
+  paystack_reference?: string;
+  paystack_transaction_id?: string;
   date: string; // e.g. "2026-10-05" or "05 Oct 2026"
   type: RoadTransactionType; // 'CREDIT' or 'DEBIT'
   source: RoadTransactionSource; // 'Paystack' | 'Bank Transfer' | 'Bank API' | 'Admin-authorized expenditure'
   description: string; // e.g. "Building 024 contribution" or "Road materials"
   category: RoadProjectCategory;
   amount: number;
+  currency?: string;
+  payment_status?: string;
   running_balance: number; // Dynamically computed: previous_balance + (CREDIT ? amount : -amount)
   payer_or_vendor: string; // Protected label, e.g. "Building 024 (Plot 14B)" or "Western Interlock Ltd"
   building_number?: string; // Optional building identifier, e.g. "024", "Plot 14B"
@@ -1017,6 +1026,8 @@ export interface RoadProjectTransaction {
   provider_transaction_id?: string; // Provider's unique transaction ID (idempotency key)
   notes?: string;
   verified_at: string;
+  paid_at?: string;
+  created_at?: string;
   status: 'VERIFIED' | 'PENDING_AUDIT';
 }
 
@@ -1046,8 +1057,9 @@ export interface RoadProjectSummary {
   debits_count: number;
   last_updated: string;
   sync_status?: {
-    paystack: string;
-    bank_sync: string;
+    paystack?: string;
+    gateway?: string;
+    bank_sync?: string;
     last_sync_time?: string;
     active_sse_connections?: number;
   };

@@ -473,11 +473,11 @@ export const RoadProjectAdminView: React.FC<RoadProjectAdminViewProps> = ({
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-mono">
             <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Paystack Webhook: Real-Time (&lt;2s)</span>
+            <span>Paystack Webhook: Real-Time Verified</span>
           </span>
           <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1 font-mono">
-            <Building className="w-3.5 h-3.5 text-blue-400" />
-            <span>Zenith Bank Escrow: Gateway Sync</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            <span>SHA-512 Signature &amp; Idempotency Protection</span>
           </span>
           <button
             onClick={() => { loadLedger(); loadReconciliation(); }}
@@ -981,38 +981,38 @@ export const RoadProjectAdminView: React.FC<RoadProjectAdminViewProps> = ({
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* TAB 3: BANK FEED & OPEN BANKING GATEWAY SETTINGS */}
+      {/* TAB 3: PAYSTACK GATEWAY & WEBHOOK ARCHITECTURE */}
       {/* ------------------------------------------------------------- */}
       {activeTab === 'BANK_GATEWAY' && (
         <div className="space-y-6">
-          {/* Nigerian Banking API Landscape Explanation Card */}
+          {/* Paystack Gateway Architecture Card */}
           <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-md border border-slate-700">
             <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
               <Zap className="w-4 h-4" />
-              <span>Nigerian Banking API & Open Banking Architecture</span>
+              <span>Paystack Online Gateway &amp; Webhook Architecture</span>
             </div>
             <h3 className="text-xl font-black text-white font-display mb-2">
-              Direct Bank Transfer & Open Banking Connectivity
+              Paystack Exclusive Online Contribution Processing
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
-              In Nigeria, commercial banks (Zenith Bank PLC, GTBank, Access Bank, etc.) do not expose open public REST APIs without regulated Open Banking gateways (CBN Regulatory Sandbox, Mono, Okra, Stitch) or Paystack Dedicated Virtual Accounts (DVA).
+              All Road Modernization Project contributions are securely processed via Paystack (Debit Card, Bank Transfer via Paystack Checkout, USSD, and Mobile Money).
             </p>
             <p className="text-xs text-slate-300 leading-relaxed max-w-3xl mt-2">
-              The Finger of God Estate Road Project is architected with a universal webhook and feed adapter. Both live Paystack webhooks and direct bank feeds enter the exact same server-side verification and idempotency engine.
+              Transactions are only committed to the transparent public ledger after HMAC-SHA512 webhook signature verification and server-side idempotency validation, ensuring zero fabricated entries or duplicate recordings.
             </p>
 
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-slate-700 text-xs font-mono">
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                <span className="text-slate-400 text-[10px] block font-sans">Official Escrow Bank</span>
-                <span className="font-bold text-white">Zenith Bank PLC</span>
+                <span className="text-slate-400 text-[10px] block font-sans">Payment Processor</span>
+                <span className="font-bold text-white">Paystack Online Checkout</span>
               </div>
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                <span className="text-slate-400 text-[10px] block font-sans">Designated Account</span>
-                <span className="font-bold text-emerald-400 text-sm">1018899201</span>
+                <span className="text-slate-400 text-[10px] block font-sans">Webhook Security</span>
+                <span className="font-bold text-emerald-400 text-sm">HMAC SHA-512 Signature</span>
               </div>
               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                <span className="text-slate-400 text-[10px] block font-sans">Account Name</span>
-                <span className="font-bold text-white">FOG Road Project Committee</span>
+                <span className="text-slate-400 text-[10px] block font-sans">Idempotency Mode</span>
+                <span className="font-bold text-white">Reference / Transaction ID</span>
               </div>
             </div>
           </div>
