@@ -114,7 +114,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-03T18:31:32.490Z"
+      "updated_at": "2026-10-04T13:44:06.801Z"
     }
   ],
   "admin_users": [
@@ -126,7 +126,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-03T18:31:32.490Z"
+      "updated_at": "2026-10-04T13:44:06.801Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -178,7 +178,24 @@
       "issued_at": "2026-10-02T19:51:57.489Z"
     }
   ],
-  "road_project_transactions": [],
+  "road_project_transactions": [
+    {
+      "id": "rd-tx-1791065740307-ea4c",
+      "date": "2026-10-03",
+      "type": "CREDIT",
+      "notes": "Verified real contribution via Paystack",
+      "amount": 100,
+      "source": "Paystack",
+      "status": "VERIFIED",
+      "paid_at": "2026-10-03T22:17:04.000Z",
+      "category": "Landlord Levy",
+      "reference": "FOG-RD-PAY-1791065740307-EA4C73",
+      "project_type": "road_modernization",
+      "payer_or_vendor": "Chiedu John",
+      "resident_number": "013",
+      "contributor_display_name": "Chiedu John"
+    }
+  ],
   "road_project_milestones": [
     {
       "id": "milestone-1",
@@ -266,5 +283,5 @@
       "created_at": "2026-10-02T19:51:01.698Z"
     }
   ],
-  "last_updated": "2026-10-03T18:31:36.987Z"
+  "last_updated": "2026-10-04T13:44:54.371Z"
 }

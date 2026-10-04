@@ -880,7 +880,7 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
 
       if (isRoadPayment) {
         console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
-        processVerifiedRoadPaystackEvent(data);
+        await processVerifiedRoadPaystackEvent(data);
         return res.sendStatus(200);
       }
 

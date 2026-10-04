@@ -117,12 +117,150 @@ const roadProcessedProviderIds = new Set<string>(); // Idempotency check for Pay
 const roadReconciliationStore = new Map<string, ServerRoadBankReconciliationItem>();
 const roadSseClients: Response[] = [];
 
-// Initialize road store from genuine persistent database records
-function initializeRoadStore() {
-  roadTransactionsStore.clear();
-  roadProcessedReferences.clear();
-  roadProcessedProviderIds.clear();
+// Initialize road store from genuine persistent database records and Paystack gateway
+export async function syncRoadStoreWithDatabaseAndPaystack(): Promise<ServerRoadProjectTransaction[]> {
+  console.log('[Road Project] Synchronizing road ledger with permanent Supabase database & Paystack gateway...');
 
+  // 1. Fetch all records from Supabase persistent storage
+  try {
+    const supabaseTransactions = await serverDb.getRoadTransactions();
+    if (Array.isArray(supabaseTransactions) && supabaseTransactions.length > 0) {
+      console.log(`[Road Project] Retrieved ${supabaseTransactions.length} records from Supabase storage.`);
+      for (const raw of supabaseTransactions) {
+        if (!raw || (!raw.id && !raw.reference)) continue;
+        const txId = raw.id || `rd-tx-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
+        const ref = raw.reference || `FOG-RD-${Date.now()}`;
+        const fullTx: ServerRoadProjectTransaction = {
+          id: txId,
+          project_type: raw.project_type || 'road_modernization',
+          project_name: raw.project_name || 'Finger of God Estate Road Modernization Project',
+          resident_id: raw.resident_id || null,
+          resident_number: raw.resident_number || raw.building_number || null,
+          contributor_display_name: raw.contributor_display_name || raw.payer_or_vendor || (raw.building_number ? `Resident ${raw.building_number}` : 'Resident Contributor'),
+          reference: ref,
+          paystack_reference: raw.paystack_reference || (raw.source === 'Paystack' ? ref : undefined),
+          paystack_transaction_id: raw.paystack_transaction_id || raw.provider_transaction_id,
+          date: raw.date || (raw.created_at ? raw.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+          type: raw.type || 'CREDIT',
+          source: raw.source || 'Paystack',
+          description: raw.description || 'Road Modernization Contribution',
+          category: raw.category || 'Building Contribution',
+          amount: Number(raw.amount || 0),
+          currency: raw.currency || 'NGN',
+          payment_status: raw.payment_status || 'success',
+          running_balance: Number(raw.running_balance || 0),
+          payer_or_vendor: raw.payer_or_vendor || raw.contributor_display_name || (raw.building_number ? `Resident ${raw.building_number}` : 'Resident Contributor'),
+          building_number: raw.building_number || raw.resident_number || undefined,
+          approved_by: raw.approved_by || 'Server Verified Gateway',
+          receipt_or_invoice_ref: raw.receipt_or_invoice_ref || `RCP-RD-${Date.now().toString().slice(-6)}`,
+          provider_transaction_id: raw.provider_transaction_id || raw.paystack_transaction_id,
+          notes: raw.notes,
+          verified_at: raw.verified_at || raw.created_at || new Date().toISOString(),
+          paid_at: raw.paid_at || raw.created_at,
+          created_at: raw.created_at || new Date().toISOString(),
+          status: raw.status || 'VERIFIED'
+        };
+        roadTransactionsStore.set(fullTx.id, fullTx);
+        if (fullTx.reference) roadProcessedReferences.add(fullTx.reference);
+        if (fullTx.paystack_reference) roadProcessedReferences.add(fullTx.paystack_reference);
+        if (fullTx.provider_transaction_id) {
+          roadProcessedProviderIds.add(fullTx.provider_transaction_id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Road Project] Error loading records from Supabase:', err);
+  }
+
+  // 2. Query Paystack Live API to guarantee zero lost transactions across redeploys
+  const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+  if (secretKey && secretKey.startsWith('sk_')) {
+    try {
+      const pRes = await fetch('https://api.paystack.co/transaction?status=success&perPage=50', {
+        headers: { Authorization: `Bearer ${secretKey}` }
+      });
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (pData.status && Array.isArray(pData.data)) {
+          for (const pt of pData.data) {
+            const ref = String(pt.reference || '').trim();
+            const meta = pt.metadata || {};
+            const isRoadProject = 
+              ref.startsWith('FOG-RD-') || 
+              meta.project_type === 'road_modernization' || 
+              meta.project === 'road_project' || 
+              String(meta.description || '').toLowerCase().includes('road modernization');
+
+            if (!isRoadProject) continue;
+
+            const isKnown = roadProcessedReferences.has(ref) || 
+              (pt.id && roadProcessedProviderIds.has(String(pt.id))) ||
+              Array.from(roadTransactionsStore.values()).some(t => t.reference === ref || t.paystack_reference === ref);
+
+            if (!isKnown) {
+              console.log(`[Road Project Paystack Sync] Recovering Paystack verified payment: ${ref} (₦${pt.amount / 100})`);
+              const amountNaira = Math.round(Number(pt.amount || 0) / 100);
+              const txDate = pt.paid_at ? pt.paid_at.split('T')[0] : new Date().toISOString().split('T')[0];
+              const isAnon = meta.is_anonymous === true || meta.contributor_display_name === 'Anonymous Contributor';
+              const contributorName = isAnon 
+                ? 'Anonymous Contributor' 
+                : (meta.contributor_display_name || meta.payer_name || (pt.customer?.first_name ? `${pt.customer?.first_name} ${pt.customer?.last_name || ''}`.trim() : (meta.resident_number ? `Resident ${meta.resident_number}` : 'Resident Contributor')));
+
+              const recoveredTx: ServerRoadProjectTransaction = {
+                id: `rd-tx-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+                project_type: 'road_modernization',
+                project_name: 'Finger of God Estate Road Modernization Project',
+                resident_id: meta.resident_id || null,
+                resident_number: String(meta.resident_number || meta.building_number || '').trim() || null,
+                contributor_display_name: contributorName,
+                reference: ref,
+                paystack_reference: ref,
+                paystack_transaction_id: String(pt.id || ''),
+                date: txDate,
+                type: 'CREDIT',
+                source: 'Paystack',
+                description: meta.description || (meta.resident_number ? `Resident ${meta.resident_number} Road Modernization Contribution` : 'Online Road Project Contribution'),
+                category: (meta.category as RoadProjectCategory) || 'Building Contribution',
+                amount: amountNaira,
+                currency: 'NGN',
+                payment_status: 'success',
+                running_balance: 0,
+                payer_or_vendor: contributorName,
+                building_number: String(meta.building_number || meta.resident_number || '').trim() || undefined,
+                approved_by: 'Paystack Automated Gateway (Server Verified)',
+                receipt_or_invoice_ref: `RCP-RD-PSTK-${Date.now().toString().slice(-6)}`,
+                provider_transaction_id: String(pt.id || ''),
+                notes: `Verified online contribution via Paystack (${pt.channel || 'card'}). Auth code: ${pt.authorization?.authorization_code || 'N/A'}`,
+                verified_at: pt.paid_at || new Date().toISOString(),
+                paid_at: pt.paid_at || new Date().toISOString(),
+                created_at: pt.paid_at || new Date().toISOString(),
+                status: 'VERIFIED'
+              };
+
+              roadTransactionsStore.set(recoveredTx.id, recoveredTx);
+              roadProcessedReferences.add(ref);
+              if (recoveredTx.provider_transaction_id) {
+                roadProcessedProviderIds.add(recoveredTx.provider_transaction_id);
+              }
+
+              // Persist permanently to Supabase
+              await serverDb.saveRoadTransaction(recoveredTx);
+            }
+          }
+        }
+      }
+    } catch (pErr) {
+      console.warn('[Road Project] Notice checking Paystack sync:', pErr);
+    }
+  }
+
+  recalculateAllRunningBalances();
+  console.log(`[Road Project] Synchronized ledger: ${roadTransactionsStore.size} genuine verified records.`);
+  return Array.from(roadTransactionsStore.values());
+}
+
+// Initial synchronous baseline load from local cache if present
+function initializeRoadStore() {
   const existingTransactions: any[] = serverDb.getRoadTransactionsSync() || [];
   
   const sorted = [...existingTransactions].sort((a, b) => {
@@ -176,7 +314,10 @@ function initializeRoadStore() {
     }
   }
 
-  console.log(`[Road Project] Initialized ledger with ${roadTransactionsStore.size} genuine verified records.`);
+  // Trigger non-blocking async Supabase & Paystack sync immediately on startup
+  syncRoadStoreWithDatabaseAndPaystack().catch(err => {
+    console.warn('[Road Project] Async background store sync warning:', err);
+  });
 }
 
 // Run store initialization
@@ -317,12 +458,12 @@ function extractBuildingNumber(text: string): string | null {
 // -----------------------------------------------------------------
 // ROAD PROJECT PAYSTACK WEBHOOK & VERIFICATION PROCESSOR
 // -----------------------------------------------------------------
-export function processVerifiedRoadPaystackEvent(data: any): { 
+export async function processVerifiedRoadPaystackEvent(data: any): Promise<{ 
   success: boolean; 
   transaction?: ServerRoadProjectTransaction; 
   duplicate?: boolean;
   message?: string;
-} {
+}> {
   const reference = String(data.reference || '').trim();
   const providerTxId = String(data.id || '').trim();
 
@@ -402,9 +543,9 @@ export function processVerifiedRoadPaystackEvent(data: any): {
     roadProcessedProviderIds.add(providerTxId);
   }
 
-  // Save to persistent serverDb
+  // Save to persistent serverDb (Supabase + local vault)
   try {
-    serverDb.saveRoadTransaction(newTx);
+    await serverDb.saveRoadTransaction(newTx);
   } catch (dbErr) {
     console.warn('[Road Project] Error saving to database:', dbErr);
   }
@@ -586,12 +727,15 @@ roadProjectRouter.get('/stream', (req: Request, res: Response) => {
 });
 
 // 2. GET CURRENT LEDGER, SUMMARY, MILESTONES & RECONCILIATION STATS
-roadProjectRouter.get('/summary', (_req: Request, res: Response) => {
+roadProjectRouter.get('/summary', async (_req: Request, res: Response) => {
+  if (roadTransactionsStore.size === 0) {
+    await syncRoadStoreWithDatabaseAndPaystack();
+  }
   const summary = computeRoadProjectSummary();
   res.json({
     success: true,
     summary,
-    milestones: serverDb.getRoadMilestones ? serverDb.getRoadMilestones() : [],
+    milestones: serverDb.getRoadMilestones ? await serverDb.getRoadMilestones() : [],
     sync_status: {
       paystack: 'ACTIVE (Real-Time Webhook Verified)',
       gateway: 'ACTIVE (Paystack Online Processing)',
@@ -601,7 +745,10 @@ roadProjectRouter.get('/summary', (_req: Request, res: Response) => {
   });
 });
 
-roadProjectRouter.get('/ledger', (_req: Request, res: Response) => {
+roadProjectRouter.get('/ledger', async (_req: Request, res: Response) => {
+  if (roadTransactionsStore.size === 0) {
+    await syncRoadStoreWithDatabaseAndPaystack();
+  }
   const transactions = recalculateAllRunningBalances().sort(
     (a, b) => new Date(b.date || b.created_at || '').getTime() - new Date(a.date || a.created_at || '').getTime() || (b.reference || '').localeCompare(a.reference || '')
   );
@@ -619,6 +766,23 @@ roadProjectRouter.get('/ledger', (_req: Request, res: Response) => {
       active_sse_connections: roadSseClients.length
     }
   });
+});
+
+// Explicit Sync endpoint for forced database & gateway synchronization
+roadProjectRouter.post('/sync', async (_req: Request, res: Response) => {
+  try {
+    const txs = await syncRoadStoreWithDatabaseAndPaystack();
+    const summary = computeRoadProjectSummary();
+    res.json({
+      success: true,
+      count: txs.length,
+      transactions: txs,
+      summary,
+      message: `Successfully synchronized ${txs.length} verified records with Supabase & Paystack.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message || 'Sync failed' });
+  }
 });
 
 // 3. INITIALIZE PAYSTACK ROAD CONTRIBUTION
@@ -767,7 +931,7 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
       });
     }
 
-    const txResult = processVerifiedRoadPaystackEvent(pData.data);
+    const txResult = await processVerifiedRoadPaystackEvent(pData.data);
     if (!txResult.success) {
       return res.status(400).json({ success: false, message: txResult.message || 'Could not record verified transaction' });
     }
@@ -784,7 +948,7 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
 });
 
 // 5. DEDICATED PAYSTACK WEBHOOK ROUTE FOR ROAD PROJECT
-roadProjectRouter.post('/paystack/webhook', (req: any, res: Response) => {
+roadProjectRouter.post('/paystack/webhook', async (req: any, res: Response) => {
   try {
     const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
     const signature = req.headers['x-paystack-signature'];
@@ -807,7 +971,7 @@ roadProjectRouter.post('/paystack/webhook', (req: any, res: Response) => {
                      data.metadata?.project === 'road_project' || 
                      String(data.reference || '').startsWith('FOG-RD-');
       if (isRoad) {
-        processVerifiedRoadPaystackEvent(data);
+        await processVerifiedRoadPaystackEvent(data);
       }
     }
 
@@ -873,7 +1037,7 @@ roadProjectRouter.post('/target', requireRoadAdminAuth, async (req: Request, res
 });
 
 // 7. RECORD AUTHORIZED PROJECT EXPENDITURE (DEBIT)
-roadProjectRouter.post('/expenditure', requireRoadAdminAuth, (req: Request, res: Response) => {
+roadProjectRouter.post('/expenditure', requireRoadAdminAuth, async (req: Request, res: Response) => {
   try {
     const {
       amount,
@@ -937,7 +1101,7 @@ roadProjectRouter.post('/expenditure', requireRoadAdminAuth, (req: Request, res:
     roadProcessedReferences.add(refCode);
 
     try {
-      serverDb.saveRoadTransaction(debitTx);
+      await serverDb.saveRoadTransaction(debitTx);
     } catch {}
 
     recalculateAllRunningBalances();
@@ -985,7 +1149,7 @@ roadProjectRouter.get('/reconciliation', (_req: Request, res: Response) => {
 });
 
 // 9. MATCH UNMATCHED TRANSACTION TO BUILDING
-roadProjectRouter.post('/reconciliation/match', requireRoadAdminAuth, (req: Request, res: Response) => {
+roadProjectRouter.post('/reconciliation/match', requireRoadAdminAuth, async (req: Request, res: Response) => {
   try {
     const { reconciliation_id, building_number, contributor_name } = req.body;
     if (!reconciliation_id || !building_number) {
@@ -1014,7 +1178,7 @@ roadProjectRouter.post('/reconciliation/match', requireRoadAdminAuth, (req: Requ
       tx.description = `Resident ${cleanBldg} Road Project contribution`;
       roadTransactionsStore.set(tx.id, tx);
       try {
-        serverDb.saveRoadTransaction(tx);
+        await serverDb.saveRoadTransaction(tx);
       } catch {}
     }
 

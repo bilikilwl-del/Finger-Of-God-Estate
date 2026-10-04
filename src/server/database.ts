@@ -556,18 +556,98 @@ export const serverDb = {
   },
 
   async getRoadTransactions(): Promise<any[]> {
+    // 1. Try dedicated public.road_project_transactions table
     try {
-      const { data, error } = await supabaseAdmin.from('road_project_transactions').select('*').order('date', { ascending: false });
+      const { data, error } = await supabaseAdmin
+        .from('road_project_transactions')
+        .select('*')
+        .order('date', { ascending: false });
       if (!error && Array.isArray(data) && data.length > 0) {
         localDb.road_project_transactions = data;
         saveDbToFile(localDb);
         return data;
       }
-    } catch {}
-    return localDb.road_project_transactions;
+    } catch (e: any) {
+      console.warn('[Supabase] road_project_transactions table query notice:', e?.message || e);
+    }
+
+    // 2. Try public.road_project_contributions table
+    try {
+      const { data: contribs, error: contribErr } = await supabaseAdmin
+        .from('road_project_contributions')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!contribErr && Array.isArray(contribs) && contribs.length > 0) {
+        const mapped = contribs.map((c: any) => ({
+          id: c.id,
+          reference: c.reference,
+          date: c.verified_at ? c.verified_at.split('T')[0] : (c.created_at ? c.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+          type: 'CREDIT',
+          source: c.payment_channel || 'Paystack',
+          description: c.notes || `Road Modernization Contribution`,
+          category: 'Special Donation',
+          amount: Number(c.amount || 0),
+          running_balance: 0,
+          payer_or_vendor: c.contributor_display_name || c.contributor_name || 'Contributor',
+          contributor_display_name: c.contributor_display_name || c.contributor_name || 'Contributor',
+          resident_number: c.resident_number || '',
+          building_number: c.resident_number || '',
+          approved_by: 'Paystack Automated Gateway',
+          receipt_or_invoice_ref: c.reference,
+          provider_transaction_id: c.paystack_reference || c.reference,
+          paystack_reference: c.paystack_reference || c.reference,
+          project_type: 'road_modernization',
+          is_anonymous: Boolean(c.is_anonymous),
+          notes: c.notes || 'Verified Road Project contribution',
+          verified_at: c.verified_at || c.created_at,
+          paid_at: c.verified_at || c.created_at,
+          created_at: c.created_at || new Date().toISOString(),
+          status: 'VERIFIED'
+        }));
+        localDb.road_project_transactions = mapped;
+        saveDbToFile(localDb);
+        return mapped;
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] road_project_contributions query notice:', e?.message || e);
+    }
+
+    // 3. Query persistent vault in Supabase election_audit_logs
+    try {
+      const { data: auditRows, error: auditErr } = await supabaseAdmin
+        .from('election_audit_logs')
+        .select('*')
+        .eq('action', 'ROAD_PROJECT_PAYMENT_VERIFIED')
+        .order('created_at', { ascending: false });
+
+      if (!auditErr && Array.isArray(auditRows) && auditRows.length > 0) {
+        const vaultTransactions = auditRows
+          .map((r: any) => r.metadata)
+          .filter((m: any) => m && (m.reference || m.id));
+
+        if (vaultTransactions.length > 0) {
+          const existingRefs = new Set(vaultTransactions.map((t: any) => t.reference));
+          for (const loc of (localDb.road_project_transactions || [])) {
+            if (loc && loc.reference && !existingRefs.has(loc.reference)) {
+              vaultTransactions.push(loc);
+              existingRefs.add(loc.reference);
+            }
+          }
+          localDb.road_project_transactions = vaultTransactions;
+          saveDbToFile(localDb);
+          return vaultTransactions;
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] election_audit_logs vault query notice:', e?.message || e);
+    }
+
+    return localDb.road_project_transactions || [];
   },
 
   async saveRoadTransaction(tx: any): Promise<any> {
+    if (!tx || (!tx.reference && !tx.id)) return tx;
+
     const idx = localDb.road_project_transactions.findIndex(t => t.reference === tx.reference || t.id === tx.id);
     if (idx >= 0) {
       localDb.road_project_transactions[idx] = { ...localDb.road_project_transactions[idx], ...tx };
@@ -576,11 +656,50 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
+    // 1. Persist directly to Supabase road_project_transactions
     try {
-      await supabaseAdmin.from('road_project_transactions').upsert(tx);
-    } catch (e) {
-      console.warn('Supabase road_project_transactions sync queued locally:', e);
+      const { error: upsertErr } = await supabaseAdmin.from('road_project_transactions').upsert(tx);
+      if (upsertErr) {
+        console.warn('[Supabase] road_project_transactions upsert note:', upsertErr.message);
+      } else {
+        console.log('[Supabase] Successfully saved transaction to road_project_transactions table:', tx.reference);
+      }
+    } catch (e: any) {
+      console.warn('[Supabase] road_project_transactions write failed:', e?.message);
     }
+
+    // 2. Persist to Supabase election_audit_logs vault (guaranteed to exist and persist in live Supabase)
+    try {
+      let electionId = 'aee791a1-d88a-4292-b0d2-0e5f68ea7de8';
+      const { data: elData } = await supabaseAdmin.from('elections').select('id').limit(1).maybeSingle();
+      if (elData?.id) electionId = elData.id;
+
+      const { data: existingVault } = await supabaseAdmin
+        .from('election_audit_logs')
+        .select('id')
+        .eq('action', 'ROAD_PROJECT_PAYMENT_VERIFIED')
+        .eq('actor_reference', tx.reference)
+        .limit(1);
+
+      if (!existingVault || existingVault.length === 0) {
+        const { error: vaultErr } = await supabaseAdmin.from('election_audit_logs').insert({
+          election_id: electionId,
+          action: 'ROAD_PROJECT_PAYMENT_VERIFIED',
+          actor_type: 'SYSTEM',
+          actor_reference: tx.reference,
+          description: `Verified Road Modernization payment: ₦${Number(tx.amount || 0).toLocaleString()} from ${tx.contributor_display_name || tx.payer_or_vendor || 'Contributor'} (${tx.resident_number ? `Resident ${tx.resident_number}` : 'Public'})`,
+          metadata: tx
+        });
+        if (vaultErr) {
+          console.warn('[Supabase] election_audit_logs vault write warning:', vaultErr.message);
+        } else {
+          console.log('[Supabase] Successfully persisted transaction to Supabase permanent vault:', tx.reference);
+        }
+      }
+    } catch (vaultEx: any) {
+      console.warn('[Supabase] Vault write notice:', vaultEx?.message);
+    }
+
     return tx;
   },
 
