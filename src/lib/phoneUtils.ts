@@ -19,16 +19,29 @@ export interface PhoneValidationResult {
  */
 export function normalizeNigerianPhone(input: string): string {
   if (!input) return '';
-  // Strip all non-digit characters except leading plus if present
-  let cleaned = input.trim().replace(/[\s\-\(\)\.]/g, '');
+  // Strip all characters except digits and plus sign
+  let cleaned = input.trim().replace(/[^\d+]/g, '');
 
   if (cleaned.startsWith('+234')) {
-    cleaned = '0' + cleaned.slice(4);
-  } else if (cleaned.startsWith('234') && cleaned.length >= 13) {
-    cleaned = '0' + cleaned.slice(3);
+    cleaned = cleaned.slice(4);
+  } else if (cleaned.startsWith('234') && cleaned.length >= 12) {
+    cleaned = cleaned.slice(3);
   }
 
-  return cleaned;
+  // Remove any redundant leading zeros that might have existed from "+234 080..."
+  cleaned = cleaned.replace(/^0+/, '');
+
+  // If 10 digits starting with 7, 8, or 9 (standard Nigerian mobile without leading 0), add the leading 0
+  if (cleaned.length === 10 && /^[789]/.test(cleaned)) {
+    return '0' + cleaned;
+  }
+
+  // If already 11 digits starting with 0
+  if (cleaned.length === 11 && cleaned.startsWith('0')) {
+    return cleaned;
+  }
+
+  return cleaned ? '0' + cleaned : '';
 }
 
 /**
@@ -107,5 +120,14 @@ export function validateNigerianPhone(input: string): PhoneValidationResult {
  */
 export function arePhoneNumbersEqual(phoneA: string, phoneB: string): boolean {
   if (!phoneA || !phoneB) return false;
-  return normalizeNigerianPhone(phoneA) === normalizeNigerianPhone(phoneB);
+  const normA = normalizeNigerianPhone(phoneA);
+  const normB = normalizeNigerianPhone(phoneB);
+  if (normA && normB && normA === normB) return true;
+
+  const digitsA = String(phoneA).replace(/\D/g, '');
+  const digitsB = String(phoneB).replace(/\D/g, '');
+  if (digitsA.length >= 10 && digitsB.length >= 10 && digitsA.slice(-10) === digitsB.slice(-10)) {
+    return true;
+  }
+  return false;
 }

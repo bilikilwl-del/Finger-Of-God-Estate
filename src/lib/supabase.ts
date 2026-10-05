@@ -2178,9 +2178,14 @@ export const dbService = {
     const cleanNum = residentNumber.trim().padStart(3, '0');
 
     try {
+      const token = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const res = await fetch('/api/resident/first-login-setup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           residentNumber: cleanNum,
           ...data
@@ -3129,6 +3134,9 @@ export const dbService = {
       const data = await res.json();
       if (res.ok && data.success) {
         residentSessionService.setCurrentResident(data.resident);
+        if (data.token) {
+          residentSessionService.setResidentToken(data.token);
+        }
         return {
           success: true,
           resident: data.resident,
@@ -3274,6 +3282,9 @@ export const dbService = {
       const data = await res.json();
       if (res.ok && data.success && data.resident) {
         residentSessionService.setCurrentResident(data.resident);
+        if (data.token) {
+          residentSessionService.setResidentToken(data.token);
+        }
         if (rememberDevice && data.token) {
           residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
         }
@@ -3449,6 +3460,9 @@ export const dbService = {
         }
 
         residentSessionService.setCurrentResident(resData.resident);
+        if (resData.token) {
+          residentSessionService.setResidentToken(resData.token);
+        }
         await this.logActivity({
           admin_email: resData.resident.email || 'resident',
           action: 'ACTIVATED_RESIDENT',
@@ -3526,6 +3540,9 @@ export const dbService = {
       const data = await res.json();
       if (res.ok && data.success && data.resident) {
         residentSessionService.setCurrentResident(data.resident);
+        if (data.token) {
+          residentSessionService.setResidentToken(data.token);
+        }
         return { success: true, resident: data.resident };
       }
       return { success: false, message: data.message || 'Invalid email or password.' };
@@ -3561,9 +3578,14 @@ export const dbService = {
     const cleanNum = residentNumber.trim().padStart(3, '0');
 
     try {
+      const token = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const res = await fetch('/api/resident/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           residentNumber: cleanNum,
           email: data.email,
@@ -3626,7 +3648,12 @@ export const dbService = {
   async getResidentDashboard(residentNumber: string): Promise<ResidentDashboardData | null> {
     const cleanNum = residentNumber.trim().padStart(3, '0');
     try {
-      const res = await fetch(`/api/resident/dashboard?residentNumber=${cleanNum}`);
+      const token = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/resident/dashboard?residentNumber=${cleanNum}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -6129,6 +6156,26 @@ export const residentSessionService = {
     }
   },
 
+  setResidentToken(token: string | null) {
+    try {
+      if (token) {
+        localStorage.setItem('estate_resident_token', token);
+      } else {
+        localStorage.removeItem('estate_resident_token');
+      }
+    } catch {}
+  },
+
+  getResidentToken(): string | null {
+    try {
+      const token = localStorage.getItem('estate_resident_token');
+      if (token) return token;
+      const remembered = this.getRememberedDevice();
+      if (remembered?.token) return remembered.token;
+    } catch {}
+    return null;
+  },
+
   setRememberedDevice(residentNumber: string, token: string) {
     try {
       localStorage.setItem('estate_remembered_device', JSON.stringify({
@@ -6154,7 +6201,18 @@ export const residentSessionService = {
   },
 
   logoutResident() {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
+    try {
+      const token = this.getResidentToken();
+      if (token) {
+        fetch('/api/resident/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => {});
+      }
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
+      localStorage.removeItem('estate_resident_token');
+      localStorage.removeItem('estate_remembered_device');
+    } catch {}
   }
 };
 

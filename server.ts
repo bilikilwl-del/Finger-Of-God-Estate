@@ -8,6 +8,8 @@ import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
 import { electionRouter } from './src/server/electionServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
+import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual } from './src/lib/phoneUtils.ts';
+import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
 
 dotenv.config();
 
@@ -240,10 +242,183 @@ const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
     lga: 'Oshimili South',
     status: 'Inactive',
     registration_date: '2026-08-12'
+  },
+  {
+    id: 'res-005',
+    resident_number: '005',
+    full_name: 'Chief Emeka Okonjo',
+    phone_number: '08011223344',
+    additional_phone: null,
+    email: 'emeka.okonjo@fingerofgodestate.ng',
+    house_number: 'Plot 25, Boulevard',
+    address: 'Plot 25 Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
+    status: 'Active',
+    account_activated: false,
+    profile_completed: false,
+    account_status: 'NOT ACTIVATED',
+    registration_date: '2026-10-02'
+  },
+  {
+    id: 'res-010',
+    auth_user_id: 'd1b49d39-12aa-46ad-9196-878d609706f2',
+    resident_number: '010',
+    full_name: 'Mrs. Isis Nwabueze',
+    phone_number: '08038383810',
+    additional_phone: null,
+    email: 'isis38f@gmail.com',
+    house_number: 'Plot 10, Palm Avenue',
+    address: '10 Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
+    status: 'Active',
+    account_activated: true,
+    profile_completed: true,
+    account_status: 'ACTIVE',
+    registration_date: '2026-08-15'
   }
 ];
 
 INITIAL_SERVER_RESIDENTS.forEach(r => residentsStore.set(r.resident_number, r));
+
+/**
+ * Strict Server-Side Resident Authentication & Authorization Guard
+ * Enforces:
+ * 1. Missing Authorization header -> 401 Unauthorized
+ * 2. Invalid or expired token -> 401 Unauthorized
+ * 3. Inactive/Suspended account -> 403 Forbidden
+ * 4. Target resident number mismatch (cross-access) -> 403 Forbidden
+ * 5. Returns authenticated resident record upon success
+ */
+export async function requireAuthenticatedResident(
+  req: Request,
+  res: Response,
+  targetResidentNumber?: string
+): Promise<ServerResidentRecord | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Authorization header with Bearer token is required.'
+    });
+    return null;
+  }
+
+  const token = authHeader.substring(7).trim();
+  if (!token) {
+    res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Authorization token is missing. Please sign in.'
+    });
+    return null;
+  }
+
+  let authResidentNumber: string | null = null;
+
+  // 1. Check local session store
+  const localSession = residentSessionsStore.get(token);
+  if (localSession) {
+    const MAX_SESSION_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+    if (Date.now() - localSession.created_at > MAX_SESSION_AGE) {
+      residentSessionsStore.delete(token);
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Your session has expired. Please sign in again.'
+      });
+      return null;
+    }
+    authResidentNumber = localSession.resident_number;
+  } else if (token.startsWith('eyJ')) {
+    // 2. Validate with Supabase Auth JWT
+    try {
+      const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+      if (!userErr && user) {
+        if (user.user_metadata?.resident_number) {
+          authResidentNumber = normalizeResidentNumber(user.user_metadata.resident_number);
+        } else {
+          const dbResidents = await serverDb.getResidents();
+          const found = dbResidents.find(r => r.auth_user_id === user.id);
+          if (found) {
+            authResidentNumber = found.resident_number;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Supabase Auth token validation error]', e);
+    }
+  }
+
+  if (!authResidentNumber) {
+    res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Invalid or expired authorization token. Access denied.'
+    });
+    return null;
+  }
+
+  const cleanAuthNum = normalizeResidentNumber(authResidentNumber);
+  let resident = residentsStore.get(cleanAuthNum);
+  if (!resident) {
+    resident = await serverDb.getResidentByNumber(cleanAuthNum);
+    if (resident) residentsStore.set(cleanAuthNum, resident);
+  }
+
+  if (!resident) {
+    res.status(404).json({
+      success: false,
+      message: 'Authenticated resident profile could not be found.'
+    });
+    return null;
+  }
+
+  if (resident.status !== 'Active') {
+    res.status(403).json({
+      success: false,
+      message: 'This resident account is currently inactive. Please contact estate administration.'
+    });
+    return null;
+  }
+
+  if (targetResidentNumber) {
+    const cleanTargetNum = normalizeResidentNumber(targetResidentNumber);
+    if (cleanTargetNum !== cleanAuthNum) {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied: You are not authorized to view or modify another resident’s records.'
+      });
+      return null;
+    }
+  }
+
+  return resident;
+}
+
+// Synchronize all residents from persistent database (estate_database.json / Supabase)
+export async function initializeResidentsStore(): Promise<void> {
+  try {
+    const dbResidents = await serverDb.getResidents();
+    if (Array.isArray(dbResidents) && dbResidents.length > 0) {
+      for (const r of dbResidents) {
+        if (r.resident_number) {
+          const cleanNum = String(r.resident_number).trim().padStart(3, '0');
+          residentsStore.set(cleanNum, {
+            ...r,
+            resident_number: cleanNum,
+            phone_number: normalizeNigerianPhone(r.phone_number),
+            additional_phone: r.additional_phone ? normalizeNigerianPhone(r.additional_phone) : null,
+            account_activated: !!r.account_activated,
+            profile_completed: !!r.profile_completed,
+            account_status: r.account_status || (r.account_activated ? (r.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED')
+          });
+        }
+      }
+      console.log(`[ResidentStore] Synchronized ${residentsStore.size} residents from persistent database.`);
+    }
+  } catch (err) {
+    console.error('[ResidentStore] Error initializing residents from database:', err);
+  }
+}
 
 // Seed Verified Initial Payments, Transactions & Official Digital Receipts
 const initialPayment001: ServerPaymentRecord = {
@@ -964,19 +1139,30 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
 // -------------------------------------------------------------
 
 // RESIDENT AUTHENTICATION (SECURE CREDENTIAL VALIDATION WITHOUT EXPOSING DIRECTORY)
-app.post('/api/resident/auth', (req: Request, res: Response) => {
+app.post('/api/resident/auth', async (req: Request, res: Response) => {
   try {
     const { residentNumber, phoneNumber } = req.body;
 
     if (!residentNumber || !phoneNumber) {
       return res.status(400).json({
         success: false,
-        message: 'Both Resident Number and registered Phone Number are required.'
+        message: 'Both Resident Number (001–300) and registered Phone Number are required.'
       });
     }
 
-    const cleanNum = String(residentNumber).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Resident Number. Estate resident numbers must be between 001 and 300 with leading zeros (e.g. 001, 010, 300).'
+      });
+    }
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
 
     if (!resident) {
       return res.status(404).json({
@@ -985,14 +1171,16 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
       });
     }
 
-    // Check phone number match
-    const inputDigits = String(phoneNumber).replace(/\D/g, '');
-    const regDigits = String(resident.phone_number).replace(/\D/g, '');
-    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+    if (resident.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: 'This resident account is currently inactive. Please contact estate administration.'
+      });
+    }
 
-    const isMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
-                    (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
-                    inputDigits === regDigits;
+    // Check phone number match using canonical Nigerian phone normalization
+    const isMatch = arePhoneNumbersEqual(phoneNumber, resident.phone_number) ||
+                    (resident.additional_phone && arePhoneNumbersEqual(phoneNumber, resident.additional_phone));
 
     if (!isMatch) {
       return res.status(401).json({
@@ -1034,7 +1222,7 @@ app.post('/api/resident/auth', (req: Request, res: Response) => {
 
 // STAGE 9: SAFE RESIDENT VERIFICATION FOR ACCOUNT ACTIVATION
 // Verifies resident number + registered phone or email without exposing third-party resident details
-app.post('/api/resident/verify-activation', (req: Request, res: Response) => {
+app.post('/api/resident/verify-activation', async (req: Request, res: Response) => {
   try {
     const { residentNumber, identifier } = req.body;
 
@@ -1045,8 +1233,19 @@ app.post('/api/resident/verify-activation', (req: Request, res: Response) => {
       });
     }
 
-    const cleanNum = String(residentNumber).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+      });
+    }
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
 
     if (!resident || resident.status !== 'Active') {
       return res.status(400).json({
@@ -1055,17 +1254,20 @@ app.post('/api/resident/verify-activation', (req: Request, res: Response) => {
       });
     }
 
-    const rawInput = String(identifier).trim().toLowerCase();
-    const inputDigits = rawInput.replace(/\D/g, '');
-    const regDigits = String(resident.phone_number).replace(/\D/g, '');
-    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+    if (resident.account_activated) {
+      return res.status(400).json({
+        success: false,
+        isAlreadyActivated: true,
+        message: 'This resident account has already been activated. Please sign in with your email and password, or use OTP verification.'
+      });
+    }
+
+    const rawInput = String(identifier).trim();
     const residentEmail = String(resident.email || '').trim().toLowerCase();
 
-    const isPhoneMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
-                         (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
-                         (inputDigits.length > 0 && inputDigits === regDigits);
-
-    const isEmailMatch = residentEmail && residentEmail === rawInput;
+    const isPhoneMatch = arePhoneNumbersEqual(rawInput, resident.phone_number) ||
+                         (resident.additional_phone && arePhoneNumbersEqual(rawInput, resident.additional_phone));
+    const isEmailMatch = residentEmail && residentEmail === rawInput.toLowerCase();
 
     if (!isPhoneMatch && !isEmailMatch) {
       return res.status(400).json({
@@ -1094,7 +1296,7 @@ app.post('/api/resident/verify-activation', (req: Request, res: Response) => {
 });
 
 // STAGE 9: RESIDENT ACCOUNT ACTIVATION & LINKING
-app.post('/api/resident/activate', (req: Request, res: Response) => {
+app.post('/api/resident/activate', async (req: Request, res: Response) => {
   try {
     const { residentNumber, identifier, email, password, auth_user_id } = req.body;
 
@@ -1112,8 +1314,19 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
       });
     }
 
-    const cleanNum = String(residentNumber).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+      });
+    }
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
 
     if (!resident || resident.status !== 'Active') {
       return res.status(400).json({
@@ -1122,18 +1335,20 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
       });
     }
 
+    if (resident.account_activated) {
+      return res.status(400).json({
+        success: false,
+        message: 'This resident account is already activated. Please log in with your credentials.'
+      });
+    }
+
     // Security Verification Check
-    const rawInput = String(identifier).trim().toLowerCase();
-    const inputDigits = rawInput.replace(/\D/g, '');
-    const regDigits = String(resident.phone_number).replace(/\D/g, '');
-    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
+    const rawInput = String(identifier).trim();
     const residentEmail = String(resident.email || '').trim().toLowerCase();
 
-    const isPhoneMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
-                         (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
-                         (inputDigits.length > 0 && inputDigits === regDigits);
-
-    const isEmailMatch = residentEmail && residentEmail === rawInput;
+    const isPhoneMatch = arePhoneNumbersEqual(rawInput, resident.phone_number) ||
+                         (resident.additional_phone && arePhoneNumbersEqual(rawInput, resident.additional_phone));
+    const isEmailMatch = residentEmail && residentEmail === rawInput.toLowerCase();
 
     if (!isPhoneMatch && !isEmailMatch) {
       return res.status(400).json({
@@ -1142,14 +1357,60 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
       });
     }
 
-    // Link Account
-    const userId = auth_user_id || resident.auth_user_id || `auth_usr_${crypto.randomBytes(12).toString('hex')}`;
+    // Provision or link with Supabase Auth
+    let finalAuthUserId = auth_user_id || resident.auth_user_id;
+    const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      const existingUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+      if (existingUser) {
+        finalAuthUserId = existingUser.id;
+        await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+          password,
+          user_metadata: {
+            resident_number: cleanNum,
+            role: 'Resident',
+            full_name: resident.full_name,
+            phone_number: resident.phone_number,
+            account_activated: true,
+            account_status: 'PROFILE UPDATE REQUIRED'
+          }
+        });
+      } else {
+        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            resident_number: cleanNum,
+            role: 'Resident',
+            full_name: resident.full_name,
+            phone_number: resident.phone_number,
+            account_activated: true,
+            account_status: 'PROFILE UPDATE REQUIRED'
+          }
+        });
+        if (!createErr && newUser?.user) {
+          finalAuthUserId = newUser.user.id;
+        }
+      }
+    } catch (authErr) {
+      console.warn('[Supabase Auth Activation Notice]', authErr);
+    }
+
+    // Link Account and Update Status
+    const userId = finalAuthUserId || `auth_usr_${crypto.randomBytes(12).toString('hex')}`;
     resident.auth_user_id = userId;
     resident.account_activated = true;
-    resident.email = email.trim().toLowerCase();
+    resident.profile_completed = false;
+    resident.account_status = 'PROFILE UPDATE REQUIRED';
+    resident.email = cleanEmail;
     resident.password_hash = crypto.createHash('sha256').update(password).digest('hex');
 
     residentsStore.set(cleanNum, resident);
+    // PERMANENT STORAGE IN SUPABASE & PERSISTENT FILE DATABASE
+    await serverDb.saveResident(resident);
 
     const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
     residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
@@ -1162,8 +1423,8 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
         id: resident.id,
         auth_user_id: resident.auth_user_id,
         account_activated: true,
-        profile_completed: !!resident.profile_completed,
-        account_status: resident.account_status || (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED'),
+        profile_completed: false,
+        account_status: 'PROFILE UPDATE REQUIRED',
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1184,7 +1445,7 @@ app.post('/api/resident/activate', (req: Request, res: Response) => {
 });
 
 // STAGE 9: RESIDENT EMAIL + PASSWORD LOGIN
-app.post('/api/resident/login', (req: Request, res: Response) => {
+app.post('/api/resident/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -1196,8 +1457,17 @@ app.post('/api/resident/login', (req: Request, res: Response) => {
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const residents = Array.from(residentsStore.values());
-    const resident = residents.find(r => (r.email && r.email.toLowerCase() === cleanEmail));
+    let resident = Array.from(residentsStore.values()).find(r => (r.email && r.email.toLowerCase() === cleanEmail));
+
+    if (!resident) {
+      // Check database
+      const allDb = await serverDb.getResidents();
+      const found = allDb.find(r => r.email && r.email.toLowerCase() === cleanEmail);
+      if (found) {
+        resident = found;
+        residentsStore.set(String(found.resident_number).padStart(3, '0'), found);
+      }
+    }
 
     if (!resident) {
       return res.status(401).json({
@@ -1213,9 +1483,38 @@ app.post('/api/resident/login', (req: Request, res: Response) => {
       });
     }
 
-    // Verify Password
-    const hashed = crypto.createHash('sha256').update(password).digest('hex');
-    if (resident.password_hash && resident.password_hash !== hashed && password.length < 6) {
+    if (!resident.account_activated) {
+      return res.status(403).json({
+        success: false,
+        message: 'This resident account has not been activated yet. Please activate your account using your resident number and registered phone number.'
+      });
+    }
+
+    // Verify Password against Supabase Auth or local hash
+    let authenticated = false;
+
+    try {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.signInWithPassword({
+        email: cleanEmail,
+        password
+      });
+      if (!authErr && authData?.user) {
+        authenticated = true;
+        if (!resident.auth_user_id) {
+          resident.auth_user_id = authData.user.id;
+          await serverDb.saveResident(resident);
+        }
+      }
+    } catch {}
+
+    if (!authenticated && resident.password_hash) {
+      const hashed = crypto.createHash('sha256').update(password).digest('hex');
+      if (resident.password_hash === hashed) {
+        authenticated = true;
+      }
+    }
+
+    if (!authenticated) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password.'
@@ -1309,14 +1608,9 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
-    // Verify phone match securely
-    const inputDigits = String(phoneNumber).replace(/\D/g, '');
-    const regDigits = String(resident.phone_number).replace(/\D/g, '');
-    const altDigits = resident.additional_phone ? String(resident.additional_phone).replace(/\D/g, '') : '';
-
-    const isMatch = (inputDigits.length >= 10 && regDigits.endsWith(inputDigits.slice(-10))) ||
-                    (altDigits.length >= 10 && altDigits.endsWith(inputDigits.slice(-10))) ||
-                    (inputDigits.length > 0 && inputDigits === regDigits);
+    // Verify phone match securely using canonical normalization
+    const isMatch = arePhoneNumbersEqual(phoneNumber, resident.phone_number) ||
+                    (resident.additional_phone && arePhoneNumbersEqual(phoneNumber, resident.additional_phone));
 
     if (!isMatch) {
       const current = residentLoginAttempts.get(cleanNum) || { count: 0, locked_until: 0 };
@@ -1500,7 +1794,7 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
 });
 
 // STAGE 9: RESIDENT SELF-SERVICE PROFILE UPDATE
-app.put('/api/resident/profile', (req: Request, res: Response) => {
+app.put('/api/resident/profile', async (req: Request, res: Response) => {
   try {
     const { residentNumber, email, phone_number, additional_phone } = req.body;
 
@@ -1508,25 +1802,63 @@ app.put('/api/resident/profile', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Resident number is required.' });
     }
 
-    const cleanNum = String(residentNumber).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
-
-    if (!resident) {
-      return res.status(404).json({ success: false, message: 'Resident record not found.' });
-    }
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    // STRICT SERVER-SIDE AUTHORIZATION: Missing -> 401, Invalid -> 401, Cross-Resident -> 403
+    const resident = await requireAuthenticatedResident(req, res, cleanNum);
+    if (!resident) return; // Response has already been sent
 
     // Strictly allow self-service update of only communication fields
     if (email !== undefined) {
       resident.email = String(email).trim().toLowerCase();
     }
+
     if (phone_number !== undefined) {
-      resident.phone_number = String(phone_number).trim();
+      const trimmedPhone = String(phone_number).trim();
+      const phoneVal = validateNigerianPhone(trimmedPhone);
+      if (!phoneVal.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: phoneVal.error || 'Please enter a valid Nigerian phone number.'
+        });
+      }
+
+      // Check duplicate phone across other residents
+      const allResidents = Array.from(residentsStore.values());
+      const dup = checkDuplicatePhone(phoneVal.normalized, allResidents, resident.id);
+      if (dup.isDuplicate && dup.conflictResident) {
+        return res.status(400).json({
+          success: false,
+          message: `Phone number is already registered to Resident #${dup.conflictResident.resident_number}. Duplicate phone numbers are not permitted.`
+        });
+      }
+
+      resident.phone_number = phoneVal.normalized;
     }
+
     if (additional_phone !== undefined) {
-      resident.additional_phone = additional_phone ? String(additional_phone).trim() : null;
+      if (additional_phone) {
+        const addVal = validateNigerianPhone(String(additional_phone).trim());
+        if (!addVal.isValid) {
+          return res.status(400).json({
+            success: false,
+            message: `Additional Phone Error: ${addVal.error}`
+          });
+        }
+        if (addVal.normalized === resident.phone_number) {
+          return res.status(400).json({
+            success: false,
+            message: 'Additional phone cannot be identical to the primary phone number.'
+          });
+        }
+        resident.additional_phone = addVal.normalized;
+      } else {
+        resident.additional_phone = null;
+      }
     }
 
     residentsStore.set(cleanNum, resident);
+    // PERMANENT PERSISTENCE TO SUPABASE & LOCAL DATABASE
+    await serverDb.saveResident(resident);
 
     return res.json({
       success: true,
@@ -1593,12 +1925,12 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
       });
     }
 
-    const cleanNum = String(data.resident_number).trim().padStart(3, '0');
-    const numInt = parseInt(cleanNum, 10);
-    if (isNaN(numInt) || numInt < 1 || numInt > 300) {
+    const cleanNum = normalizeResidentNumber(data.resident_number);
+    const numVal = validateResidentNumber(cleanNum);
+    if (!numVal.isValid) {
       return res.status(400).json({
         success: false,
-        message: `Resident Number "${cleanNum}" is invalid. Resident numbers must be between 001 and 300.`
+        message: numVal.error
       });
     }
     
@@ -1610,17 +1942,22 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
       });
     }
 
-    // Check duplicate phone number
-    const inputDigits = String(data.phone_number).replace(/\D/g, '');
-    const phoneExists = Array.from(residentsStore.values()).some(r => {
-      const rDigits = String(r.phone_number).replace(/\D/g, '');
-      return (inputDigits.length >= 10 && rDigits.endsWith(inputDigits.slice(-10))) || inputDigits === rDigits;
-    });
-
-    if (phoneExists) {
+    // Validate primary phone
+    const phoneVal = validateNigerianPhone(data.phone_number);
+    if (!phoneVal.isValid) {
       return res.status(400).json({
         success: false,
-        message: `Phone number "${data.phone_number}" is already registered to an existing resident.`
+        message: phoneVal.error || 'Please enter a valid Nigerian phone number.'
+      });
+    }
+
+    // Check duplicate phone number
+    const allResidents = Array.from(residentsStore.values());
+    const phoneDup = checkDuplicatePhone(phoneVal.normalized, allResidents);
+    if (phoneDup.isDuplicate && phoneDup.conflictResident) {
+      return res.status(400).json({
+        success: false,
+        message: `Phone number is already registered to Resident #${phoneDup.conflictResident.resident_number} (${phoneDup.conflictResident.full_name}).`
       });
     }
 
@@ -1629,8 +1966,8 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
       id: newId,
       resident_number: cleanNum,
       full_name: data.full_name.trim(),
-      phone_number: data.phone_number.trim(),
-      additional_phone: data.additional_phone ? data.additional_phone.trim() : null,
+      phone_number: phoneVal.normalized,
+      additional_phone: data.additional_phone ? normalizeNigerianPhone(data.additional_phone) : null,
       email: data.email ? data.email.trim().toLowerCase() : '',
       house_number: data.house_number ? data.house_number.trim() : 'Phase 1',
       address: data.address ? data.address.trim() : 'Finger of God Estate, Iyiaba, Asaba',
@@ -1707,10 +2044,33 @@ app.put('/api/admin/residents/:id', requireAdminAuth, async (req: Request, res: 
       return res.status(404).json({ success: false, message: 'Resident not found' });
     }
 
+    if (data.phone_number) {
+      const phoneVal = validateNigerianPhone(data.phone_number);
+      if (!phoneVal.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: phoneVal.error || 'Please enter a valid Nigerian phone number.'
+        });
+      }
+      const allResidents = Array.from(residentsStore.values());
+      const phoneDup = checkDuplicatePhone(phoneVal.normalized, allResidents, existing.id);
+      if (phoneDup.isDuplicate && phoneDup.conflictResident) {
+        return res.status(400).json({
+          success: false,
+          message: `Phone number is already registered to Resident #${phoneDup.conflictResident.resident_number} (${phoneDup.conflictResident.full_name}).`
+        });
+      }
+      data.phone_number = phoneVal.normalized;
+    }
+
+    if (data.additional_phone) {
+      data.additional_phone = normalizeNigerianPhone(data.additional_phone);
+    }
+
     const updated: ServerResidentRecord = {
       ...existing,
       ...data,
-      resident_number: existing.resident_number // Never mutate resident number
+      resident_number: existing.resident_number // Strictly preserve permanent resident number
     };
 
     residentsStore.set(existing.resident_number, updated);
@@ -1723,7 +2083,7 @@ app.put('/api/admin/residents/:id', requireAdminAuth, async (req: Request, res: 
 });
 
 // FIRST-TIME RESIDENT PROFILE SETUP COMPLETION (ONE-TIME ONLY)
-app.post('/api/resident/first-login-setup', (req: Request, res: Response) => {
+app.post('/api/resident/first-login-setup', async (req: Request, res: Response) => {
   try {
     const { residentNumber, full_name, phone_number, additional_phone, house_number, address, email } = req.body;
 
@@ -1731,19 +2091,67 @@ app.post('/api/resident/first-login-setup', (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Resident number is required.' });
     }
 
-    const cleanNum = String(residentNumber).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    // STRICT SERVER-SIDE AUTHORIZATION: Missing -> 401, Invalid -> 401, Cross-Resident -> 403
+    const resident = await requireAuthenticatedResident(req, res, cleanNum);
+    if (!resident) return; // Response has already been sent
 
-    if (!resident) {
-      return res.status(404).json({ success: false, message: 'Resident record not found.' });
+    if (full_name && full_name.trim().length >= 2) {
+      resident.full_name = String(full_name).trim();
     }
 
-    if (full_name) resident.full_name = String(full_name).trim();
-    if (phone_number) resident.phone_number = String(phone_number).trim();
-    if (additional_phone !== undefined) resident.additional_phone = additional_phone ? String(additional_phone).trim() : null;
-    if (house_number) resident.house_number = String(house_number).trim();
-    if (address) resident.address = String(address).trim();
-    if (email) resident.email = String(email).trim().toLowerCase();
+    if (phone_number) {
+      const phoneVal = validateNigerianPhone(String(phone_number).trim());
+      if (!phoneVal.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: phoneVal.error || 'Please enter a valid Nigerian phone number.'
+        });
+      }
+
+      // Check duplicate phone across other residents
+      const allResidents = Array.from(residentsStore.values());
+      const dup = checkDuplicatePhone(phoneVal.normalized, allResidents, resident.id);
+      if (dup.isDuplicate && dup.conflictResident) {
+        return res.status(400).json({
+          success: false,
+          message: `Phone number is already registered to Resident #${dup.conflictResident.resident_number}. Duplicate phone numbers are not permitted.`
+        });
+      }
+
+      resident.phone_number = phoneVal.normalized;
+    }
+
+    if (additional_phone !== undefined) {
+      if (additional_phone) {
+        const addVal = validateNigerianPhone(String(additional_phone).trim());
+        if (!addVal.isValid) {
+          return res.status(400).json({
+            success: false,
+            message: `Additional Phone Error: ${addVal.error}`
+          });
+        }
+        if (addVal.normalized === resident.phone_number) {
+          return res.status(400).json({
+            success: false,
+            message: 'Additional phone cannot be identical to the primary phone number.'
+          });
+        }
+        resident.additional_phone = addVal.normalized;
+      } else {
+        resident.additional_phone = null;
+      }
+    }
+
+    if (house_number && house_number.trim()) {
+      resident.house_number = String(house_number).trim();
+    }
+    if (address && address.trim()) {
+      resident.address = String(address).trim();
+    }
+    if (email && email.trim()) {
+      resident.email = String(email).trim().toLowerCase();
+    }
 
     // Mark one-time setup as completed and account fully active
     resident.profile_completed = true;
@@ -1751,12 +2159,15 @@ app.post('/api/resident/first-login-setup', (req: Request, res: Response) => {
     resident.account_status = 'ACTIVE';
 
     residentsStore.set(cleanNum, resident);
+    // PERMANENT STORAGE IN SUPABASE & ESTATE DATABASE
+    await serverDb.saveResident(resident);
 
     // Update payment record resident name if present
     const pay = paymentsStore.get(`${cleanNum}_10_2026`);
     if (pay) {
       pay.resident_name = resident.full_name;
       pay.house_number = resident.house_number;
+      await serverDb.savePayment(pay);
     }
 
     res.json({
@@ -1788,19 +2199,21 @@ app.post('/api/resident/first-login-setup', (req: Request, res: Response) => {
 });
 
 // RESIDENT DASHBOARD DATA (SCOPED STRICTLY TO THE AUTHENTICATED RESIDENT)
-app.get('/api/resident/dashboard', (req: Request, res: Response) => {
+app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
   try {
     const residentNum = req.query.residentNumber;
     if (!residentNum) {
       return res.status(400).json({ success: false, message: 'Resident number parameter is required.' });
     }
 
-    const cleanNum = String(residentNum).trim().padStart(3, '0');
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
-
-    if (!resident) {
-      return res.status(404).json({ success: false, message: `Resident #${cleanNum} not found.` });
+    const cleanNum = normalizeResidentNumber(residentNum as string);
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({ success: false, message: 'Invalid resident number format.' });
     }
+
+    // STRICT SERVER-SIDE AUTHORIZATION: Missing -> 401, Invalid -> 401, Cross-Resident -> 403
+    const resident = await requireAuthenticatedResident(req, res, cleanNum);
+    if (!resident) return; // Response has already been sent
 
     // Official billing schedule starting October 2026 (₦5,000 / month)
     const billingSchedule = [
@@ -1863,7 +2276,6 @@ app.get('/api/resident/dashboard', (req: Request, res: Response) => {
     const currentMonthPayment = residentPayments.find(p => p.period_month === 10 && p.period_year === 2026) || residentPayments[0];
 
     // Outstanding Levies: Legitimate billing months that are UNPAID
-    // For October 2026: October 2026 is due
     const outstandingLevies = residentPayments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
     const monthsOutstanding = outstandingLevies.length;
     const totalOutstanding = monthsOutstanding * 5000;
@@ -1872,6 +2284,10 @@ app.get('/api/resident/dashboard', (req: Request, res: Response) => {
       success: true,
       resident: {
         id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
         resident_number: resident.resident_number,
         full_name: resident.full_name,
         phone_number: resident.phone_number,
@@ -1901,6 +2317,66 @@ app.get('/api/resident/dashboard', (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Resident dashboard data error:', err);
     res.status(500).json({ success: false, message: 'Server error retrieving resident dashboard.' });
+  }
+});
+
+// SAFE PUBLIC RESIDENT LOOKUP (NO PHONE, EMAIL, OR PASSWORD EXPOSED)
+app.get('/api/resident/lookup', (req: Request, res: Response) => {
+  try {
+    const rawNum = req.query.resident_number || req.query.residentNumber;
+    if (!rawNum) {
+      return res.status(400).json({ found: false, message: 'Resident number parameter is required.' });
+    }
+
+    const cleanNum = normalizeResidentNumber(String(rawNum));
+    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      return res.status(404).json({ found: false, message: `Resident #${cleanNum} not found in estate directory.` });
+    }
+
+    const payments = Array.from(paymentsStore.values())
+      .filter(p => p.resident_number === cleanNum)
+      .map(p => ({
+        id: p.id,
+        period_month: p.period_month,
+        period_year: p.period_year,
+        period_label: p.period_label,
+        amount_due: p.amount_due,
+        amount_paid: p.amount_paid,
+        status: p.status,
+        due_date: p.due_date,
+        paid_at: p.paid_at
+      }));
+
+    return res.json({
+      found: true,
+      resident: {
+        id: resident.id,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        house_number: resident.house_number,
+        status: resident.status
+      },
+      payments
+    });
+  } catch (err: any) {
+    console.error('Resident lookup error:', err);
+    res.status(500).json({ found: false, message: 'Server error performing lookup.' });
+  }
+});
+
+// RESIDENT LOGOUT / SESSION REVOCATION
+app.post('/api/resident/logout', (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      residentSessionsStore.delete(token);
+    }
+    return res.json({ success: true, message: 'Signed out successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Error during logout.' });
   }
 });
 
@@ -4219,6 +4695,13 @@ async function setupApp() {
     await ensureDesignatedAdminAccount();
   } catch (err) {
     console.warn('Notice ensuring designated admin account:', err);
+  }
+
+  // Synchronize residents directory from persistent database
+  try {
+    await initializeResidentsStore();
+  } catch (err) {
+    console.warn('Notice initializing residents store:', err);
   }
 
   if (!isProd) {

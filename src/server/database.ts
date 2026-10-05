@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { normalizeNigerianPhone, arePhoneNumbersEqual } from '../lib/phoneUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,6 +121,45 @@ const DEFAULT_RESIDENTS = [
     registration_date: '2026-08-12',
     created_at: new Date('2026-08-12T14:20:00Z').toISOString(),
     updated_at: new Date('2026-08-12T14:20:00Z').toISOString()
+  },
+  {
+    id: 'res-005',
+    resident_number: '005',
+    full_name: 'Chief Emeka Okonjo',
+    phone_number: '08011223344',
+    additional_phone: null,
+    email: 'emeka.okonjo@fingerofgodestate.ng',
+    house_number: 'Plot 25, Boulevard',
+    address: 'Plot 25 Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
+    status: 'Active',
+    account_activated: false,
+    profile_completed: false,
+    account_status: 'NOT ACTIVATED',
+    registration_date: '2026-10-02',
+    created_at: new Date('2026-10-02T19:51:29Z').toISOString(),
+    updated_at: new Date('2026-10-02T19:51:29Z').toISOString()
+  },
+  {
+    id: 'res-010',
+    auth_user_id: 'd1b49d39-12aa-46ad-9196-878d609706f2',
+    resident_number: '010',
+    full_name: 'Mrs. Isis Nwabueze',
+    phone_number: '08038383810',
+    additional_phone: null,
+    email: 'isis38f@gmail.com',
+    house_number: 'Plot 10, Palm Avenue',
+    address: '10 Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+    state: 'Delta',
+    lga: 'Oshimili South',
+    status: 'Active',
+    account_activated: true,
+    profile_completed: true,
+    account_status: 'ACTIVE',
+    registration_date: '2026-08-15',
+    created_at: new Date('2026-08-15T10:00:00Z').toISOString(),
+    updated_at: new Date('2026-08-15T10:00:00Z').toISOString()
   }
 ];
 
@@ -397,16 +437,45 @@ export const serverDb = {
   async saveResident(residentData: any): Promise<any> {
     const cleanNum = String(residentData.resident_number).trim().padStart(3, '0');
     
-    // Check uniqueness constraint
-    const existing = localDb.residents.find(r => String(r.resident_number).padStart(3, '0') === cleanNum && r.id !== residentData.id);
-    if (existing) {
-      throw new Error(`Resident number ${cleanNum} is already assigned.`);
+    // Enforce 001 - 300 range with leading zero preservation
+    const residentNumRegex = /^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$/;
+    if (!residentNumRegex.test(cleanNum)) {
+      throw new Error(`Invalid resident number "${cleanNum}". Resident numbers must be between 001 and 300.`);
+    }
+
+    // Check resident number uniqueness constraint
+    const existingNum = localDb.residents.find(r => 
+      String(r.resident_number).trim().padStart(3, '0') === cleanNum && 
+      r.id !== residentData.id
+    );
+    if (existingNum) {
+      throw new Error(`Resident number ${cleanNum} is already assigned to ${existingNum.full_name}.`);
+    }
+
+    // Normalize phone numbers
+    const normPhone = residentData.phone_number ? normalizeNigerianPhone(residentData.phone_number) : '';
+    const normAltPhone = residentData.additional_phone ? normalizeNigerianPhone(residentData.additional_phone) : null;
+
+    // Check phone number uniqueness across other residents
+    if (normPhone) {
+      const existingPhone = localDb.residents.find(r => {
+        if (r.id === residentData.id) return false;
+        const rPhone = normalizeNigerianPhone(r.phone_number);
+        const rAlt = r.additional_phone ? normalizeNigerianPhone(r.additional_phone) : null;
+        return arePhoneNumbersEqual(normPhone, rPhone) || (rAlt && arePhoneNumbersEqual(normPhone, rAlt));
+      });
+      if (existingPhone) {
+        throw new Error(`Phone number "${residentData.phone_number}" is already registered to Resident #${existingPhone.resident_number} (${existingPhone.full_name}). Duplicate phone registrations are not permitted.`);
+      }
     }
 
     const residentRecord = {
       ...residentData,
       id: residentData.id || `res-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       resident_number: cleanNum,
+      phone_number: normPhone || residentData.phone_number,
+      additional_phone: normAltPhone || residentData.additional_phone || null,
+      email: residentData.email ? String(residentData.email).trim().toLowerCase() : '',
       state: residentData.state || 'Delta',
       lga: residentData.lga || 'Oshimili South',
       created_at: residentData.created_at || new Date().toISOString(),
@@ -421,11 +490,30 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
-    // Try Supabase write
+    // Try Supabase table upsert
     try {
       await supabaseAdmin.from('residents').upsert(residentRecord);
     } catch (e) {
       console.warn('Supabase resident upsert queued locally:', e);
+    }
+
+    // If linked to Supabase Auth, keep user metadata in sync
+    if (residentRecord.auth_user_id) {
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(residentRecord.auth_user_id, {
+          user_metadata: {
+            resident_number: cleanNum,
+            role: 'Resident',
+            full_name: residentRecord.full_name,
+            phone_number: residentRecord.phone_number,
+            account_activated: !!residentRecord.account_activated,
+            profile_completed: !!residentRecord.profile_completed,
+            account_status: residentRecord.account_status || 'ACTIVE'
+          }
+        });
+      } catch (authErr) {
+        console.warn('Supabase auth metadata update notice:', authErr);
+      }
     }
 
     return residentRecord;

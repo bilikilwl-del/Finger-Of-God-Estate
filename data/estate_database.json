@@ -16,6 +16,7 @@
   "residents": [
     {
       "id": "res-001",
+      "auth_user_id": "cb033992-eb57-4a0f-800f-d73b303b9d07",
       "resident_number": "001",
       "full_name": "Engr. Babatunde Adeleke",
       "phone_number": "08023456789",
@@ -28,6 +29,7 @@
       "status": "Active",
       "account_activated": true,
       "profile_completed": true,
+      "account_status": "ACTIVE",
       "registration_date": "2026-08-01",
       "created_at": "2026-08-01T08:00:00.000Z",
       "updated_at": "2026-08-01T08:00:00.000Z"
@@ -84,7 +86,8 @@
       "profile_completed": false,
       "registration_date": "2026-08-12",
       "created_at": "2026-08-12T14:20:00.000Z",
-      "updated_at": "2026-08-12T14:20:00.000Z"
+      "updated_at": "2026-10-04T17:30:03.021Z",
+      "account_status": "NOT ACTIVATED"
     },
     {
       "id": "res-1790970689833-492",
@@ -104,6 +107,26 @@
       "registration_date": "2026-10-02",
       "created_at": "2026-10-02T19:51:29.833Z",
       "updated_at": "2026-10-02T19:51:29.833Z"
+    },
+    {
+      "id": "res-010",
+      "auth_user_id": "d1b49d39-12aa-46ad-9196-878d609706f2",
+      "resident_number": "010",
+      "full_name": "Mrs. Isis Nwabueze",
+      "phone_number": "08038383810",
+      "additional_phone": null,
+      "email": "isis38f@gmail.com",
+      "house_number": "Plot 10, Palm Avenue",
+      "address": "10 Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba",
+      "state": "Delta",
+      "lga": "Oshimili South",
+      "status": "Active",
+      "account_activated": true,
+      "profile_completed": true,
+      "account_status": "ACTIVE",
+      "registration_date": "2026-08-15",
+      "created_at": "2026-08-15T10:00:00.000Z",
+      "updated_at": "2026-08-15T10:00:00.000Z"
     }
   ],
   "profiles": [
@@ -114,7 +137,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-04T13:44:06.801Z"
+      "updated_at": "2026-10-04T17:25:03.765Z"
     }
   ],
   "admin_users": [
@@ -126,7 +149,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-04T13:44:06.801Z"
+      "updated_at": "2026-10-04T17:25:03.765Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -179,6 +202,36 @@
     }
   ],
   "road_project_transactions": [
+    {
+      "id": "rd-tx-1791133611354-5482",
+      "date": "2026-10-04",
+      "type": "CREDIT",
+      "notes": "Verified online contribution via Paystack (bank_transfer). Auth code: AUTH_y8mzy5ltnn",
+      "amount": 100,
+      "source": "Paystack",
+      "status": "VERIFIED",
+      "paid_at": "2026-10-04T14:15:37.000Z",
+      "category": "Landlord Levy",
+      "currency": "NGN",
+      "reference": "FOG-RD-PAY-1791123238092-52ED68",
+      "created_at": "2026-10-04T14:15:37.000Z",
+      "approved_by": "Paystack Automated Gateway (Server Verified)",
+      "description": "Resident 013 Road Modernization Contribution",
+      "resident_id": null,
+      "verified_at": "2026-10-04T14:15:37.000Z",
+      "project_name": "Finger of God Estate Road Modernization Project",
+      "project_type": "road_modernization",
+      "payment_status": "success",
+      "building_number": "013",
+      "payer_or_vendor": "CJ",
+      "resident_number": "013",
+      "running_balance": 0,
+      "paystack_reference": "FOG-RD-PAY-1791123238092-52ED68",
+      "receipt_or_invoice_ref": "RCP-RD-PSTK-611355",
+      "paystack_transaction_id": "6624174736",
+      "provider_transaction_id": "6624174736",
+      "contributor_display_name": "CJ"
+    },
     {
       "id": "rd-tx-1791065740307-ea4c",
       "date": "2026-10-03",
@@ -283,5 +336,5 @@
       "created_at": "2026-10-02T19:51:01.698Z"
     }
   ],
-  "last_updated": "2026-10-04T13:44:54.371Z"
+  "last_updated": "2026-10-04T17:30:03.021Z"
 }

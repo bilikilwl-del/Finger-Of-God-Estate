@@ -468,26 +468,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   };
 
-  // 7. FAST TEST PROFILE SWITCHER (DEV / DEMO SPEED)
-  const handleQuickSelect = async (num: string, phone: string) => {
+  // 7. FAST TEST PROFILE SWITCHER (AUTO-FILL FORM ONLY - NO AUTO LOGIN)
+  const handleQuickSelect = (num: string, phone: string) => {
+    setActiveTab('login');
+    setOtpStep('enter_details');
     setEstateNumber(num);
     setPhoneNumber(phone);
     setErrorMessage(null);
     setSuccessMessage(null);
-    setIsLoading(true);
-    try {
-      const res = await dbService.authResident(num, phone);
-      if (res.success && res.resident) {
-        onSuccess(res.resident);
-        if (isModal && onCloseModal) onCloseModal();
-      } else {
-        setErrorMessage(res.message || 'Failed to select test resident.');
-      }
-    } catch {
-      setErrorMessage('Failed to sign in with test resident.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const containerContent = (

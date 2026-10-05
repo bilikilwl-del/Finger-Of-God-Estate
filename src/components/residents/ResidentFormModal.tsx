@@ -19,6 +19,7 @@ import { Resident, ResidentStatus } from '../../types/database';
 import { NIGERIAN_STATES_LGAS } from '../../data/nigerianStates';
 import { getNextSequentialResidentNumber, dbService } from '../../lib/supabase';
 import { validateNigerianPhone } from '../../lib/phoneUtils';
+import { validateResidentNumber } from '../../lib/residentUtils';
 
 interface ResidentFormModalProps {
   isOpen: boolean;
@@ -113,8 +114,9 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
 
   // Validation function
   const validateForm = (): string | null => {
-    if (!residentNumber.trim()) {
-      return 'Resident identification number is required.';
+    const numVal = validateResidentNumber(residentNumber);
+    if (!numVal.isValid) {
+      return numVal.error || 'Resident identification number is required.';
     }
     if (!fullName.trim() || fullName.trim().length < 2) {
       return 'Please enter the resident\'s full name.';
