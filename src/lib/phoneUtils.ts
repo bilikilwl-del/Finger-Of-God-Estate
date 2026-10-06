@@ -116,6 +116,29 @@ export function validateNigerianPhone(input: string): PhoneValidationResult {
 }
 
 /**
+ * Formats any variation of a Nigerian phone number into the standard international format (2348012345678)
+ * required by Nigerian SMS gateways (SmartSMS, Termii, etc.).
+ */
+export function formatNigerianPhoneForSMS(input: string): string {
+  if (!input) return '';
+  const local11 = normalizeNigerianPhone(input);
+  if (local11.startsWith('0') && local11.length === 11) {
+    return '234' + local11.substring(1);
+  }
+  const digits = String(input).replace(/\D/g, '');
+  if (digits.startsWith('234') && digits.length === 13) {
+    return digits;
+  }
+  if (digits.startsWith('0') && digits.length === 11) {
+    return '234' + digits.substring(1);
+  }
+  if (digits.length === 10 && /^[789]/.test(digits)) {
+    return '234' + digits;
+  }
+  return digits;
+}
+
+/**
  * Checks if two phone numbers match after normalization
  */
 export function arePhoneNumbersEqual(phoneA: string, phoneB: string): boolean {

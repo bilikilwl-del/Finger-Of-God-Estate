@@ -8,7 +8,7 @@ import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
 import { electionRouter } from './src/server/electionServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
-import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual } from './src/lib/phoneUtils.ts';
+import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual, formatNigerianPhoneForSMS } from './src/lib/phoneUtils.ts';
 import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
 
 dotenv.config();
@@ -3206,37 +3206,36 @@ INITIAL_SERVER_SMS.forEach(s => smsLogsStore.set(s.id, s));
 
 // Helper: Read SMS provider configurations from server environment
 function getSmsProvider(): string {
-  return (process.env.SMS_PROVIDER || 'termii').toLowerCase().trim();
+  const p = (process.env.SMS_PROVIDER || 'termii').toLowerCase().trim();
+  if (p.includes('smart') || p.includes('smartsms')) {
+    return 'smart_sms';
+  }
+  if (p.includes('termii')) {
+    return 'termii';
+  }
+  return p;
 }
 
 function getSmsApiKey(): string {
-  return (process.env.SMS_API_KEY || '').trim();
+  return (process.env.SMS_API_KEY || process.env.TERMII_API_KEY || process.env.SMARTSMS_API_KEY || '').trim();
 }
 
 function getSmsSenderId(): string {
-  return (process.env.SMS_SENDER_ID || 'FINGEROFGOD').trim().substring(0, 11);
+  return (process.env.SMS_SENDER_ID || process.env.TERMII_SENDER_ID || 'FINGEROFGOD').trim().substring(0, 11);
 }
 
 function getSmsChannel(): string {
-  return (process.env.SMS_CHANNEL || 'generic').toLowerCase().trim();
+  return (process.env.SMS_CHANNEL || process.env.TERMII_CHANNEL || 'generic').toLowerCase().trim();
 }
 
 function isSmsConfigured(): boolean {
   const key = getSmsApiKey();
-  return Boolean(key && key.length > 5 && !key.startsWith('YOUR_'));
+  return Boolean(key && key.length > 5 && !key.startsWith('YOUR_') && !key.startsWith('TLxx'));
 }
 
 // Helper: Format phone numbers for Nigerian SMS delivery (e.g., 2348012345678)
 function normalizePhoneForSMS(phone: string): string {
-  if (!phone) return '';
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('234') && digits.length === 13) {
-    return digits;
-  }
-  if (digits.startsWith('0') && digits.length === 11) {
-    return '234' + digits.substring(1);
-  }
-  return digits;
+  return formatNigerianPhoneForSMS(phone);
 }
 
 // Helper: Get precise current time in Africa/Lagos timezone
@@ -3305,7 +3304,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
     return {
       success: false,
       status: 'FAILED',
-      error: `Invalid Nigerian phone number format: "${toPhone}". Expected 11 digits (e.g. 08012345678).`
+      error: `Invalid Nigerian phone number format: "${toPhone}". Expected standard 11 digits (e.g. 08012345678).`
     };
   }
 
@@ -3315,7 +3314,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
     return {
       success: false,
       status: 'NOT_CONFIGURED',
-      error: 'SMS SERVICE NOT CONFIGURED: No valid SMS_API_KEY detected in server environment. Set SMS_API_KEY in .env to enable live delivery via Termii.'
+      error: 'SMS SERVICE NOT CONFIGURED: No valid SMS_API_KEY detected in server environment. Set SMS_API_KEY in .env to enable live delivery.'
     };
   }
 
@@ -3325,7 +3324,47 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
   const channel = getSmsChannel();
 
   try {
-    if (provider === 'termii') {
+    if (provider === 'smart_sms' || provider.includes('smart')) {
+      const params = new URLSearchParams();
+      params.append('token', apiKey);
+      params.append('sender', senderId);
+      params.append('to', normalizedPhone);
+      params.append('message', messageText);
+      params.append('type', '0'); // Plain text
+      params.append('routing', channel === 'corporate' ? '4' : '3'); // Route 3: Basic with DND fallback
+
+      const response = await fetch('https://app.smartsmssolutions.com/io/api/client/v1/sms/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && (data.code === 1000 || data.successful || data.message_id)) {
+        const msgId = data.message_id || `sms-${Date.now()}`;
+        lastSuccessfulSmsTimestamp = new Date().toISOString();
+        return {
+          success: true,
+          status: 'SENT',
+          providerMessageId: String(msgId)
+        };
+      } else {
+        const errMessage = data.comment || data.error || data.message || `HTTP ${response.status} from SmartSMSSolutions`;
+        lastFailedSmsTimestamp = new Date().toISOString();
+        const masked = normalizedPhone.length >= 8 
+          ? `${normalizedPhone.substring(0, 6)}***${normalizedPhone.substring(normalizedPhone.length - 2)}` 
+          : '***';
+        console.warn(`[SMS Failed] Provider: SmartSMSSolutions, Status: ${response.status}, Phone: ${masked}, Type: ${reminderType}, Reason: ${errMessage}`);
+        return {
+          success: false,
+          status: 'FAILED',
+          error: `SmartSMS Gateway Error: ${errMessage}`
+        };
+      }
+    } else if (provider === 'termii') {
       const response = await fetch('https://api.ng.termii.com/api/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3352,6 +3391,10 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
       } else {
         const errMessage = data.message || data.error || `HTTP ${response.status} from Termii`;
         lastFailedSmsTimestamp = new Date().toISOString();
+        const masked = normalizedPhone.length >= 8 
+          ? `${normalizedPhone.substring(0, 6)}***${normalizedPhone.substring(normalizedPhone.length - 2)}` 
+          : '***';
+        console.warn(`[SMS Failed] Provider: Termii, Status: ${response.status}, Phone: ${masked}, Type: ${reminderType}, Reason: ${errMessage}`);
         return {
           success: false,
           status: 'FAILED',
@@ -3359,11 +3402,11 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
         };
       }
     } else {
-      // Generic compatible HTTP SMS webhook/endpoint
+      lastFailedSmsTimestamp = new Date().toISOString();
       return {
         success: false,
         status: 'FAILED',
-        error: `Unsupported SMS provider "${provider}". Configured providers: termii.`
+        error: `Unsupported SMS provider "${provider}". Configured providers: "smart sms solutions", "termii".`
       };
     }
   } catch (err: any) {
@@ -3755,6 +3798,226 @@ app.post('/api/sms/run-reminders', requireAdminAuth, async (req: Request, res: R
     console.error('Run reminders error:', error);
     res.status(500).json({ success: false, message: 'Failed to run automated reminder job.' });
   }
+});
+
+// -------------------------------------------------------------
+// ADMIN SMS TEST DASHBOARD ENDPOINTS (STAGE 5 DIAGNOSTICS)
+// -------------------------------------------------------------
+interface AdminSmsTestLogRecord {
+  id: string;
+  created_at: string;
+  recipient_masked: string;
+  provider: string;
+  sender_id: string;
+  status: 'ACCEPTED' | 'FAILED' | 'NOT_CONFIGURED';
+  delivery_label: string;
+  provider_message_id?: string | null;
+  error_message?: string | null;
+  message_preview: string;
+  admin_email: string;
+}
+
+const adminTestLogsStore: AdminSmsTestLogRecord[] = [];
+let lastAdminTestSmsTimestamp = 0;
+
+// 1. Check Server SMS Configuration (Without Sending SMS)
+app.get('/api/admin/sms/check-config', requireAdminAuth, (_req: Request, res: Response) => {
+  const rawProvider = getSmsProvider();
+  const providerDisplay = rawProvider === 'smart_sms' || rawProvider.includes('smart') 
+    ? 'SmartSMSSolutions' 
+    : rawProvider === 'termii' 
+    ? 'Termii' 
+    : rawProvider;
+  const configured = isSmsConfigured();
+  const apiKey = getSmsApiKey();
+  const senderId = getSmsSenderId();
+  const channel = getSmsChannel();
+
+  res.json({
+    success: true,
+    provider: providerDisplay,
+    rawProvider,
+    senderId,
+    channel,
+    isConfigured: configured,
+    maskedApiKey: apiKey ? '••••••••••••' : null,
+    checks: {
+      providerConfigured: Boolean(rawProvider),
+      apiKeyPresent: Boolean(apiKey && apiKey.length > 5),
+      senderIdConfigured: Boolean(senderId && senderId.length > 0),
+      channelConfigured: Boolean(channel && channel.length > 0)
+    },
+    ready: configured,
+    checkedAt: new Date().toISOString()
+  });
+});
+
+// 2. Admin Test SMS Dispatch Endpoint (Direct Test to Any Specified Number)
+app.post('/api/admin/sms/test', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { testPhone, message } = req.body;
+
+    if (!testPhone || typeof testPhone !== 'string' || !testPhone.trim()) {
+      return res.status(400).json({
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Validation Error',
+        message: 'Test phone number is required.',
+        error: 'Please enter a valid Nigerian mobile phone number (e.g. 08031234567).'
+      });
+    }
+
+    // Cooldown check (prevent accidental rapid clicks)
+    const now = Date.now();
+    if (now - lastAdminTestSmsTimestamp < 3000) {
+      return res.status(429).json({
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Rate Limited',
+        message: 'Please wait 3 seconds before sending another test SMS.',
+        error: 'Cooldown active to prevent duplicate dispatches.'
+      });
+    }
+
+    // Normalize phone number via centralized helper
+    const normalizedPhone = normalizePhoneForSMS(testPhone.trim());
+    if (!normalizedPhone || normalizedPhone.length !== 13 || !normalizedPhone.startsWith('234')) {
+      return res.status(400).json({
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Validation Error',
+        message: 'Invalid Nigerian phone number format.',
+        error: `Could not parse "${testPhone}". Expected format like 08031234567, +2348031234567, or 2348031234567.`
+      });
+    }
+
+    lastAdminTestSmsTimestamp = now;
+
+    const rawProvider = getSmsProvider();
+    const providerDisplay = rawProvider === 'smart_sms' || rawProvider.includes('smart') 
+      ? 'SmartSMSSolutions' 
+      : rawProvider === 'termii' 
+      ? 'Termii' 
+      : rawProvider;
+    const senderId = getSmsSenderId();
+
+    const defaultMsg = 'Finger of God Estate: This is a test SMS from the Resident Portal. If you received this message, the estate SMS service is working correctly.';
+    const messageText = (message && typeof message === 'string' && message.trim()) ? message.trim() : defaultMsg;
+
+    if (messageText.length > 500) {
+      return res.status(400).json({
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Validation Error',
+        message: 'Test message exceeds character limit (maximum 500 characters).'
+      });
+    }
+
+    // Safe recipient masking: 234803***4567
+    const maskedPhone = `${normalizedPhone.slice(0, 6)}***${normalizedPhone.slice(-4)}`;
+
+    // Dispatch SMS via existing core dispatch service
+    const dispatch = await dispatchSms(normalizedPhone, messageText, 'ADMIN_TEST');
+
+    const adminEmail = (req as any).adminUser?.email || 'admin@fingerofgodestate.com';
+
+    const testLog: AdminSmsTestLogRecord = {
+      id: `test-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+      created_at: new Date().toISOString(),
+      recipient_masked: maskedPhone,
+      provider: providerDisplay,
+      sender_id: senderId,
+      status: dispatch.success ? 'ACCEPTED' : (dispatch.status === 'NOT_CONFIGURED' ? 'NOT_CONFIGURED' : 'FAILED'),
+      delivery_label: dispatch.success ? 'Accepted by provider' : (dispatch.status === 'NOT_CONFIGURED' ? 'Not Configured' : 'Failed'),
+      provider_message_id: dispatch.providerMessageId || null,
+      error_message: dispatch.error || null,
+      message_preview: messageText.length > 60 ? `${messageText.slice(0, 57)}...` : messageText,
+      admin_email: adminEmail
+    };
+
+    // Keep up to 20 recent tests in memory ring buffer
+    adminTestLogsStore.unshift(testLog);
+    if (adminTestLogsStore.length > 20) {
+      adminTestLogsStore.pop();
+    }
+
+    // Also record in system SMS log store for audit visibility
+    const sysLog: ServerSmsLogRecord = {
+      id: testLog.id,
+      resident_id: 'admin-test',
+      resident_number: 'ADMIN',
+      phone_number: maskedPhone,
+      payment_month: 10,
+      payment_year: 2026,
+      period_label: 'Diagnostic Test',
+      reminder_type: 'TEST',
+      message: messageText,
+      provider: rawProvider,
+      provider_message_id: dispatch.providerMessageId || null,
+      delivery_status: dispatch.status,
+      sent_at: dispatch.success ? new Date().toISOString() : null,
+      error_message: dispatch.error || null,
+      created_at: new Date().toISOString()
+    };
+    smsLogsStore.set(sysLog.id, sysLog);
+
+    if (dispatch.status === 'NOT_CONFIGURED') {
+      return res.json({
+        success: false,
+        status: 'NOT_CONFIGURED',
+        deliveryLabel: 'Not Configured',
+        message: 'SMS provider not configured on server.',
+        error: dispatch.error || 'No valid SMS_API_KEY detected in server environment.',
+        provider: providerDisplay,
+        senderId,
+        recipientMasked: maskedPhone,
+        timestamp: testLog.created_at
+      });
+    }
+
+    if (!dispatch.success) {
+      return res.json({
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Failed',
+        message: `${providerDisplay} rejected the SMS request.`,
+        error: dispatch.error || 'Provider rejected message transmission.',
+        provider: providerDisplay,
+        senderId,
+        recipientMasked: maskedPhone,
+        timestamp: testLog.created_at
+      });
+    }
+
+    return res.json({
+      success: true,
+      status: 'ACCEPTED',
+      deliveryLabel: 'Accepted by provider',
+      message: `${providerDisplay} accepted the test SMS for delivery.`,
+      provider: providerDisplay,
+      senderId,
+      recipientMasked: maskedPhone,
+      providerMessageId: dispatch.providerMessageId || null,
+      timestamp: testLog.created_at
+    });
+  } catch (err: any) {
+    console.error('Admin test SMS exception:', err);
+    res.status(500).json({
+      success: false,
+      status: 'FAILED',
+      deliveryLabel: 'Server Error',
+      message: 'Internal server error while processing SMS test.',
+      error: err?.message || 'Server error'
+    });
+  }
+});
+
+// 3. Admin Test History Endpoint
+app.get('/api/admin/sms/test-history', requireAdminAuth, (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    tests: adminTestLogsStore.slice(0, 20)
+  });
 });
 
 // -------------------------------------------------------------

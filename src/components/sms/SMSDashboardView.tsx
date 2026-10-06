@@ -27,6 +27,7 @@ import { dbService } from '../../lib/supabase';
 import { SendTestSMSModal } from './SendTestSMSModal';
 import { RunRemindersModal } from './RunRemindersModal';
 import { ViewSMSModal } from './ViewSMSModal';
+import { SMSTestDashboardSection } from './SMSTestDashboardSection';
 
 interface SMSDashboardViewProps {
   residents: Resident[];
@@ -37,6 +38,7 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
   residents,
   onSelectResident
 }) => {
+  const [subTab, setSubTab] = useState<'TEST_DASHBOARD' | 'REMINDERS_AND_LOGS'>('TEST_DASHBOARD');
   const [logs, setLogs] = useState<SMSLog[]>([]);
   const [config, setConfig] = useState<SMSConfigStatus>({
     isConfigured: false,
@@ -124,8 +126,41 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      {/* Sub-tab navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setSubTab('TEST_DASHBOARD')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            subTab === 'TEST_DASHBOARD'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Send className="w-3.5 h-3.5" />
+          <span>SMS Test Dashboard</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('REMINDERS_AND_LOGS')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            subTab === 'REMINDERS_AND_LOGS'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Automated Levy Reminders & Logs</span>
+        </button>
+      </div>
+
+      {subTab === 'TEST_DASHBOARD' ? (
+        <SMSTestDashboardSection />
+      ) : (
+        <>
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center text-emerald-600">
@@ -535,6 +570,8 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* Modals */}
       <SendTestSMSModal

@@ -56,7 +56,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'road_project_admin', label: 'Road Project Ledger', icon: Coins },
     { id: 'reports', label: 'Financial Reports', icon: FileText },
     { id: 'admin_election', label: 'Estate Elections', icon: Vote },
-    { id: 'sms', label: 'SMS Broadcasts', icon: MessageSquare },
+    { id: 'sms', label: 'SMS Dashboard', icon: MessageSquare },
     { id: 'announcements', label: 'Announcements', icon: Bell }
   ];
 

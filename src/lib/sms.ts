@@ -7,20 +7,59 @@
  */
 
 import { SMSLog, SMSConfigStatus, SMSSummaryStats, SMSReminderType, SMSDeliveryStatus } from '../types/database';
+import { formatNigerianPhoneForSMS } from './phoneUtils';
+import { getAdminAuthHeaders } from './supabase';
+
+export interface AdminSmsConfigCheck {
+  success: boolean;
+  provider: string;
+  rawProvider: string;
+  senderId: string;
+  channel: string;
+  isConfigured: boolean;
+  maskedApiKey: string | null;
+  checks: {
+    providerConfigured: boolean;
+    apiKeyPresent: boolean;
+    senderIdConfigured: boolean;
+    channelConfigured: boolean;
+  };
+  ready: boolean;
+  checkedAt: string;
+}
+
+export interface AdminSmsTestResult {
+  success: boolean;
+  status: 'ACCEPTED' | 'FAILED' | 'NOT_CONFIGURED';
+  deliveryLabel: string;
+  message: string;
+  error?: string;
+  provider: string;
+  senderId: string;
+  recipientMasked: string;
+  providerMessageId?: string | null;
+  timestamp: string;
+}
+
+export interface AdminSmsTestHistoryItem {
+  id: string;
+  created_at: string;
+  recipient_masked: string;
+  provider: string;
+  sender_id: string;
+  status: 'ACCEPTED' | 'FAILED' | 'NOT_CONFIGURED';
+  delivery_label: string;
+  provider_message_id?: string | null;
+  error_message?: string | null;
+  message_preview: string;
+  admin_email: string;
+}
 
 /**
  * Normalizes phone numbers to standard Nigerian international format for SMS gateways (e.g. 2348012345678)
  */
 export function formatPhoneForSMS(phone: string): string {
-  if (!phone) return '';
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('234') && digits.length === 13) {
-    return digits;
-  }
-  if (digits.startsWith('0') && digits.length === 11) {
-    return '234' + digits.substring(1);
-  }
-  return digits;
+  return formatNigerianPhoneForSMS(phone);
 }
 
 /**
@@ -179,9 +218,86 @@ export const smsApiClient = {
   }> {
     const res = await fetch('/api/sms/run-reminders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await getAdminAuthHeaders(),
       body: JSON.stringify({ month, year })
     });
     return await res.json();
+  },
+
+  /**
+   * Verifies server-side SMS configuration without sending any SMS
+   */
+  async checkAdminConfig(): Promise<AdminSmsConfigCheck> {
+    try {
+      const res = await fetch('/api/admin/sms/check-config', {
+        headers: await getAdminAuthHeaders()
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('Could not check admin SMS config:', err);
+    }
+    return {
+      success: false,
+      provider: 'Unknown',
+      rawProvider: '',
+      senderId: 'FINGEROFGOD',
+      channel: 'generic',
+      isConfigured: false,
+      maskedApiKey: null,
+      checks: {
+        providerConfigured: false,
+        apiKeyPresent: false,
+        senderIdConfigured: false,
+        channelConfigured: false
+      },
+      ready: false,
+      checkedAt: new Date().toISOString()
+    };
+  },
+
+  /**
+   * Dispatches an administrator diagnostic test SMS to any specified Nigerian phone number
+   */
+  async sendAdminTestSms(testPhone: string, message: string): Promise<AdminSmsTestResult> {
+    try {
+      const res = await fetch('/api/admin/sms/test', {
+        method: 'POST',
+        headers: await getAdminAuthHeaders(),
+        body: JSON.stringify({ testPhone, message })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return {
+        success: false,
+        status: 'FAILED',
+        deliveryLabel: 'Network Error',
+        message: 'Could not connect to estate server for SMS test.',
+        error: err?.message || 'Network error',
+        provider: 'Gateway',
+        senderId: 'FINGEROFGOD',
+        recipientMasked: '234***',
+        timestamp: new Date().toISOString()
+      };
+    }
+  },
+
+  /**
+   * Retrieves recent administrator SMS diagnostic tests history
+   */
+  async getAdminTestHistory(): Promise<AdminSmsTestHistoryItem[]> {
+    try {
+      const res = await fetch('/api/admin/sms/test-history', {
+        headers: await getAdminAuthHeaders()
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.tests || [];
+      }
+    } catch (err) {
+      console.warn('Could not fetch admin test history:', err);
+    }
+    return [];
   }
 };
