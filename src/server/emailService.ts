@@ -44,69 +44,146 @@ export interface SecurityLevyReminderEmailData {
 }
 
 class EmailService {
-  private apiKey: string;
+  private brevoApiKey: string;
   private fromEmail: string;
+  private fromName: string;
   private isConfigured: boolean;
 
   constructor() {
-    this.apiKey = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '';
-    this.fromEmail = process.env.FROM_EMAIL || 'Finger of God Estate <notifications@fingerofgodestate.ng>';
-    this.isConfigured = Boolean(this.apiKey && !this.apiKey.includes('xxxx'));
+    this.brevoApiKey = (process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '').trim();
+    
+    // Sender Name: prioritize BREVO_SENDER_NAME
+    this.fromName = (process.env.BREVO_SENDER_NAME || 'Finger of God Estate').trim();
+
+    // Sender Email: prioritize BREVO_SENDER_EMAIL
+    const rawFrom = (process.env.BREVO_SENDER_EMAIL || process.env.FROM_EMAIL || process.env.EMAIL_FROM || '').trim();
+    const match = rawFrom.match(/^(.*?)\s*<(.+?)>$/);
+    if (match) {
+      if (!process.env.BREVO_SENDER_NAME && match[1]) {
+        this.fromName = match[1].trim().replace(/^["']|["']$/g, '');
+      }
+      this.fromEmail = match[2].trim();
+    } else {
+      this.fromEmail = rawFrom || 'notifications@fingerofgodestate.ng';
+    }
+
+    this.isConfigured = Boolean(this.brevoApiKey && !this.brevoApiKey.includes('xxxx') && this.brevoApiKey.length > 10);
   }
 
   public getStatus() {
     return {
       isConfigured: this.isConfigured,
       fromEmail: this.fromEmail,
-      provider: this.apiKey.startsWith('re_') ? 'resend' : 'custom'
+      fromName: this.fromName,
+      provider: this.isConfigured ? 'brevo' : 'none'
     };
   }
 
   /**
-   * Dispatches an email via configured provider or logs audit notice safely
+   * Dispatches an email via Brevo transactional API (https://api.brevo.com/v3/smtp/email)
    */
-  async sendEmail(options: EmailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  async sendEmail(options: EmailOptions & { recipientName?: string }): Promise<{ success: boolean; messageId?: string; error?: string; status?: 'SENT' | 'FAILED' | 'NOT_CONFIGURED' }> {
     if (!options.to || !options.to.includes('@')) {
-      return { success: false, error: 'Invalid recipient email address' };
+      return { success: false, status: 'FAILED', error: 'Invalid recipient email address' };
     }
 
+    const cleanTo = options.to.trim().toLowerCase();
+
+    // Check configuration
     if (!this.isConfigured) {
-      console.log(`[Email Service Notice] Email provider not configured in .env. Logged email to ${options.to}: "${options.subject}"`);
+      console.warn(`[Brevo Email Notice] Brevo API Key not configured. Simulated dispatch to ${cleanTo.replace(/^(.{2})(.*)(@.*)$/, '$1***$3')}`);
       return {
-        success: true,
-        messageId: `log_${Date.now()}`
+        success: false,
+        status: 'NOT_CONFIGURED',
+        error: 'BREVO_API_KEY is not configured in server environment.'
       };
     }
 
     try {
-      // If using Resend API (default modern email standard)
-      const res = await fetch('https://api.resend.com/emails', {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
+          'api-key': this.brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
-          from: this.fromEmail,
-          to: [options.to],
+          sender: {
+            name: this.fromName,
+            email: this.fromEmail
+          },
+          to: [
+            {
+              email: cleanTo,
+              name: options.recipientName || 'Resident'
+            }
+          ],
           subject: options.subject,
-          html: options.html,
-          text: options.text || options.html.replace(/<[^>]*>?/gm, '')
+          htmlContent: options.html,
+          textContent: options.text || options.html.replace(/<[^>]*>?/gm, '')
         })
       });
 
-      const data = await res.json();
-      if (res.ok && data.id) {
-        console.log(`[Email Service] Dispatched "${options.subject}" to ${options.to}. ID: ${data.id}`);
-        return { success: true, messageId: data.id };
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && (data.messageId || data.messageIds)) {
+        const msgId = data.messageId || (Array.isArray(data.messageIds) ? data.messageIds[0] : 'brevo-sent');
+        const masked = cleanTo.replace(/^(.{2})(.*)(@.*)$/, '$1***$3');
+        console.log(`[Brevo Email Success] Dispatched email to ${masked}. Message ID: ${msgId}`);
+        return { success: true, status: 'SENT', messageId: String(msgId) };
       } else {
-        console.warn('[Email Service Warning] Provider responded with error:', data);
-        return { success: false, error: data.message || 'Email dispatch failed' };
+        const errMessage = data.message || data.error || `HTTP ${response.status} from Brevo`;
+        console.warn('[Brevo Email Failed] Provider response:', data);
+        return { success: false, status: 'FAILED', error: `Brevo error: ${errMessage}` };
       }
     } catch (err: any) {
-      console.error('[Email Service Error]', err?.message || err);
-      return { success: false, error: err?.message || 'Network error sending email' };
+      console.error('[Brevo Network Error]', err?.message || err);
+      return { success: false, status: 'FAILED', error: `Network error connecting to Brevo: ${err?.message || err}` };
     }
+  }
+
+  /**
+   * OTP Verification Email (dual-channel delivery with SMS)
+   */
+  async sendOtpEmail(to: string, residentName: string, otpCode: string, type: 'LOGIN' | 'ACTIVATION' = 'LOGIN') {
+    const actionLabel = type === 'ACTIVATION' ? 'Account Activation' : 'Portal Login';
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: #0f172a; padding: 24px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 0.5px;">FINGER OF GOD ESTATE</h2>
+          <p style="margin: 4px 0 0; font-size: 12px; color: #94a3b8;">Resident Portal Security Verification</p>
+        </div>
+        <div style="padding: 32px 24px;">
+          <p style="font-size: 14px; color: #334155; margin: 0 0 16px;">Dear <strong>${residentName}</strong>,</p>
+          <p style="font-size: 13px; color: #475569; line-height: 1.6; margin: 0 0 20px;">
+            Here is your 6-digit one-time verification code for <strong>${actionLabel}</strong> on the Finger of God Estate Resident Portal:
+          </p>
+          <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 8px;">Your Verification Code</span>
+            <div style="font-family: monospace, Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #047857;">
+              ${otpCode}
+            </div>
+            <span style="font-size: 12px; color: #94a3b8; display: block; margin-top: 8px;">Expires in 10 minutes</span>
+          </div>
+          <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin: 0 0 12px;">
+            This same code was also dispatched via SMS to your registered telephone number. You only need to enter this code once to proceed.
+          </p>
+          <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+            If you did not request this verification, please contact estate security administration immediately.
+          </p>
+        </div>
+        <div style="background: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
+          Finger of God Estate • Main Gate Boulevard, Phase 1, Asaba, Delta State
+        </div>
+      </div>
+    `;
+
+    return this.sendEmail({
+      to,
+      recipientName: residentName,
+      subject: `Finger of God Estate: Your Verification Code is ${otpCode}`,
+      html,
+      text: `Dear ${residentName},\n\nYour Finger of God Estate verification code is ${otpCode}. It expires in 10 minutes.\n\nFinger of God Estate Management`
+    });
   }
 
   /**

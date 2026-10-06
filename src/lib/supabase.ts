@@ -3055,8 +3055,6 @@ export const dbService = {
     residentName?: string;
     expiresInSeconds?: number;
     cooldownSeconds?: number;
-    isDevDemo?: boolean;
-    demoOtp?: string;
   }> {
     const genericError = 'Those details could not be verified. Please check your estate number and registered phone number.';
     try {
@@ -3076,9 +3074,7 @@ export const dbService = {
           maskedPhone: data.maskedPhone,
           residentName: data.residentName,
           expiresInSeconds: data.expiresInSeconds || 600,
-          cooldownSeconds: data.cooldownSeconds || 45,
-          isDevDemo: data.isDevDemo,
-          demoOtp: data.demoOtp
+          cooldownSeconds: data.cooldownSeconds || 45
         };
       }
       return {
@@ -3086,41 +3082,9 @@ export const dbService = {
         message: data.message || genericError
       };
     } catch {
-      // Local fallback simulation if server is offline
-      const cleanNum = residentNumber.trim().padStart(3, '0');
-      const residents = await this.getResidents();
-      const resident = residents.find(r => r.resident_number === cleanNum);
-
-      if (!resident || resident.status !== 'Active') {
-        return { success: false, message: genericError };
-      }
-
-      const inputPhone = phoneNumber.replace(/\D/g, '');
-      const regPhone = resident.phone_number.replace(/\D/g, '');
-      const altPhone = resident.additional_phone ? resident.additional_phone.replace(/\D/g, '') : '';
-
-      const match = (inputPhone.length >= 10 && regPhone.endsWith(inputPhone.slice(-10))) ||
-                    (altPhone.length >= 10 && altPhone.endsWith(inputPhone.slice(-10))) ||
-                    inputPhone === regPhone;
-
-      if (!match) {
-        return { success: false, message: genericError };
-      }
-
-      const rawPhone = resident.phone_number;
-      const maskedPhone = rawPhone.length >= 8 
-        ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
-        : 'registered phone number';
-
       return {
-        success: true,
-        message: `A 6-digit verification code has been dispatched to ${maskedPhone}.`,
-        maskedPhone,
-        residentName: resident.full_name,
-        expiresInSeconds: 600,
-        cooldownSeconds: 45,
-        isDevDemo: true,
-        demoOtp: '123456'
+        success: false,
+        message: 'Unable to connect to the server. Please check your internet connection and try again.'
       };
     }
   },
@@ -3169,41 +3133,14 @@ export const dbService = {
         message: data.message || 'Those details could not be verified. Please check your information and try again.'
       };
     } catch {
-      // Local fallback simulation
-      const cleanNum = residentNumber.trim().padStart(3, '0');
-      const residents = await this.getResidents();
-      const resident = residents.find(r => r.resident_number === cleanNum);
-
-      if (!resident || resident.status !== 'Active') {
-        return {
-          success: false,
-          message: 'Those details could not be verified. Please check your estate number and registered phone number.'
-        };
-      }
-
-      if (otp.trim().length !== 6) {
-        return {
-          success: false,
-          message: 'Please enter the complete 6-digit verification code.'
-        };
-      }
-
-      const sessionToken = `local_tok_${Date.now()}`;
-      residentSessionService.setCurrentResident(resident);
-      if (rememberDevice) {
-        residentSessionService.setRememberedDevice(resident.resident_number, sessionToken);
-      }
-
       return {
-        success: true,
-        resident,
-        token: sessionToken,
-        message: `Welcome back, ${resident.full_name}!`
+        success: false,
+        message: 'Unable to connect to the server. Please check your internet connection and try again.'
       };
     }
   },
 
-  // RESIDENT ACCOUNT ACTIVATION: REQUEST SMS ACTIVATION CODE
+  // RESIDENT ACCOUNT ACTIVATION: REQUEST SMS + EMAIL ACTIVATION CODE
   async requestActivationCode(residentNumber: string, phoneNumber: string): Promise<{
     success: boolean;
     isAlreadyActivated?: boolean;
@@ -3213,8 +3150,6 @@ export const dbService = {
     residentNumber?: string;
     expiresInSeconds?: number;
     cooldownSeconds?: number;
-    isDevDemo?: boolean;
-    demoOtp?: string;
   }> {
     const genericError = 'Those details could not be verified. Please check your estate number and registered phone number.';
     try {
@@ -3235,9 +3170,7 @@ export const dbService = {
           residentName: data.residentName,
           residentNumber: data.residentNumber,
           expiresInSeconds: data.expiresInSeconds || 600,
-          cooldownSeconds: data.cooldownSeconds || 45,
-          isDevDemo: data.isDevDemo,
-          demoOtp: data.demoOtp
+          cooldownSeconds: data.cooldownSeconds || 45
         };
       }
       return {
@@ -3246,53 +3179,9 @@ export const dbService = {
         message: data.message || genericError
       };
     } catch {
-      // Local fallback simulation
-      const cleanNum = residentNumber.trim().padStart(3, '0');
-      const residents = await this.getResidents();
-      const resident = residents.find(r => r.resident_number === cleanNum);
-
-      if (!resident || resident.status !== 'Active') {
-        return { success: false, message: genericError };
-      }
-
-      if (resident.account_activated) {
-        return {
-          success: false,
-          isAlreadyActivated: true,
-          message: `This resident account (#${cleanNum} — ${resident.full_name}) is already activated. Please sign in via Resident Login.`
-        };
-      }
-
-      const inputPhone = phoneNumber.replace(/\D/g, '');
-      const regPhone = resident.phone_number.replace(/\D/g, '');
-      const altPhone = resident.additional_phone ? resident.additional_phone.replace(/\D/g, '') : '';
-
-      const match = (inputPhone.length >= 10 && regPhone.endsWith(inputPhone.slice(-10))) ||
-                    (altPhone.length >= 10 && altPhone.endsWith(inputPhone.slice(-10))) ||
-                    inputPhone === regPhone;
-
-      if (!match) {
-        return {
-          success: false,
-          message: `The phone number provided does not match the registered telephone number for Resident #${cleanNum}. Please check your phone number or contact estate administration.`
-        };
-      }
-
-      const rawPhone = resident.phone_number;
-      const maskedPhone = rawPhone.length >= 8 
-        ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
-        : 'registered phone number';
-
       return {
-        success: true,
-        message: `A 6-digit activation code has been dispatched to ${maskedPhone}.`,
-        maskedPhone,
-        residentName: resident.full_name,
-        residentNumber: cleanNum,
-        expiresInSeconds: 600,
-        cooldownSeconds: 45,
-        isDevDemo: true,
-        demoOtp: '123456'
+        success: false,
+        message: 'Unable to connect to the server. Please check your internet connection and try again.'
       };
     }
   },
@@ -3342,38 +3231,9 @@ export const dbService = {
         message: data.message || 'Those details could not be verified. Please check the code and try again.'
       };
     } catch {
-      // Local fallback simulation
-      const cleanNum = residentNumber.trim().padStart(3, '0');
-      const residents = await this.getResidents();
-      const resident = residents.find(r => r.resident_number === cleanNum);
-
-      if (!resident || resident.status !== 'Active') {
-        return {
-          success: false,
-          message: 'Resident record could not be found.'
-        };
-      }
-
-      if (otp.trim().length !== 6) {
-        return {
-          success: false,
-          message: 'Please enter the complete 6-digit activation code.'
-        };
-      }
-
-      resident.account_activated = true;
-      resident.account_status = 'ACTIVE';
-      const sessionToken = `local_tok_${Date.now()}`;
-      residentSessionService.setCurrentResident(resident);
-      if (rememberDevice) {
-        residentSessionService.setRememberedDevice(resident.resident_number, sessionToken);
-      }
-
       return {
-        success: true,
-        resident,
-        token: sessionToken,
-        message: `Account activated successfully! Welcome to Finger of God Estate Resident Portal, ${resident.full_name}.`
+        success: false,
+        message: 'Account activation failed due to network connection error. Please try again.'
       };
     }
   },

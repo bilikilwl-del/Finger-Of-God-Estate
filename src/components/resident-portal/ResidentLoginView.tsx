@@ -66,7 +66,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [rememberDevice, setRememberDevice] = useState(false);
   const [maskedPhone, setMaskedPhone] = useState<string>('');
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [demoOtpHint, setDemoOtpHint] = useState<string | null>(null);
 
   // Rate Limiting & Failed Attempts Lockout Protection
   const [failedAttempts, setFailedAttempts] = useState(0);
@@ -108,7 +107,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [actMaskedPhone, setActMaskedPhone] = useState('');
   const [actResidentName, setActResidentName] = useState('');
   const [actResendCooldown, setActResendCooldown] = useState(0);
-  const [actDemoOtpHint, setActDemoOtpHint] = useState<string | null>(null);
   const [actRememberDevice, setActRememberDevice] = useState(false);
   const [actIsAlreadyActivated, setActIsAlreadyActivated] = useState(false);
   const actInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -252,7 +250,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
       if (res.success) {
         setMaskedPhone(res.maskedPhone || cleanPhone);
         setResendCooldown(res.cooldownSeconds || 45);
-        setDemoOtpHint(res.demoOtp || null);
         setOtpStep('enter_otp');
         setOtpCode(['', '', '', '', '', '']);
         setSuccessMessage(`A 6-digit verification code has been dispatched to ${res.maskedPhone || 'your phone'}.`);
@@ -334,8 +331,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
       if (res.success) {
         setResendCooldown(res.cooldownSeconds || 45);
-        setDemoOtpHint(res.demoOtp || null);
-        setSuccessMessage('A fresh verification code has been dispatched to your phone.');
+        setSuccessMessage('A fresh verification code has been dispatched to your registered contact.');
       } else {
         setErrorMessage(res.message || 'Unable to resend verification code. Please wait a moment.');
       }
@@ -435,7 +431,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setActMaskedPhone(res.maskedPhone || cleanPhone);
         setActResidentName(res.residentName || '');
         setActResendCooldown(res.cooldownSeconds || 45);
-        setActDemoOtpHint(res.demoOtp || null);
         setActOtpCode(['', '', '', '', '', '']);
         setActStep('enter_otp');
         setSuccessMessage(`A 6-digit activation code has been dispatched to ${res.maskedPhone || 'your registered phone'}.`);
@@ -504,8 +499,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
       if (res.success) {
         setActResendCooldown(res.cooldownSeconds || 45);
-        setActDemoOtpHint(res.demoOtp || null);
-        setSuccessMessage('A fresh activation code has been dispatched to your registered phone.');
+        setSuccessMessage('A fresh activation code has been dispatched to your registered contact.');
       } else {
         setErrorMessage(res.message || 'Unable to resend activation code. Please wait a moment.');
       }
@@ -848,28 +842,9 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     </button>
                   </div>
                   <p className="text-emerald-800 text-[11px] sm:text-xs leading-relaxed">
-                    We dispatched a 6-digit code to registered resident contact{' '}
-                    <span className="font-bold text-emerald-950">{maskedPhone}</span> (Estate #{estateNumber.padStart(3, '0')}).
+                    We dispatched a 6-digit verification code via <strong className="text-emerald-950">SMS &amp; Email</strong> to your registered contact{' '}
+                    <span className="font-bold text-emerald-950">{maskedPhone}</span> (Estate #{estateNumber.padStart(3, '0')}). Check either your phone messages or inbox and enter the code below.
                   </p>
-
-                  {/* Dev / Demo Mode Safe Hint */}
-                  {demoOtpHint && (
-                    <div className="mt-2 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[11px]">
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5" /> Test Code:
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const digits = demoOtpHint.split('');
-                          setOtpCode(digits);
-                        }}
-                        className="px-2 py-0.5 bg-emerald-200/80 hover:bg-emerald-300 text-emerald-950 rounded font-mono font-bold tracking-wider cursor-pointer"
-                      >
-                        Auto-fill: {demoOtpHint}
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {/* 6-Box OTP Input */}
@@ -1229,26 +1204,11 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     </button>
                   </div>
                   <p className="text-emerald-800 text-[11px] leading-relaxed">
-                    We sent a 6-digit activation code via SMS to{' '}
+                    We dispatched a 6-digit activation code via <strong className="text-emerald-950">SMS &amp; Email</strong> to{' '}
                     <strong className="text-emerald-950 font-mono font-bold">{actMaskedPhone}</strong> for{' '}
                     <strong className="text-emerald-950">Resident #{actResidentNumber.padStart(3, '0')}</strong>
-                    {actResidentName ? ` (${actResidentName})` : ''}.
+                    {actResidentName ? ` (${actResidentName})` : ''}. Check either your SMS or Email inbox and enter the code below.
                   </p>
-                  {actDemoOtpHint && (
-                    <div className="mt-2 p-2 rounded-lg bg-emerald-100/90 text-emerald-900 text-[11px] font-medium flex items-center justify-between">
-                      <span>Demo Activation Code:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const digits = actDemoOtpHint.split('').slice(0, 6);
-                          setActOtpCode(digits);
-                        }}
-                        className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-emerald-300 text-emerald-800 hover:bg-emerald-50 cursor-pointer shadow-2xs"
-                      >
-                        {actDemoOtpHint} (Auto-Fill)
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 <form onSubmit={handleVerifyActivationOtp} className="space-y-3.5 sm:space-y-4">

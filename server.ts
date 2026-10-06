@@ -10,6 +10,7 @@ import { electionRouter } from './src/server/electionServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
 import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual, formatNigerianPhoneForSMS } from './src/lib/phoneUtils.ts';
 import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
+import { emailService } from './src/server/emailService.ts';
 
 dotenv.config();
 
@@ -1466,11 +1467,13 @@ app.post('/api/resident/login', async (req: Request, res: Response) => {
   }
 });
 
-// EMAIL DISPATCH HELPER
+// EMAIL DISPATCH HELPER (Brevo / Resend / System Log)
 async function dispatchEmail(
   toEmail: string,
   subject: string,
-  textBody: string
+  textBody: string,
+  recipientName?: string,
+  htmlBody?: string
 ): Promise<{ success: boolean; error?: string }> {
   if (!toEmail || !toEmail.includes('@')) {
     return { success: false, error: 'No valid email address registered.' };
@@ -1480,48 +1483,23 @@ async function dispatchEmail(
   const maskedEmail = cleanEmail.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => `${a}${'•'.repeat(Math.max(b.length, 3))}${c}`);
   console.log(`[Email Dispatch] Destination: ${maskedEmail}, Subject: "${subject}"`);
 
-  // Check if Resend or standard API key is configured
-  const resendKey = (process.env.RESEND_API_KEY || '').trim();
-  if (resendKey && resendKey.length > 5) {
-    try {
-      const resp = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'Finger of God Estate <notifications@fingerofgodestate.ng>',
-          to: [cleanEmail],
-          subject,
-          text: textBody
-        })
-      });
-      if (resp.ok) {
-        console.log(`[Email Success] Accepted by email gateway for: ${maskedEmail}`);
-        return { success: true };
-      } else {
-        const data = await resp.json().catch(() => ({}));
-        console.warn(`[Email Failed] Provider status: ${resp.status}`, data);
-        return { success: false, error: data?.message || `HTTP ${resp.status} from email service` };
-      }
-    } catch (err: any) {
-      console.warn(`[Email Failed] Network error: ${err?.message || err}`);
-      return { success: false, error: err?.message || 'Email network exception' };
-    }
-  }
+  const result = await emailService.sendEmail({
+    to: cleanEmail,
+    recipientName: recipientName || 'Resident',
+    subject,
+    text: textBody,
+    html: htmlBody || `<div style="font-family: sans-serif; padding: 20px; line-height: 1.6;">${textBody.replace(/\n/g, '<br/>')}</div>`
+  });
 
-  // If no external email API key configured on server:
-  // Register email notification dispatch in system audit log
-  console.log(`[Email Server Register] Verification message dispatched to mailbox for: ${maskedEmail}`);
-  return { success: true };
+  return result;
 }
 
 // OTP STORAGE & SECURITY THROTTLING FOR RESIDENT PORTAL
 interface ServerResidentOtpRecord {
   resident_number: string;
   phone_number: string;
-  otp_code: string;
+  otp_hash: string;
+  salt: string;
   expires_at: number;
   attempts: number;
   resend_after: number;
@@ -1530,6 +1508,32 @@ interface ServerResidentOtpRecord {
 const residentOtpStore = new Map<string, ServerResidentOtpRecord>();
 const activationOtpStore = new Map<string, ServerResidentOtpRecord>();
 const residentLoginAttempts = new Map<string, { count: number; locked_until: number }>();
+
+// Cryptographically secure 6-digit OTP generator (000000–999999 with leading zeros)
+function generateSecure6DigitOtp(): string {
+  const num = crypto.randomInt(0, 1000000);
+  return num.toString().padStart(6, '0');
+}
+
+// SHA-256 Hash with cryptographic per-OTP salt
+function hashOtpWithSalt(otp: string, salt: string): string {
+  return crypto.createHash('sha256').update(`${salt}:${otp.trim()}`).digest('hex');
+}
+
+// Constant-time verification to prevent timing attacks
+function verifyOtpWithHash(inputOtp: string, record: ServerResidentOtpRecord): boolean {
+  const cleanInput = String(inputOtp).trim().replace(/\D/g, '');
+  if (cleanInput.length !== 6) return false;
+  const computedHash = hashOtpWithSalt(cleanInput, record.salt);
+  try {
+    const bufA = Buffer.from(computedHash, 'hex');
+    const bufB = Buffer.from(record.otp_hash, 'hex');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 // RESIDENT PORTAL: SEND OTP ENDPOINT (LOGIN)
 app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
@@ -1557,7 +1561,11 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
 
     if (!resident || resident.status !== 'Active') {
       // Record failed attempt for throttling without revealing user existence
@@ -1592,7 +1600,7 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
-    // Check resend cooldown
+    // Check resend cooldown (45 seconds)
     const existingOtp = residentOtpStore.get(cleanNum);
     if (existingOtp && existingOtp.resend_after > now) {
       const wait = Math.ceil((existingOtp.resend_after - now) / 1000);
@@ -1603,32 +1611,34 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
-    // Invalidate old OTP
+    // Invalidate old OTP on resend
     residentOtpStore.delete(cleanNum);
 
     // Generate EXACTLY ONE cryptographically secure 6-digit numeric OTP code
-    const otpCode = crypto.randomInt(100000, 1000000).toString();
+    const otpCode = generateSecure6DigitOtp();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const otpHash = hashOtpWithSalt(otpCode, salt);
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
     // Mask phone for user confirmation display (e.g., 080••••4567)
     const rawPhone = resident.phone_number;
     const maskedPhone = rawPhone.length >= 8 
-      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}` 
       : 'registered phone number';
 
-    // Diagnostic logging (never log the actual plaintext OTP)
+    // Safe diagnostic logging (NEVER log the actual plaintext OTP)
     console.log(`[OTP Login Flow] Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
 
     // Dispatch real SMS via SMSLive247 (keyword-safe template: NO "account" / NO "code")
     const messageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
     const smsPromise = dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION');
 
-    // Dispatch Email with the EXACT SAME OTP
+    // Dispatch Email with the EXACT SAME OTP (via Brevo transactional email)
     const residentEmail = resident.email ? resident.email.trim().toLowerCase() : '';
-    const emailSubject = 'Finger of God Estate: Verification Number';
-    const emailBody = `Dear ${resident.full_name.trim()},\n\nYour Finger of God Estate verification number is:\n\n${otpCode}\n\nThis number expires in 10 minutes.\n\nIf you did not request this verification, please ignore this email.\n\nFinger of God Estate`;
-    const emailPromise = residentEmail ? dispatchEmail(residentEmail, emailSubject, emailBody) : Promise.resolve({ success: false, error: 'No email' });
+    const emailPromise = residentEmail
+      ? emailService.sendOtpEmail(residentEmail, resident.full_name.trim(), otpCode, 'LOGIN')
+      : Promise.resolve({ success: false, error: 'No email registered' });
 
     const [smsResult, emailResult] = await Promise.all([smsPromise, emailPromise]);
 
@@ -1644,10 +1654,12 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
+    // Store secure hashed OTP in server memory store
     residentOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
-      otp_code: otpCode,
+      otp_hash: otpHash,
+      salt,
       expires_at: expiresAt,
       attempts: 0,
       resend_after: resendAfter,
@@ -1664,10 +1676,7 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       residentName: resident.full_name,
       expiresInSeconds: 600,
       cooldownSeconds: 45,
-      providerMessageId: smsResult.providerMessageId,
-      // For development/demo environment testing, include simulated code hint safely
-      isDevDemo: process.env.NODE_ENV !== 'production' && !isSmsConfigured(),
-      demoOtp: (process.env.NODE_ENV !== 'production' && !isSmsConfigured()) ? otpCode : undefined
+      providerMessageId: smsResult.providerMessageId
     });
   } catch (err: any) {
     console.error('Send OTP error:', err);
@@ -1719,7 +1728,9 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
       });
     }
 
-    if (otpRecord.otp_code !== cleanOtp) {
+    const isMatch = verifyOtpWithHash(cleanOtp, otpRecord);
+
+    if (!isMatch) {
       otpRecord.attempts += 1;
       residentOtpStore.set(cleanNum, otpRecord);
       const remaining = 5 - otpRecord.attempts;
@@ -1784,7 +1795,7 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
   }
 });
 
-// RESIDENT PORTAL: REQUEST ACTIVATION CODE (SMS OTP)
+// RESIDENT PORTAL: REQUEST ACTIVATION CODE (SMS + EMAIL OTP)
 app.post('/api/resident/request-activation-code', async (req: Request, res: Response) => {
   try {
     const { residentNumber, phoneNumber } = req.body;
@@ -1852,7 +1863,9 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     activationOtpStore.delete(cleanNum);
 
     // Generate EXACTLY ONE cryptographically secure 6-digit numeric OTP code
-    const otpCode = crypto.randomInt(100000, 1000000).toString();
+    const otpCode = generateSecure6DigitOtp();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const otpHash = hashOtpWithSalt(otpCode, salt);
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
@@ -1864,17 +1877,17 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
 
     // Diagnostic logging (never log the actual plaintext OTP)
     console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
-    console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching dual notifications via SMSLive247 and Email...`);
+    console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching dual notifications via SMSLive247 and Brevo Email...`);
 
     // Dispatch real SMS to registered trusted phone (keyword-safe template: NO "account" / NO "code")
     const smsMessageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
     const smsPromise = dispatchSms(resident.phone_number, smsMessageBody, 'ACCOUNT_ACTIVATION');
 
-    // Dispatch Email to registered trusted email with the EXACT SAME OTP
+    // Dispatch Email to registered trusted email with the EXACT SAME OTP (via Brevo transactional email)
     const residentEmail = resident.email ? resident.email.trim().toLowerCase() : '';
-    const emailSubject = 'Finger of God Estate: Verification Number';
-    const emailMessageBody = `Dear ${resident.full_name.trim()},\n\nYour Finger of God Estate verification number is:\n\n${otpCode}\n\nThis number expires in 10 minutes.\n\nIf you did not request this verification, please ignore this email.\n\nFinger of God Estate`;
-    const emailPromise = residentEmail ? dispatchEmail(residentEmail, emailSubject, emailMessageBody) : Promise.resolve({ success: false, error: 'No email registered' });
+    const emailPromise = residentEmail
+      ? emailService.sendOtpEmail(residentEmail, resident.full_name.trim(), otpCode, 'ACTIVATION')
+      : Promise.resolve({ success: false, error: 'No email registered' });
 
     const [smsResult, emailResult] = await Promise.all([smsPromise, emailPromise]);
 
@@ -1893,11 +1906,12 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       });
     }
 
-    // Store the single OTP in server memory store
+    // Store secure hashed OTP in server memory store
     activationOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
-      otp_code: otpCode,
+      otp_hash: otpHash,
+      salt,
       expires_at: expiresAt,
       attempts: 0,
       resend_after: resendAfter,
@@ -1912,9 +1926,7 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       residentNumber: cleanNum,
       expiresInSeconds: 600,
       cooldownSeconds: 45,
-      providerMessageId: smsResult.providerMessageId,
-      isDevDemo: process.env.NODE_ENV !== 'production' && !isSmsConfigured(),
-      demoOtp: (process.env.NODE_ENV !== 'production' && !isSmsConfigured()) ? otpCode : undefined
+      providerMessageId: smsResult.providerMessageId
     });
   } catch (err: any) {
     console.error('Request activation code error:', err);
@@ -1965,7 +1977,9 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       });
     }
 
-    if (otpRecord.otp_code !== cleanOtp) {
+    const isMatch = verifyOtpWithHash(cleanOtp, otpRecord);
+
+    if (!isMatch) {
       otpRecord.attempts += 1;
       activationOtpStore.set(cleanNum, otpRecord);
       const remaining = 5 - otpRecord.attempts;
@@ -2031,7 +2045,7 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       action: 'RESIDENT_ACCOUNT_ACTIVATION',
       entity_type: 'resident',
       entity_id: cleanNum,
-      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account via SMS OTP.`,
+      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account via OTP.`,
       metadata: { resident_number: cleanNum, resident_name: resident.full_name },
       created_at: new Date().toISOString()
     };
