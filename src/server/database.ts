@@ -20,9 +20,9 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // Supabase Client Initialization
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dmdotpyotcmtrppediub.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  process.env.VITE_SUPABASE_ANON_KEY || 
+const SUPABASE_URL: string = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://dmdotpyotcmtrppediub.supabase.co';
+// Server-side admin client MUST use service_role key to bypass RLS and persist records securely
+const SUPABASE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || 
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZG90cHlvdGNtdHJwcGVkaXViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDI0MzA0NiwiZXhwIjoyMTA1ODE5MDQ2fQ.9Lvfyc3xel7aD8h_TXVBAFbp9v3-qV3vDInKhj9gAdc';
 
 export const supabaseAdmin: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -51,7 +51,8 @@ const DEFAULT_ESTATE_SETTINGS = {
 
 const DEFAULT_RESIDENTS = [
   {
-    id: 'res-001',
+    id: '00000000-0000-0000-0001-000000000001',
+    auth_user_id: 'cb033992-eb57-4a0f-800f-d73b303b9d07',
     resident_number: '001',
     full_name: 'Engr. Babatunde Adeleke',
     phone_number: '08023456789',
@@ -64,12 +65,13 @@ const DEFAULT_RESIDENTS = [
     status: 'Active',
     account_activated: true,
     profile_completed: true,
+    account_status: 'ACTIVE',
     registration_date: '2026-08-01',
     created_at: new Date('2026-08-01T08:00:00Z').toISOString(),
     updated_at: new Date('2026-08-01T08:00:00Z').toISOString()
   },
   {
-    id: 'res-002',
+    id: '00000000-0000-0000-0001-000000000002',
     resident_number: '002',
     full_name: 'Dr. Chioma Nwachukwu',
     phone_number: '08098765432',
@@ -82,12 +84,13 @@ const DEFAULT_RESIDENTS = [
     status: 'Active',
     account_activated: false,
     profile_completed: false,
+    account_status: 'NOT ACTIVATED',
     registration_date: '2026-08-05',
     created_at: new Date('2026-08-05T09:30:00Z').toISOString(),
     updated_at: new Date('2026-08-05T09:30:00Z').toISOString()
   },
   {
-    id: 'res-003',
+    id: '00000000-0000-0000-0001-000000000003',
     resident_number: '003',
     full_name: 'Alhaji Usman Danladi',
     phone_number: '08123459876',
@@ -100,12 +103,13 @@ const DEFAULT_RESIDENTS = [
     status: 'Active',
     account_activated: false,
     profile_completed: false,
+    account_status: 'NOT ACTIVATED',
     registration_date: '2026-08-10',
     created_at: new Date('2026-08-10T11:15:00Z').toISOString(),
     updated_at: new Date('2026-08-10T11:15:00Z').toISOString()
   },
   {
-    id: 'res-004',
+    id: '00000000-0000-0000-0001-000000000004',
     resident_number: '004',
     full_name: 'Mrs. Folashade Balogun',
     phone_number: '07033445566',
@@ -118,12 +122,13 @@ const DEFAULT_RESIDENTS = [
     status: 'Inactive',
     account_activated: false,
     profile_completed: false,
+    account_status: 'NOT ACTIVATED',
     registration_date: '2026-08-12',
     created_at: new Date('2026-08-12T14:20:00Z').toISOString(),
     updated_at: new Date('2026-08-12T14:20:00Z').toISOString()
   },
   {
-    id: 'res-005',
+    id: '00000000-0000-0000-0001-000000000005',
     resident_number: '005',
     full_name: 'Chief Emeka Okonjo',
     phone_number: '08011223344',
@@ -142,7 +147,7 @@ const DEFAULT_RESIDENTS = [
     updated_at: new Date('2026-10-02T19:51:29Z').toISOString()
   },
   {
-    id: 'res-010',
+    id: '00000000-0000-0000-0001-000000000010',
     auth_user_id: 'd1b49d39-12aa-46ad-9196-878d609706f2',
     resident_number: '010',
     full_name: 'Mrs. Isis Nwabueze',
@@ -469,15 +474,27 @@ export const serverDb = {
       }
     }
 
+    // Validate or generate UUID for PostgreSQL compatibility
+    const isValidUuid = (val: any) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+    const validId = residentData.id && isValidUuid(residentData.id) ? residentData.id : crypto.randomUUID();
+
     const residentRecord = {
       ...residentData,
-      id: residentData.id || `res-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: validId,
       resident_number: cleanNum,
       phone_number: normPhone || residentData.phone_number,
       additional_phone: normAltPhone || residentData.additional_phone || null,
       email: residentData.email ? String(residentData.email).trim().toLowerCase() : '',
+      house_number: residentData.house_number ? String(residentData.house_number).trim() : 'Phase 1',
+      address: residentData.address ? String(residentData.address).trim() : 'Finger of God Estate, Iyiaba, Asaba',
       state: residentData.state || 'Delta',
       lga: residentData.lga || 'Oshimili South',
+      notes: residentData.notes ? String(residentData.notes).trim() : null,
+      registration_date: residentData.registration_date || new Date().toISOString().split('T')[0],
+      status: residentData.status || 'Active',
+      account_activated: !!residentData.account_activated,
+      profile_completed: !!residentData.profile_completed,
+      account_status: residentData.account_status || (residentData.account_activated ? (residentData.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
       created_at: residentData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -490,11 +507,48 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
-    // Try Supabase table upsert
+    // Persist directly to authoritative Supabase database
     try {
-      await supabaseAdmin.from('residents').upsert(residentRecord);
-    } catch (e) {
-      console.warn('Supabase resident upsert queued locally:', e);
+      const dbPayload = {
+        id: residentRecord.id,
+        auth_user_id: residentRecord.auth_user_id && isValidUuid(residentRecord.auth_user_id) ? residentRecord.auth_user_id : null,
+        resident_number: cleanNum,
+        full_name: residentRecord.full_name,
+        phone_number: residentRecord.phone_number,
+        additional_phone: residentRecord.additional_phone || null,
+        email: residentRecord.email || null,
+        house_number: residentRecord.house_number,
+        address: residentRecord.address,
+        state: residentRecord.state,
+        lga: residentRecord.lga,
+        notes: residentRecord.notes || null,
+        registration_date: residentRecord.registration_date,
+        status: residentRecord.status,
+        account_activated: residentRecord.account_activated,
+        profile_completed: residentRecord.profile_completed,
+        account_status: residentRecord.account_status,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: upsertData, error: upsertErr } = await supabaseAdmin
+        .from('residents')
+        .upsert(dbPayload, { onConflict: 'resident_number' })
+        .select()
+        .maybeSingle();
+
+      if (upsertErr) {
+        console.error(`[Supabase Error] Upsert resident ${cleanNum} failed:`, upsertErr.message, upsertErr.details || '');
+      } else if (upsertData) {
+        console.log(`[Supabase Success] Resident ${cleanNum} permanently persisted in Supabase database. ID: ${upsertData.id}`);
+        residentRecord.id = upsertData.id;
+        const finalIdx = localDb.residents.findIndex(r => String(r.resident_number).padStart(3, '0') === cleanNum);
+        if (finalIdx >= 0) {
+          localDb.residents[finalIdx].id = upsertData.id;
+          saveDbToFile(localDb);
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Supabase Warning] Supabase resident upsert network exception:', e?.message || e);
     }
 
     // If linked to Supabase Auth, keep user metadata in sync

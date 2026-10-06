@@ -2220,7 +2220,7 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
       });
     }
 
-    const newId = `res-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newId = crypto.randomUUID();
     const newResident: ServerResidentRecord = {
       id: newId,
       resident_number: cleanNum,
@@ -2239,8 +2239,8 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
       registration_date: data.registration_date || new Date().toISOString().split('T')[0]
     };
 
-    residentsStore.set(cleanNum, newResident);
-    await serverDb.saveResident(newResident);
+    const savedResident = await serverDb.saveResident(newResident);
+    residentsStore.set(cleanNum, savedResident);
 
     // Initialize October 2026 payment record
     const payKey = `${cleanNum}_10_2026`;

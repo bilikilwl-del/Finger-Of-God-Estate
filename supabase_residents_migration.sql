@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS public.residents (
     status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Suspended')),
     account_activated BOOLEAN NOT NULL DEFAULT FALSE,
     profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    account_status VARCHAR(50) NOT NULL DEFAULT 'NOT ACTIVATED',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_resident_number_range CHECK (resident_number ~ '^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$')
@@ -45,6 +46,45 @@ CREATE INDEX IF NOT EXISTS idx_residents_num ON public.residents(resident_number
 CREATE INDEX IF NOT EXISTS idx_residents_phone ON public.residents(phone_number);
 CREATE INDEX IF NOT EXISTS idx_residents_status ON public.residents(status);
 CREATE INDEX IF NOT EXISTS idx_residents_auth_user ON public.residents(auth_user_id);
+
+-- -------------------------------------------------------------------------
+-- 1B. ENSURE PUBLIC.ADMIN_USERS & PROFILES EXIST FOR RLS & ROLE CHECKS
+-- -------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'Administrator',
+    status VARCHAR(20) NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    role VARCHAR(30) NOT NULL DEFAULT 'Resident',
+    status VARCHAR(20) NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Seed Designated Administrator into admin_users and profiles
+INSERT INTO public.admin_users (id, auth_user_id, email, full_name, role, status)
+VALUES ('2aef6033-2600-4d7a-aaa5-7f54c441e429', '2aef6033-2600-4d7a-aaa5-7f54c441e429', 'admin@fingerofgodestate.com', 'Estate Administrator', 'Administrator', 'Active')
+ON CONFLICT (email) DO UPDATE SET
+    auth_user_id = EXCLUDED.auth_user_id,
+    status = 'Active',
+    updated_at = NOW();
+
+INSERT INTO public.profiles (id, email, full_name, role, status)
+VALUES ('2aef6033-2600-4d7a-aaa5-7f54c441e429', 'admin@fingerofgodestate.com', 'Estate Administrator', 'admin', 'Active')
+ON CONFLICT (id) DO UPDATE SET
+    role = 'admin',
+    status = 'Active',
+    updated_at = NOW();
 
 -- -------------------------------------------------------------------------
 -- 2. ENABLE ROW-LEVEL SECURITY (RLS)
