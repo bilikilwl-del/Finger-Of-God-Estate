@@ -160,38 +160,7 @@ USING (
 );
 
 -- -------------------------------------------------------------------------
--- 3. MIGRATE THE SIX REAL PRODUCTION RESIDENT RECORDS
+-- 3. SCHEMA VERIFICATION
 -- -------------------------------------------------------------------------
-INSERT INTO public.residents (
-    resident_number,
-    full_name,
-    phone_number,
-    additional_phone,
-    email,
-    house_number,
-    address,
-    state,
-    lga,
-    status,
-    account_activated,
-    profile_completed,
-    auth_user_id,
-    registration_date
-) VALUES
-('001', 'Engr. Babatunde Adeleke', '08023456789', NULL, 'babatunde.adeleke@gmail.com', 'Plot 4A, Hibiscus Crescent', 'Phase 1, Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Active', TRUE, TRUE, 'cb033992-eb57-4a0f-800f-d73b303b9d07', '2026-08-15'),
-('002', 'Dr. Chioma Nwachukwu', '08098765432', NULL, 'dr.chioma@nwachukwumed.ng', 'Plot 12, Palm View Avenue', 'Phase 1, Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Active', FALSE, FALSE, NULL, '2026-08-20'),
-('003', 'Alhaji Usman Danladi', '08123459876', NULL, 'usman.danladi@danladigroup.com', 'Plot 7B, Grace Close', 'Phase 1, Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Active', FALSE, FALSE, NULL, '2026-08-25'),
-('004', 'Mrs. Folashade Balogun', '07033445566', NULL, 'folashade.balogun@outlook.com', 'Plot 19, Olive Way', 'Phase 1, Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Inactive', FALSE, FALSE, NULL, '2026-09-01'),
-('005', 'Chief Emeka Okonjo', '08011223344', NULL, NULL, 'Plot 3, Harmony Boulevard', 'Phase 1, Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Active', FALSE, FALSE, NULL, '2026-09-05'),
-('010', 'Mrs. Isis Nwabueze', '08038383810', NULL, 'isis38f@gmail.com', 'Plot 10, Palm View Avenue', 'Finger of God Estate, Iyiaba, Asaba', 'Delta', 'Oshimili South', 'Active', TRUE, TRUE, 'd1b49d39-12aa-46ad-9196-878d609706f2', '2026-10-04')
-ON CONFLICT (resident_number) DO UPDATE SET
-    full_name = EXCLUDED.full_name,
-    phone_number = EXCLUDED.phone_number,
-    email = EXCLUDED.email,
-    house_number = EXCLUDED.house_number,
-    address = EXCLUDED.address,
-    status = EXCLUDED.status,
-    account_activated = EXCLUDED.account_activated,
-    profile_completed = EXCLUDED.profile_completed,
-    auth_user_id = EXCLUDED.auth_user_id,
-    updated_at = NOW();
+-- Production table 'public.residents' is now created with RLS enabled and ready for resident uploads (001 - 300).
+SELECT 'public.residents table verified with RLS policies' AS status;

@@ -308,8 +308,8 @@ export async function requireAuthenticatedResident(
 export async function initializeResidentsStore(): Promise<void> {
   try {
     const dbResidents = await serverDb.getResidents();
+    residentsStore.clear();
     if (Array.isArray(dbResidents) && dbResidents.length > 0) {
-      residentsStore.clear();
       for (const r of dbResidents) {
         if (r.resident_number) {
           const cleanNum = String(r.resident_number).trim().padStart(3, '0');
@@ -325,6 +325,8 @@ export async function initializeResidentsStore(): Promise<void> {
         }
       }
       console.log(`[ResidentStore] Synchronized ${residentsStore.size} residents from persistent database.`);
+    } else {
+      console.log(`[ResidentStore] Persistent database has 0 residents. Resident store initialized empty.`);
     }
   } catch (err) {
     console.error('[ResidentStore] Error initializing residents from database:', err);
@@ -2305,7 +2307,10 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
     });
   } catch (err: any) {
     console.error('Create resident error:', err);
-    res.status(500).json({ success: false, message: 'Unable to register this resident. Please check the information and try again.' });
+    res.status(500).json({ 
+      success: false, 
+      message: err?.message || 'Unable to register this resident. Please check the information and try again.' 
+    });
   }
 });
 
@@ -2355,7 +2360,8 @@ app.put('/api/admin/residents/:id', requireAdminAuth, async (req: Request, res: 
 
     res.json({ success: true, message: 'Resident updated successfully', resident: updated });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: 'Failed to update resident' });
+    console.error('Update resident error:', err);
+    res.status(500).json({ success: false, message: err?.message || 'Failed to update resident' });
   }
 });
 
