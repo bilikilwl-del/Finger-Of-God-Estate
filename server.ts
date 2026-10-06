@@ -1645,6 +1645,28 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
+    // Mask phone for user confirmation display (e.g., 080***4567)
+    const rawPhone = resident.phone_number;
+    const maskedPhone = rawPhone.length >= 8 
+      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+      : 'registered phone number';
+
+    // Diagnostic logging
+    console.log(`[OTP Login Flow] Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
+
+    // Dispatch real SMS if configured
+    const messageBody = `Finger of God Estate: Your Resident Portal OTP is ${otpCode}. Valid for 10 minutes. Do not share this code. Resident No: #${cleanNum}.`;
+    const smsResult = await dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION');
+
+    console.log(`[OTP Login Flow] SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
+
+    if (isSmsConfigured() && !smsResult.success) {
+      return res.status(502).json({
+        success: false,
+        message: `SMS Delivery Error: ${smsResult.error || 'The SMS gateway could not deliver your OTP'}. Please check your phone number or try again.`
+      });
+    }
+
     residentOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
@@ -1653,18 +1675,6 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       attempts: 0,
       resend_after: resendAfter,
       created_at: now
-    });
-
-    // Mask phone for user confirmation display (e.g., 080***4567)
-    const rawPhone = resident.phone_number;
-    const maskedPhone = rawPhone.length >= 8 
-      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
-      : 'registered phone number';
-
-    // Dispatch real SMS if configured
-    const messageBody = `Finger of God Estate: Your Resident Portal OTP is ${otpCode}. Valid for 10 minutes. Do not share this code. Resident No: ${cleanNum}.`;
-    dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION').catch(e => {
-      console.warn('[OTP SMS Dispatch Notice]', e);
     });
 
     // Reset failed login count on successful code dispatch
@@ -1677,9 +1687,10 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       residentName: resident.full_name,
       expiresInSeconds: 600,
       cooldownSeconds: 45,
+      providerMessageId: smsResult.providerMessageId,
       // For development/demo environment testing, include simulated code hint safely
-      isDevDemo: process.env.NODE_ENV !== 'production' || !isSmsConfigured(),
-      demoOtp: (process.env.NODE_ENV !== 'production' || !isSmsConfigured()) ? otpCode : undefined
+      isDevDemo: process.env.NODE_ENV !== 'production' && !isSmsConfigured(),
+      demoOtp: (process.env.NODE_ENV !== 'production' && !isSmsConfigured()) ? otpCode : undefined
     });
   } catch (err: any) {
     console.error('Send OTP error:', err);
@@ -1865,6 +1876,31 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
+    // Mask phone for user confirmation display (e.g., 080••••4567)
+    const rawPhone = resident.phone_number;
+    const maskedPhone = rawPhone.length >= 8 
+      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+      : 'registered phone number';
+
+    // Diagnostic logging
+    console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
+    console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching SMS via ${getSmsProvider()}...`);
+
+    // Dispatch real SMS to registered trusted phone
+    const messageBody = `Finger of God Estate: Your account activation code is ${otpCode}. Valid for 10 minutes. Use this code to activate your Resident Portal account. Resident No: #${cleanNum}.`;
+    const smsResult = await dispatchSms(resident.phone_number, messageBody, 'ACCOUNT_ACTIVATION');
+
+    console.log(`[Activation Flow] Step 3: SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
+
+    // If live SMS is configured but provider failed, inform user and do not pretend success
+    if (isSmsConfigured() && !smsResult.success) {
+      return res.status(502).json({
+        success: false,
+        message: `SMS Delivery Error: ${smsResult.error || 'The SMS gateway could not deliver your code'}. Please check your phone number or contact estate administration.`
+      });
+    }
+
+    // Store OTP in server memory store only after successful dispatch (or in demo mode)
     activationOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
@@ -1875,18 +1911,6 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       created_at: now
     });
 
-    // Mask phone for user confirmation display (e.g., 080••••4567)
-    const rawPhone = resident.phone_number;
-    const maskedPhone = rawPhone.length >= 8 
-      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
-      : 'registered phone number';
-
-    // Dispatch real SMS
-    const messageBody = `Finger of God Estate: Your account activation code is ${otpCode}. Valid for 10 minutes. Use this code to activate your Resident Portal account. Resident No: #${cleanNum}.`;
-    dispatchSms(resident.phone_number, messageBody, 'ACCOUNT_ACTIVATION').catch(e => {
-      console.warn('[Activation SMS Dispatch Notice]', e);
-    });
-
     return res.json({
       success: true,
       message: `A 6-digit activation code has been dispatched to ${maskedPhone}.`,
@@ -1895,8 +1919,9 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       residentNumber: cleanNum,
       expiresInSeconds: 600,
       cooldownSeconds: 45,
-      isDevDemo: process.env.NODE_ENV !== 'production' || !isSmsConfigured(),
-      demoOtp: (process.env.NODE_ENV !== 'production' || !isSmsConfigured()) ? otpCode : undefined
+      providerMessageId: smsResult.providerMessageId,
+      isDevDemo: process.env.NODE_ENV !== 'production' && !isSmsConfigured(),
+      demoOtp: (process.env.NODE_ENV !== 'production' && !isSmsConfigured()) ? otpCode : undefined
     });
   } catch (err: any) {
     console.error('Request activation code error:', err);
@@ -3567,9 +3592,14 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
     };
   }
 
+  const maskedPhone = normalizedPhone.length >= 8 
+    ? `${normalizedPhone.slice(0, 6)}***${normalizedPhone.slice(-4)}` 
+    : '***';
+
   // Strict check: if no SMS API Key is configured, clearly state NOT CONFIGURED
   if (!isSmsConfigured()) {
     lastFailedSmsTimestamp = new Date().toISOString();
+    console.warn(`[SMS Dispatch Notice] Live SMS delivery skipped (No valid SMS_API_KEY). Target: ${maskedPhone}, Type: ${reminderType}`);
     return {
       success: false,
       status: 'NOT_CONFIGURED',
@@ -3582,6 +3612,8 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
   const senderId = getSmsSenderId();
   const channel = getSmsChannel();
 
+  console.log(`[SMS Dispatch Request] Provider: ${provider}, Sender: ${senderId}, Target: ${maskedPhone}, Type: ${reminderType}`);
+
   try {
     if (provider === 'smart_sms' || provider.includes('smart')) {
       const params = new URLSearchParams();
@@ -3590,7 +3622,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
       params.append('to', normalizedPhone);
       params.append('message', messageText);
       params.append('type', '0'); // Plain text
-      params.append('routing', channel === 'corporate' ? '4' : '3'); // Route 3: Basic with DND fallback
+      params.append('routing', channel === 'corporate' ? '4' : '3'); // Route 3: Basic with DND fallback; Route 4: Corporate
 
       const response = await fetch('https://app.smartsmssolutions.com/io/api/client/v1/sms/', {
         method: 'POST',
@@ -3602,21 +3634,24 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
 
       const data = await response.json().catch(() => ({}));
 
-      if (response.ok && (data.code === 1000 || data.successful || data.message_id)) {
+      const isSuccess = response.ok && 
+        data.code === 1000 && 
+        !data.failed && 
+        (Boolean(data.successful) || Boolean(data.basic_successful) || Boolean(data.message_id));
+
+      if (isSuccess) {
         const msgId = data.message_id || `sms-${Date.now()}`;
         lastSuccessfulSmsTimestamp = new Date().toISOString();
+        console.log(`[SMS Success] SmartSMSSolutions accepted message. ID: ${msgId}, Recipient: ${maskedPhone}, Units: ${data.units_used || 'N/A'}`);
         return {
           success: true,
           status: 'SENT',
           providerMessageId: String(msgId)
         };
       } else {
-        const errMessage = data.comment || data.error || data.message || `HTTP ${response.status} from SmartSMSSolutions`;
+        const errMessage = data.comment || data.error || data.failed || data.invalid || data.message || `HTTP ${response.status} from SmartSMSSolutions`;
         lastFailedSmsTimestamp = new Date().toISOString();
-        const masked = normalizedPhone.length >= 8 
-          ? `${normalizedPhone.substring(0, 6)}***${normalizedPhone.substring(normalizedPhone.length - 2)}` 
-          : '***';
-        console.warn(`[SMS Failed] Provider: SmartSMSSolutions, Status: ${response.status}, Phone: ${masked}, Type: ${reminderType}, Reason: ${errMessage}`);
+        console.warn(`[SMS Failed] Provider: SmartSMSSolutions, HTTP: ${response.status}, Code: ${data.code || 'N/A'}, Phone: ${maskedPhone}, Type: ${reminderType}, Reason: ${errMessage}`);
         return {
           success: false,
           status: 'FAILED',
@@ -3642,6 +3677,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
       if (response.ok && (data.message_id || data.code === 'ok' || data.message === 'Successfully Sent')) {
         const msgId = data.message_id || `tm-${Date.now()}`;
         lastSuccessfulSmsTimestamp = new Date().toISOString();
+        console.log(`[SMS Success] Termii accepted message. ID: ${msgId}, Recipient: ${maskedPhone}`);
         return {
           success: true,
           status: 'SENT',
@@ -3650,10 +3686,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
       } else {
         const errMessage = data.message || data.error || `HTTP ${response.status} from Termii`;
         lastFailedSmsTimestamp = new Date().toISOString();
-        const masked = normalizedPhone.length >= 8 
-          ? `${normalizedPhone.substring(0, 6)}***${normalizedPhone.substring(normalizedPhone.length - 2)}` 
-          : '***';
-        console.warn(`[SMS Failed] Provider: Termii, Status: ${response.status}, Phone: ${masked}, Type: ${reminderType}, Reason: ${errMessage}`);
+        console.warn(`[SMS Failed] Provider: Termii, Status: ${response.status}, Phone: ${maskedPhone}, Type: ${reminderType}, Reason: ${errMessage}`);
         return {
           success: false,
           status: 'FAILED',
