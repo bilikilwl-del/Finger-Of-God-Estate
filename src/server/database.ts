@@ -51,11 +51,29 @@ const DEFAULT_ESTATE_SETTINGS = {
 
 const DEFAULT_RESIDENTS: any[] = [];
 
+export interface PersistentOtpChallenge {
+  id?: string;
+  resident_number: string;
+  challenge_type: 'ACTIVATION' | 'LOGIN';
+  phone_number: string;
+  pending_email?: string;
+  otp_hash: string;
+  salt: string;
+  attempts: number;
+  max_attempts: number;
+  expires_at: string | number;
+  resend_after: string | number;
+  verified?: boolean;
+  created_at?: string | number;
+  updated_at?: string | number;
+}
+
 export interface PersistentDatabaseSchema {
   estate_settings: typeof DEFAULT_ESTATE_SETTINGS;
   residents: any[];
   profiles: any[];
   admin_users: any[];
+  otp_challenges?: PersistentOtpChallenge[];
   monthly_payments: any[];
   payment_transactions: any[];
   receipts: any[];
@@ -81,6 +99,7 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
       return {
         estate_settings: parsed.estate_settings || DEFAULT_ESTATE_SETTINGS,
         residents: Array.isArray(parsed.residents) ? parsed.residents : [],
+        otp_challenges: Array.isArray(parsed.otp_challenges) ? parsed.otp_challenges : [],
         profiles: parsed.profiles || [
           {
             id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
@@ -306,6 +325,121 @@ export const serverDb = {
       console.warn(`[Supabase Error] getResidents exception: ${err?.message || err}`);
     }
     return localDb.residents;
+  },
+
+  // =========================================================================
+  // PERSISTENT SERVER-AUTHORITATIVE RESIDENT OTP CHALLENGES
+  // =========================================================================
+  async saveOtpChallenge(challenge: PersistentOtpChallenge): Promise<void> {
+    const cleanNum = String(challenge.resident_number).trim().padStart(3, '0');
+    const record: PersistentOtpChallenge = {
+      ...challenge,
+      resident_number: cleanNum,
+      updated_at: new Date().toISOString(),
+      created_at: challenge.created_at || new Date().toISOString()
+    };
+
+    // 1. Sync to in-memory/file persistent store
+    if (!localDb.otp_challenges) localDb.otp_challenges = [];
+    localDb.otp_challenges = localDb.otp_challenges.filter(
+      c => !(c.resident_number === cleanNum && c.challenge_type === challenge.challenge_type)
+    );
+    localDb.otp_challenges.push(record);
+    saveDbToFile(localDb);
+
+    // 2. Sync to Supabase table if available
+    try {
+      await supabaseAdmin.from('resident_otp_challenges').upsert({
+        resident_number: cleanNum,
+        challenge_type: challenge.challenge_type,
+        phone_number: challenge.phone_number,
+        pending_email: challenge.pending_email || null,
+        otp_hash: challenge.otp_hash,
+        salt: challenge.salt,
+        attempts: challenge.attempts || 0,
+        max_attempts: challenge.max_attempts || 5,
+        expires_at: typeof challenge.expires_at === 'number' ? new Date(challenge.expires_at).toISOString() : challenge.expires_at,
+        resend_after: typeof challenge.resend_after === 'number' ? new Date(challenge.resend_after).toISOString() : challenge.resend_after,
+        verified: !!challenge.verified,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'resident_number,challenge_type' });
+    } catch {
+      // Gracefully continue using persistent serverDb fallback
+    }
+  },
+
+  async getOtpChallenge(residentNumber: string, challengeType: 'ACTIVATION' | 'LOGIN'): Promise<PersistentOtpChallenge | null> {
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+
+    // 1. Check Supabase first
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('resident_otp_challenges')
+        .select('*')
+        .eq('resident_number', cleanNum)
+        .eq('challenge_type', challengeType)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          ...data,
+          expires_at: new Date(data.expires_at).getTime(),
+          resend_after: new Date(data.resend_after).getTime()
+        };
+      }
+    } catch {
+      // Fallback
+    }
+
+    // 2. Check local persistent store
+    if (!localDb.otp_challenges) localDb.otp_challenges = [];
+    const found = localDb.otp_challenges.find(
+      c => c.resident_number === cleanNum && c.challenge_type === challengeType
+    );
+    if (found) {
+      return {
+        ...found,
+        expires_at: typeof found.expires_at === 'string' ? new Date(found.expires_at).getTime() : found.expires_at,
+        resend_after: typeof found.resend_after === 'string' ? new Date(found.resend_after).getTime() : found.resend_after
+      };
+    }
+    return null;
+  },
+
+  async updateOtpChallengeAttempts(residentNumber: string, challengeType: 'ACTIVATION' | 'LOGIN', attempts: number): Promise<void> {
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    if (localDb.otp_challenges) {
+      const item = localDb.otp_challenges.find(c => c.resident_number === cleanNum && c.challenge_type === challengeType);
+      if (item) {
+        item.attempts = attempts;
+        item.updated_at = new Date().toISOString();
+        saveDbToFile(localDb);
+      }
+    }
+    try {
+      await supabaseAdmin
+        .from('resident_otp_challenges')
+        .update({ attempts, updated_at: new Date().toISOString() })
+        .eq('resident_number', cleanNum)
+        .eq('challenge_type', challengeType);
+    } catch {}
+  },
+
+  async deleteOtpChallenge(residentNumber: string, challengeType: 'ACTIVATION' | 'LOGIN'): Promise<void> {
+    const cleanNum = String(residentNumber).trim().padStart(3, '0');
+    if (localDb.otp_challenges) {
+      localDb.otp_challenges = localDb.otp_challenges.filter(
+        c => !(c.resident_number === cleanNum && c.challenge_type === challengeType)
+      );
+      saveDbToFile(localDb);
+    }
+    try {
+      await supabaseAdmin
+        .from('resident_otp_challenges')
+        .delete()
+        .eq('resident_number', cleanNum)
+        .eq('challenge_type', challengeType);
+    } catch {}
   },
 
   async getResidentByNumber(num: string): Promise<any | null> {
