@@ -99,12 +99,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Activation Flow State (SMS OTP-based activation)
+  // Activation Flow State (SMS + Email OTP-based activation with resident-entered email)
   const [actStep, setActStep] = useState<'enter_details' | 'enter_otp'>('enter_details');
   const [actResidentNumber, setActResidentNumber] = useState('');
   const [actPhoneNumber, setActPhoneNumber] = useState('');
+  const [actEmail, setActEmail] = useState('');
   const [actOtpCode, setActOtpCode] = useState(['', '', '', '', '', '']);
   const [actMaskedPhone, setActMaskedPhone] = useState('');
+  const [actMaskedEmail, setActMaskedEmail] = useState('');
   const [actResidentName, setActResidentName] = useState('');
   const [actResendCooldown, setActResendCooldown] = useState(0);
   const [actRememberDevice, setActRememberDevice] = useState(false);
@@ -417,23 +419,31 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
     const cleanNum = actResidentNumber.trim().padStart(3, '0');
     const cleanPhone = actPhoneNumber.trim();
+    const cleanEmail = actEmail.trim().toLowerCase();
 
-    if (!cleanNum || !cleanPhone) {
-      setErrorMessage('Please enter both your Resident Number (001–300) and registered phone number.');
+    if (!cleanNum || !cleanPhone || !cleanEmail) {
+      setErrorMessage('Please enter your Resident Number (001–300), registered phone number, and email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMessage('Please enter a valid email address (e.g. resident@example.com).');
       return;
     }
 
     setIsLoading(true);
     try {
-      const res = await dbService.requestActivationCode(cleanNum, cleanPhone);
+      const res = await dbService.requestActivationCode(cleanNum, cleanPhone, cleanEmail);
 
       if (res.success) {
         setActMaskedPhone(res.maskedPhone || cleanPhone);
+        setActMaskedEmail(res.maskedEmail || cleanEmail);
         setActResidentName(res.residentName || '');
         setActResendCooldown(res.cooldownSeconds || 45);
         setActOtpCode(['', '', '', '', '', '']);
         setActStep('enter_otp');
-        setSuccessMessage(`A 6-digit activation code has been dispatched to ${res.maskedPhone || 'your registered phone'}.`);
+        setSuccessMessage(`A 6-digit verification code has been dispatched via SMS to ${res.maskedPhone || 'your registered phone'} and Email to ${res.maskedEmail || cleanEmail}.`);
       } else {
         if (res.isAlreadyActivated) {
           setActIsAlreadyActivated(true);
@@ -495,11 +505,12 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     try {
       const cleanNum = actResidentNumber.trim().padStart(3, '0');
       const cleanPhone = actPhoneNumber.trim();
-      const res = await dbService.requestActivationCode(cleanNum, cleanPhone);
+      const cleanEmail = actEmail.trim().toLowerCase();
+      const res = await dbService.requestActivationCode(cleanNum, cleanPhone, cleanEmail);
 
       if (res.success) {
         setActResendCooldown(res.cooldownSeconds || 45);
-        setSuccessMessage('A fresh activation code has been dispatched to your registered contact.');
+        setSuccessMessage('A fresh verification code has been dispatched to your SMS & Email.');
       } else {
         setErrorMessage(res.message || 'Unable to resend activation code. Please wait a moment.');
       }
@@ -1049,11 +1060,11 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </div>
 
                 <form onSubmit={handleSendActivationOtp} className="space-y-3 sm:space-y-3.5">
-                  {/* Resident Number Field (001–300) */}
+                  {/* STEP 1: Resident Number Field (001–300) */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
-                        Resident Number
+                        Step 1: Resident Number
                       </label>
                       <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md">
                         Format: 001 – 300
@@ -1083,10 +1094,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     </p>
                   </div>
 
-                  {/* Registered Phone Number Field */}
+                  {/* STEP 2: Registered Phone Number Field */}
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                      Registered Phone Number
+                      Step 2: Registered Phone Number
                     </label>
                     <div className="relative">
                       <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1104,7 +1115,32 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       />
                     </div>
                     <p className="text-[10px] text-slate-500 mt-0.5">
-                      Must match the telephone number registered on the estate records.
+                      Enter the phone number registered with Finger of God Estate. Your phone number must match our records before you can continue.
+                    </p>
+                  </div>
+
+                  {/* STEP 3: Email Address Field */}
+                  <div>
+                    <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                      Step 3: Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        value={actEmail}
+                        onChange={(e) => {
+                          setActEmail(e.target.value);
+                          setActIsAlreadyActivated(false);
+                        }}
+                        placeholder="resident@example.com"
+                        required
+                        disabled={isLoading}
+                        className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Enter the email address you want to use for your Finger of God Estate account.
                     </p>
                   </div>
 
@@ -1205,7 +1241,8 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   </div>
                   <p className="text-emerald-800 text-[11px] leading-relaxed">
                     We dispatched a 6-digit activation code via <strong className="text-emerald-950">SMS &amp; Email</strong> to{' '}
-                    <strong className="text-emerald-950 font-mono font-bold">{actMaskedPhone}</strong> for{' '}
+                    <strong className="text-emerald-950 font-mono font-bold">{actMaskedPhone}</strong>
+                    {actMaskedEmail ? <> and <strong className="text-emerald-950 font-mono font-bold">{actMaskedEmail}</strong></> : null} for{' '}
                     <strong className="text-emerald-950">Resident #{actResidentNumber.padStart(3, '0')}</strong>
                     {actResidentName ? ` (${actResidentName})` : ''}. Check either your SMS or Email inbox and enter the code below.
                   </p>
@@ -1215,7 +1252,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   {/* 6 Digit OTP Inputs */}
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 text-center">
-                      Enter 6-Digit SMS Code
+                      Enter 6-Digit Verification Code
                     </label>
                     <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                       {actOtpCode.map((digit, idx) => (
@@ -1283,8 +1320,8 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 disabled:text-slate-400 hover:underline cursor-pointer disabled:cursor-not-allowed transition-colors"
                     >
                       {actResendCooldown > 0
-                        ? `Resend activation code in ${actResendCooldown}s`
-                        : 'Did not receive code? Resend SMS code'}
+                        ? `Resend verification code in ${actResendCooldown}s`
+                        : 'Did not receive code? Resend SMS & Email code'}
                     </button>
                   </div>
                 </form>

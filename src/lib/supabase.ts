@@ -3140,25 +3140,27 @@ export const dbService = {
     }
   },
 
-  // RESIDENT ACCOUNT ACTIVATION: REQUEST SMS + EMAIL ACTIVATION CODE
-  async requestActivationCode(residentNumber: string, phoneNumber: string): Promise<{
+  // RESIDENT ACCOUNT ACTIVATION: REQUEST SMS + EMAIL ACTIVATION CODE (RESIDENT-ENTERED EMAIL)
+  async requestActivationCode(residentNumber: string, phoneNumber: string, email: string): Promise<{
     success: boolean;
     isAlreadyActivated?: boolean;
     message?: string;
     maskedPhone?: string;
+    maskedEmail?: string;
     residentName?: string;
     residentNumber?: string;
     expiresInSeconds?: number;
     cooldownSeconds?: number;
   }> {
-    const genericError = 'Those details could not be verified. Please check your estate number and registered phone number.';
+    const genericError = 'Resident details could not be verified. Please check your Resident Number and registered phone number.';
     try {
       const res = await fetch('/api/resident/request-activation-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           residentNumber: residentNumber.trim(),
-          phoneNumber: phoneNumber.trim()
+          phoneNumber: phoneNumber.trim(),
+          email: email.trim()
         })
       });
       const data = await res.json();
@@ -3167,6 +3169,7 @@ export const dbService = {
           success: true,
           message: data.message,
           maskedPhone: data.maskedPhone,
+          maskedEmail: data.maskedEmail,
           residentName: data.residentName,
           residentNumber: data.residentNumber,
           expiresInSeconds: data.expiresInSeconds || 600,

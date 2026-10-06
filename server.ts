@@ -1498,6 +1498,7 @@ async function dispatchEmail(
 interface ServerResidentOtpRecord {
   resident_number: string;
   phone_number: string;
+  pending_email?: string;
   otp_hash: string;
   salt: string;
   expires_at: number;
@@ -1795,15 +1796,32 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
   }
 });
 
-// RESIDENT PORTAL: REQUEST ACTIVATION CODE (SMS + EMAIL OTP)
+// Helper to safely mask email
+function maskEmailAddress(email: string): string {
+  if (!email || !email.includes('@')) return 'registered email';
+  const [user, domain] = email.trim().toLowerCase().split('@');
+  if (user.length <= 2) {
+    return `${user.slice(0, 1)}***@${domain}`;
+  }
+  return `${user.slice(0, 2)}***@${domain}`;
+}
+
+// Helper to safely mask phone
+function maskPhoneNumber(phone: string): string {
+  const clean = String(phone).trim();
+  if (clean.length < 8) return 'registered phone number';
+  return `${clean.slice(0, 4)}******${clean.slice(-2)}`;
+}
+
+// RESIDENT PORTAL: REQUEST ACTIVATION CODE (SMS + EMAIL OTP WITH RESIDENT-ENTERED EMAIL)
 app.post('/api/resident/request-activation-code', async (req: Request, res: Response) => {
   try {
-    const { residentNumber, phoneNumber } = req.body;
+    const { residentNumber, phoneNumber, email } = req.body;
 
-    if (!residentNumber || !phoneNumber) {
+    if (!residentNumber || !phoneNumber || !email) {
       return res.status(400).json({
         success: false,
-        message: 'Please enter both your Resident Number (001–300) and registered phone number.'
+        message: 'Please enter your Resident Number, registered phone number, and email address.'
       });
     }
 
@@ -1815,16 +1833,26 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       });
     }
 
-    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    // Validate email format
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail) || cleanEmail.length > 254) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid email address format (e.g. resident@example.com).'
+      });
+    }
+
+    // Authoritative check against production database
+    let resident = await serverDb.getResidentByNumber(cleanNum);
     if (!resident) {
-      resident = await serverDb.getResidentByNumber(cleanNum);
-      if (resident) residentsStore.set(cleanNum, resident);
+      resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
     }
 
     if (!resident || resident.status !== 'Active') {
       return res.status(400).json({
         success: false,
-        message: `Resident record #${cleanNum} could not be verified in the active estate register. Please contact estate administration.`
+        message: 'Resident details could not be verified. Please check your Resident Number and registered phone number.'
       });
     }
 
@@ -1844,7 +1872,22 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     if (!isPhoneMatch) {
       return res.status(400).json({
         success: false,
-        message: `The phone number provided does not match the registered telephone number for Resident #${cleanNum}. Please check your phone number or contact estate administration.`
+        message: 'Resident details could not be verified. Please check your Resident Number and registered phone number.'
+      });
+    }
+
+    // EMAIL DUPLICATE CHECK: Check whether the supplied email is already permanently associated with another resident
+    const allResidents = await serverDb.getResidents();
+    const isEmailTakenByOther = allResidents.some(r =>
+      r.resident_number !== cleanNum &&
+      r.email &&
+      r.email.trim().toLowerCase() === cleanEmail
+    );
+
+    if (isEmailTakenByOther) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email address is already associated with another resident account. Please use a different email address.'
       });
     }
 
@@ -1869,29 +1912,24 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
-    // Mask phone for user confirmation display (e.g., 080••••4567)
-    const rawPhone = resident.phone_number;
-    const maskedPhone = rawPhone.length >= 8 
-      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
-      : 'registered phone number';
+    // Mask phone and email for confirmation display
+    const maskedPhone = maskPhoneNumber(resident.phone_number);
+    const maskedEmail = maskEmailAddress(cleanEmail);
 
-    // Diagnostic logging (never log the actual plaintext OTP)
-    console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
+    // Safe diagnostic logging (NEVER log the actual plaintext OTP)
+    console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}, Masked email: ${maskedEmail}`);
     console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching dual notifications via SMSLive247 and Brevo Email...`);
 
     // Dispatch real SMS to registered trusted phone (keyword-safe template: NO "account" / NO "code")
     const smsMessageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
     const smsPromise = dispatchSms(resident.phone_number, smsMessageBody, 'ACCOUNT_ACTIVATION');
 
-    // Dispatch Email to registered trusted email with the EXACT SAME OTP (via Brevo transactional email)
-    const residentEmail = resident.email ? resident.email.trim().toLowerCase() : '';
-    const emailPromise = residentEmail
-      ? emailService.sendOtpEmail(residentEmail, resident.full_name.trim(), otpCode, 'ACTIVATION')
-      : Promise.resolve({ success: false, error: 'No email registered' });
+    // Dispatch Email to the resident-supplied pending email with the EXACT SAME OTP (via Brevo transactional email)
+    const emailPromise = emailService.sendOtpEmail(cleanEmail, resident.full_name.trim(), otpCode, 'ACTIVATION');
 
     const [smsResult, emailResult] = await Promise.all([smsPromise, emailPromise]);
 
-    console.log(`[Activation Flow] Step 3: Notification results -> SMS Success: ${smsResult.success}, Email Success: ${emailResult.success}`);
+    console.log(`[Activation Flow] Step 3: Notification results -> SMS: ${smsResult.status || (smsResult.success ? 'SENT' : 'FAILED')}, Email: ${emailResult.status || (emailResult.success ? 'SENT' : 'FAILED')}`);
 
     const isSmsOk = smsResult.success || (!isSmsConfigured() && process.env.NODE_ENV !== 'production');
     const isEmailOk = emailResult.success;
@@ -1899,17 +1937,18 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
 
     // If both channels fail, return a safe user message without exposing internal details
     if (isSmsConfigured() && !atLeastOneDelivered) {
-      console.warn(`[Activation SMS Failure Logged] SMS Error: ${smsResult.error || 'N/A'}, Email Error: ${emailResult.error || 'N/A'}`);
+      console.warn(`[Activation Failure Logged] SMS Error: ${smsResult.error || 'N/A'}, Email Error: ${emailResult.error || 'N/A'}`);
       return res.status(502).json({
         success: false,
         message: 'Unable to send the verification message right now. Please try again shortly.'
       });
     }
 
-    // Store secure hashed OTP in server memory store
+    // Store secure hashed OTP and pending email in server memory store (DO NOT permanently save email before OTP verification)
     activationOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
+      pending_email: cleanEmail,
       otp_hash: otpHash,
       salt,
       expires_at: expiresAt,
@@ -1920,8 +1959,9 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
 
     return res.json({
       success: true,
-      message: `A 6-digit activation code has been dispatched to ${maskedPhone}.`,
+      message: 'Your resident details have been verified. A verification number has been sent to your registered phone and the email address you provided.',
       maskedPhone,
+      maskedEmail,
       residentName: resident.full_name,
       residentNumber: cleanNum,
       expiresInSeconds: 600,
@@ -1992,12 +2032,15 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       });
     }
 
-    // OTP Verified successfully! Clean up activation OTP record
+    // Retrieve pending email from verified record
+    const verifiedPendingEmail = otpRecord.pending_email;
+
+    // Clean up activation OTP record upon successful verification
     activationOtpStore.delete(cleanNum);
 
-    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    let resident = await serverDb.getResidentByNumber(cleanNum);
     if (!resident) {
-      resident = await serverDb.getResidentByNumber(cleanNum);
+      resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
     }
     if (!resident) {
       return res.status(404).json({
@@ -2006,7 +2049,10 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       });
     }
 
-    // Activate the resident account!
+    // Permanently save the supplied verified email and activate the resident account!
+    if (verifiedPendingEmail) {
+      resident.email = verifiedPendingEmail;
+    }
     resident.account_activated = true;
     resident.account_status = 'ACTIVE';
     resident.updated_at = new Date().toISOString();
@@ -2014,12 +2060,13 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
     residentsStore.set(cleanNum, resident);
     await serverDb.saveResident(resident);
 
-    // Sync to Supabase if configured
+    // Sync permanent email and activation state to production Supabase
     if (supabaseAdmin) {
       try {
         await supabaseAdmin
           .from('residents')
           .update({
+            email: resident.email,
             account_activated: true,
             account_status: 'ACTIVE',
             updated_at: new Date().toISOString()
@@ -2045,7 +2092,7 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       action: 'RESIDENT_ACCOUNT_ACTIVATION',
       entity_type: 'resident',
       entity_id: cleanNum,
-      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account via OTP.`,
+      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account with verified email ${maskEmailAddress(resident.email || '')}.`,
       metadata: { resident_number: cleanNum, resident_name: resident.full_name },
       created_at: new Date().toISOString()
     };
