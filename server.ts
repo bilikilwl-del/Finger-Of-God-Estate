@@ -4020,6 +4020,257 @@ app.get('/api/admin/sms/test-history', requireAdminAuth, (_req: Request, res: Re
   });
 });
 
+// 4. Generate Outstanding Security Levy SMS Drafts (Review & Approval Only - NEVER Auto-sends)
+app.get('/api/admin/sms/outstanding-drafts', requireAdminAuth, (req: Request, res: Response) => {
+  try {
+    const month = parseInt(String(req.query.month || '10'), 10);
+    const year = parseInt(String(req.query.year || '2026'), 10);
+    const MONTH_NAMES = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const periodLabel = `${MONTH_NAMES[month - 1] || 'October'} ${year}`;
+
+    const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
+    const smsLogs = Array.from(smsLogsStore.values()).filter(s => s.payment_month === month && s.payment_year === year);
+
+    const drafts = [];
+    const amountDue = 5000; // Monthly Security Levy standard
+
+    for (const resident of activeResidents) {
+      const key = `${resident.resident_number}_${month}_${year}`;
+      const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
+      
+      // Crucial: Only confirmed 'PAID' payments reduce the balance!
+      // Pending, Failed, Cancelled, Abandoned do NOT count as paid.
+      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || 5000) : 0;
+      const outstandingAmount = Math.max(0, amountDue - amountPaid);
+
+      // Strictly security levy only (NO road modernization contributions)
+      if (outstandingAmount > 0) {
+        // Phone validation & normalization
+        const rawPhone = resident.phone_number || '';
+        const normalized = normalizePhoneForSMS(rawPhone);
+        const isPhoneValid = Boolean(normalized && normalized.length === 13 && normalized.startsWith('234'));
+
+        // Check recent SMS reminders to detect duplicates / recent dispatches
+        const residentLogs = smsLogs.filter(s => s.resident_number === resident.resident_number);
+        const lastSentLog = residentLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+        // Format message template as specified in requirements:
+        // "Finger of God Estate: Dear {residentName}, our records show an outstanding security levy balance of ₦{outstandingAmount} for {paymentPeriod}. Please log in to the Resident Portal to review and make payment. Thank you."
+        const formattedAmount = `₦${outstandingAmount.toLocaleString()}`;
+        const defaultMessage = `Finger of God Estate: Dear ${resident.full_name.trim()}, our records show an outstanding security levy balance of ${formattedAmount} for ${periodLabel}. Please log in to the Resident Portal to review and make payment. Thank you.`;
+
+        drafts.push({
+          draft_id: `draft-${resident.resident_number}-${month}-${year}`,
+          resident_id: resident.id,
+          resident_number: resident.resident_number,
+          resident_name: resident.full_name,
+          house_number: resident.house_number,
+          phone_number: rawPhone,
+          normalized_phone: normalized || '',
+          is_phone_valid: isPhoneValid,
+          phone_validation_error: isPhoneValid ? null : (rawPhone ? 'Invalid Nigerian phone format' : 'No phone number provided'),
+          amount_due: amountDue,
+          amount_paid: amountPaid,
+          outstanding_amount: outstandingAmount,
+          payment_period: periodLabel,
+          period_month: month,
+          period_year: year,
+          message: defaultMessage,
+          status: 'draft',
+          last_reminder_sent: lastSentLog ? (lastSentLog.sent_at || lastSentLog.created_at) : null,
+          created_at: new Date().toISOString()
+        });
+      }
+    }
+
+    // Record audit log for draft generation
+    const adminEmail = (req as any).adminUser?.email || 'admin@fingerofgodestate.com';
+    auditLogsStore.unshift({
+      id: crypto.randomUUID(),
+      admin_email: adminEmail,
+      action: 'SMS_OUTSTANDING_DRAFTS_GENERATED',
+      entity_type: 'sms',
+      entity_id: null,
+      description: `Administrator generated ${drafts.length} outstanding security levy SMS drafts for ${periodLabel}`,
+      metadata: { count: drafts.length, period: periodLabel },
+      created_at: new Date().toISOString()
+    });
+    if (auditLogsStore.length > 500) auditLogsStore.pop();
+
+    res.json({
+      success: true,
+      count: drafts.length,
+      period: periodLabel,
+      drafts
+    });
+  } catch (err: any) {
+    console.error('Error generating outstanding SMS drafts:', err);
+    res.status(500).json({ success: false, message: 'Server error generating drafts.' });
+  }
+});
+
+// 5. Send Approved SMS Reminders (Two-Step Admin Action with Explicit Confirmation)
+app.post('/api/admin/sms/send-approved-reminders', requireAdminAuth, async (req: Request, res: Response) => {
+  try {
+    const { approved_drafts } = req.body;
+
+    if (!Array.isArray(approved_drafts) || approved_drafts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No approved SMS drafts provided for transmission.'
+      });
+    }
+
+    const adminEmail = (req as any).adminUser?.email || 'admin@fingerofgodestate.com';
+    const results = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const draft of approved_drafts) {
+      const { draft_id, resident_number, phone_number, message } = draft;
+
+      // Phone validation & normalization
+      const normalizedPhone = normalizePhoneForSMS(phone_number || '');
+      if (!normalizedPhone || normalizedPhone.length !== 13 || !normalizedPhone.startsWith('234')) {
+        failedCount++;
+        results.push({
+          draft_id,
+          resident_number,
+          resident_name: draft.resident_name || `Resident ${resident_number}`,
+          phone_number: phone_number || '',
+          status: 'failed',
+          delivery_label: 'Invalid Phone Number',
+          provider_message_id: null,
+          error: 'No valid Nigerian phone number found for resident.'
+        });
+        continue;
+      }
+
+      const msgText = (typeof message === 'string' && message.trim()) ? message.trim() : '';
+      if (!msgText) {
+        failedCount++;
+        results.push({
+          draft_id,
+          resident_number,
+          resident_name: draft.resident_name || `Resident ${resident_number}`,
+          phone_number: normalizedPhone,
+          status: 'failed',
+          delivery_label: 'Empty Message',
+          provider_message_id: null,
+          error: 'Message content cannot be blank.'
+        });
+        continue;
+      }
+
+      // Dispatch SMS through existing dispatchSms service
+      const dispatch = await dispatchSms(normalizedPhone, msgText, 'REMINDER_OUTSTANDING_ADMIN');
+
+      const maskedPhone = `${normalizedPhone.slice(0, 6)}***${normalizedPhone.slice(-4)}`;
+
+      if (dispatch.success) {
+        sentCount++;
+        results.push({
+          draft_id,
+          resident_number,
+          resident_name: draft.resident_name || `Resident ${resident_number}`,
+          phone_number: maskedPhone,
+          status: 'sent',
+          delivery_label: 'Accepted by provider',
+          provider_message_id: dispatch.providerMessageId || null,
+          error: null
+        });
+
+        // Record in system SMS logs
+        const logId = `sms-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
+        const newLog: ServerSmsLogRecord = {
+          id: logId,
+          resident_id: draft.resident_id || resident_number,
+          resident_number,
+          phone_number: maskedPhone,
+          payment_month: draft.period_month || 10,
+          payment_year: draft.period_year || 2026,
+          period_label: draft.payment_period || 'October 2026',
+          reminder_type: 'REMINDER_1',
+          message: msgText,
+          provider: getSmsProvider(),
+          provider_message_id: dispatch.providerMessageId || null,
+          delivery_status: 'SENT',
+          sent_at: new Date().toISOString(),
+          error_message: null,
+          created_at: new Date().toISOString()
+        };
+        smsLogsStore.set(logId, newLog);
+      } else {
+        failedCount++;
+        results.push({
+          draft_id,
+          resident_number,
+          resident_name: draft.resident_name || `Resident ${resident_number}`,
+          phone_number: maskedPhone,
+          status: 'failed',
+          delivery_label: dispatch.status === 'NOT_CONFIGURED' ? 'Not Configured' : 'Rejected by Provider',
+          provider_message_id: null,
+          error: dispatch.error || 'Provider rejected transmission'
+        });
+
+        // Record failed log
+        const logId = `sms-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`;
+        const newLog: ServerSmsLogRecord = {
+          id: logId,
+          resident_id: draft.resident_id || resident_number,
+          resident_number,
+          phone_number: maskedPhone,
+          payment_month: draft.period_month || 10,
+          payment_year: draft.period_year || 2026,
+          period_label: draft.payment_period || 'October 2026',
+          reminder_type: 'REMINDER_1',
+          message: msgText,
+          provider: getSmsProvider(),
+          provider_message_id: null,
+          delivery_status: 'FAILED',
+          sent_at: null,
+          error_message: dispatch.error || 'Provider rejected transmission',
+          created_at: new Date().toISOString()
+        };
+        smsLogsStore.set(logId, newLog);
+      }
+
+      // Small throttling delay between multiple dispatches (100ms)
+      if (approved_drafts.length > 1) {
+        await new Promise(res => setTimeout(res, 100));
+      }
+    }
+
+    // Record audit log
+    auditLogsStore.unshift({
+      id: crypto.randomUUID(),
+      admin_email: adminEmail,
+      action: 'SMS_OUTSTANDING_REMINDERS_SENT',
+      entity_type: 'sms',
+      entity_id: null,
+      description: `Administrator dispatched ${sentCount} outstanding reminder SMS (${failedCount} failed) out of ${approved_drafts.length} attempted`,
+      metadata: { attempted: approved_drafts.length, sent: sentCount, failed: failedCount },
+      created_at: new Date().toISOString()
+    });
+    if (auditLogsStore.length > 500) auditLogsStore.pop();
+
+    res.json({
+      success: true,
+      message: `SMS transmission complete: ${sentCount} accepted by provider, ${failedCount} failed.`,
+      total_attempted: approved_drafts.length,
+      total_sent: sentCount,
+      total_failed: failedCount,
+      results
+    });
+  } catch (err: any) {
+    console.error('Error sending approved SMS reminders:', err);
+    res.status(500).json({ success: false, message: 'Server error sending approved reminders.' });
+  }
+});
+
 // -------------------------------------------------------------
 // SCHEDULED AUTOMATED CRON JOB (DAILY AT 08:00 AM AFRICA/LAGOS)
 // -------------------------------------------------------------

@@ -55,6 +55,49 @@ export interface AdminSmsTestHistoryItem {
   admin_email: string;
 }
 
+export interface OutstandingPaymentSmsDraft {
+  draft_id: string;
+  resident_id: string;
+  resident_number: string;
+  resident_name: string;
+  house_number: string;
+  phone_number: string;
+  normalized_phone: string;
+  is_phone_valid: boolean;
+  phone_validation_error?: string | null;
+  amount_due: number;
+  amount_paid: number;
+  outstanding_amount: number;
+  payment_period: string;
+  period_month: number;
+  period_year: number;
+  message: string;
+  status: 'draft' | 'approved' | 'sent' | 'failed';
+  delivery_label?: string;
+  provider_message_id?: string | null;
+  error?: string | null;
+  last_reminder_sent?: string | null;
+  created_at: string;
+}
+
+export interface SendApprovedRemindersResult {
+  success: boolean;
+  message: string;
+  total_attempted: number;
+  total_sent: number;
+  total_failed: number;
+  results: Array<{
+    draft_id: string;
+    resident_number: string;
+    resident_name: string;
+    phone_number: string;
+    status: 'sent' | 'failed';
+    delivery_label: string;
+    provider_message_id?: string | null;
+    error?: string | null;
+  }>;
+}
+
 /**
  * Normalizes phone numbers to standard Nigerian international format for SMS gateways (e.g. 2348012345678)
  */
@@ -299,5 +342,104 @@ export const smsApiClient = {
       console.warn('Could not fetch admin test history:', err);
     }
     return [];
+  },
+
+  /**
+   * Generates draft SMS reminders for residents with outstanding security levies.
+   * This is a review/drafting action and NEVER automatically sends SMS.
+   */
+  async generateOutstandingPaymentDrafts(month: number = 10, year: number = 2026): Promise<{
+    success: boolean;
+    count: number;
+    period: string;
+    drafts: OutstandingPaymentSmsDraft[];
+    message?: string;
+  }> {
+    try {
+      const res = await fetch(`/api/admin/sms/outstanding-drafts?month=${month}&year=${year}`, {
+        headers: await getAdminAuthHeaders()
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const errJson = await res.json().catch(() => ({}));
+      return {
+        success: false,
+        count: 0,
+        period: '',
+        drafts: [],
+        message: errJson.message || 'Failed to generate drafts from server.'
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        count: 0,
+        period: '',
+        drafts: [],
+        message: err?.message || 'Network exception while generating drafts.'
+      };
+    }
+  },
+
+  /**
+   * Dispatches approved SMS drafts via the configured SMS service.
+   * Only called after explicit admin review, approval, and modal confirmation.
+   */
+  async sendApprovedReminders(approvedDrafts: Array<{
+    draft_id: string;
+    resident_id?: string;
+    resident_number: string;
+    resident_name: string;
+    phone_number: string;
+    period_month?: number;
+    period_year?: number;
+    payment_period?: string;
+    message: string;
+    status: string;
+  }>): Promise<SendApprovedRemindersResult> {
+    try {
+      const res = await fetch('/api/admin/sms/send-approved-reminders', {
+        method: 'POST',
+        headers: await getAdminAuthHeaders(),
+        body: JSON.stringify({ approved_drafts: approvedDrafts })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const errJson = await res.json().catch(() => ({}));
+      return {
+        success: false,
+        message: errJson.message || 'Server rejected SMS reminder transmission.',
+        total_attempted: approvedDrafts.length,
+        total_sent: 0,
+        total_failed: approvedDrafts.length,
+        results: approvedDrafts.map(d => ({
+          draft_id: d.draft_id,
+          resident_number: d.resident_number,
+          resident_name: d.resident_name,
+          phone_number: d.phone_number,
+          status: 'failed',
+          delivery_label: 'Rejected by server',
+          error: errJson.message || 'Transmission failed'
+        }))
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Network error connecting to SMS transmission service.',
+        total_attempted: approvedDrafts.length,
+        total_sent: 0,
+        total_failed: approvedDrafts.length,
+        results: approvedDrafts.map(d => ({
+          draft_id: d.draft_id,
+          resident_number: d.resident_number,
+          resident_name: d.resident_name,
+          phone_number: d.phone_number,
+          status: 'failed',
+          delivery_label: 'Network error',
+          error: err?.message || 'Network error'
+        }))
+      };
+    }
   }
 };

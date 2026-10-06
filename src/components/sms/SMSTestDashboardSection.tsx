@@ -15,6 +15,7 @@ import {
   Check
 } from 'lucide-react';
 import { smsApiClient, AdminSmsConfigCheck, AdminSmsTestResult, AdminSmsTestHistoryItem } from '../../lib/sms';
+import { OutstandingPaymentSMSSection } from './OutstandingPaymentSMSSection';
 
 export const SMSTestDashboardSection: React.FC = () => {
   const [testPhone, setTestPhone] = useState<string>('');
@@ -548,6 +549,9 @@ export const SMSTestDashboardSection: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Outstanding Payment SMS Draft Generator & Review Area */}
+      <OutstandingPaymentSMSSection onSmsSent={loadTestHistory} />
     </div>
   );
 };
