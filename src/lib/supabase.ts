@@ -1795,7 +1795,7 @@ export const dbService = {
       });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.residents) && json.residents.length > 0) {
+        if (json.success && Array.isArray(json.residents)) {
           residents = json.residents.map((d: any) => ({
             id: d.id,
             auth_user_id: d.auth_user_id || null,
@@ -1818,6 +1818,7 @@ export const dbService = {
             updated_at: d.updated_at || new Date().toISOString()
           }));
           saveLocalResidents(residents);
+          return residents;
         }
       }
     } catch {}
@@ -1837,7 +1838,7 @@ export const dbService = {
             markTableMissing('residents');
           }
           residents = getLocalResidents();
-        } else if (data && data.length > 0) {
+        } else if (data) {
           markTableAvailable('residents');
           residents = data.map((d: any) => ({
             id: d.id,
@@ -1922,7 +1923,9 @@ export const dbService = {
     const formatted = residentNumber.trim().padStart(3, '0');
     // Check server store
     try {
-      const res = await fetch('/api/admin/residents');
+      const res = await fetch('/api/admin/residents', {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.residents)) {
@@ -1965,7 +1968,9 @@ export const dbService = {
 
     // Check server store
     try {
-      const res = await fetch('/api/admin/residents');
+      const res = await fetch('/api/admin/residents', {
+        headers: await getAdminAuthHeaders()
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.residents)) {
@@ -2083,87 +2088,38 @@ export const dbService = {
       updated_at: now
     };
 
-    // 1. Post to Server API endpoint
-    try {
-      const srvRes = await fetch('/api/admin/residents', {
-        method: 'POST',
-        headers: await getAdminAuthHeaders(),
-        body: JSON.stringify({
-          ...newResident,
-          admin_email: adminEmail
-        })
-      });
-      if (srvRes.ok) {
-        const srvJson = await srvRes.json();
-        if (srvJson.success && srvJson.resident) {
-          newResident = {
-            ...newResident,
-            ...srvJson.resident
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Server create resident notice, continuing with local sync:', e);
+    // 1. Post to Server API endpoint (authoritative server-side insertion to Supabase)
+    const srvRes = await fetch('/api/admin/residents', {
+      method: 'POST',
+      headers: await getAdminAuthHeaders(),
+      body: JSON.stringify({
+        ...newResident,
+        admin_email: adminEmail
+      })
+    });
+
+    const srvJson = await srvRes.json().catch(() => ({}));
+
+    if (!srvRes.ok || !srvJson.success || !srvJson.resident) {
+      const errMsg = srvJson.message || srvJson.error || 'Resident could not be saved to the database. Please try again.';
+      throw new Error(errMsg);
     }
 
-    // 2. Try Supabase Sync
-    if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
-      try {
-        const { data, error } = await supabase
-          .from('residents')
-          .insert({
-            resident_number: newResident.resident_number,
-            full_name: newResident.full_name,
-            phone_number: newResident.phone_number,
-            additional_phone: newResident.additional_phone || null,
-            email: newResident.email || null,
-            house_number: newResident.house_number,
-            address: newResident.address,
-            state: newResident.state,
-            lga: newResident.lga,
-            notes: newResident.notes || null,
-            registration_date: newResident.registration_date,
-            status: newResident.status
-          })
-          .select()
-          .maybeSingle();
+    const createdResident: Resident = srvJson.resident;
 
-        if (error) {
-          if (isTableNotFoundError(error)) {
-            markTableMissing('residents');
-          }
-        } else if (data) {
-          markTableAvailable('residents');
-          newResident.id = data.id;
-          newResident.created_at = data.created_at;
-          newResident.updated_at = data.updated_at;
-        }
-      } catch (err: any) {
-        if (isTableNotFoundError(err)) {
-          markTableMissing('residents');
-        }
-      }
-    }
-
-    // 3. Save locally as well
-    const residents = getLocalResidents();
-    const existingIdx = residents.findIndex(r => r.resident_number === cleanNum);
-    if (existingIdx !== -1) {
-      residents[existingIdx] = newResident;
-    } else {
-      residents.push(newResident);
-    }
-    saveLocalResidents(residents);
+    const currentLocals = getLocalResidents().filter(r => r.resident_number !== createdResident.resident_number && r.id !== createdResident.id);
+    currentLocals.push(createdResident);
+    saveLocalResidents(currentLocals);
 
     await this.logActivity({
       admin_email: adminEmail,
       action: 'CREATED_RESIDENT',
       entity_type: 'resident',
-      entity_id: newResident.resident_number,
-      description: `Registered resident ${newResident.resident_number} - ${newResident.full_name} (${newResident.house_number})`
+      entity_id: createdResident.resident_number,
+      description: `Registered resident ${createdResident.resident_number} - ${createdResident.full_name} (${createdResident.house_number})`
     });
 
-    return newResident;
+    return createdResident;
   },
 
   // COMPLETE ONE-TIME FIRST-LOGIN PROFILE SETUP
@@ -2265,56 +2221,31 @@ export const dbService = {
       updates.additional_phone = normalizeNigerianPhone(updates.additional_phone);
     }
 
-    let updatedResident: Resident | null = null;
-    const now = new Date().toISOString();
-
-    if (isSupabaseConfigured && supabase && !isTableMarkedMissing('residents')) {
-      try {
-        const { data, error } = await supabase
-          .from('residents')
-          .update({
-            ...updates,
-            updated_at: now
-          })
-          .eq('id', id)
-          .select()
-          .maybeSingle();
-
-        if (error) {
-          if (isTableNotFoundError(error)) {
-            markTableMissing('residents');
-            console.warn('[Supabase Notice] Table "residents" not in schema cache. Resident updated in local storage.');
-          } else {
-            console.warn('[Supabase Notice] Could not sync resident update to Supabase:', error.message);
-          }
-        } else if (data) {
-          markTableAvailable('residents');
-          updatedResident = data as Resident;
-        }
-      } catch (err: any) {
-        if (isTableNotFoundError(err)) {
-          markTableMissing('residents');
-        }
-        console.warn('[Supabase Notice] Supabase update resident notice:', err?.message || err);
-      }
-    }
-
-    // Local sync
-    const residents = getLocalResidents();
-    const idx = residents.findIndex(r => r.id === id);
-    if (idx !== -1) {
-      residents[idx] = {
-        ...residents[idx],
+    // Route to server API
+    const res = await fetch(`/api/admin/residents/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: await getAdminAuthHeaders(),
+      body: JSON.stringify({
         ...updates,
-        updated_at: now
-      };
-      saveLocalResidents(residents);
-      if (!updatedResident) updatedResident = residents[idx];
+        admin_email: adminEmail
+      })
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success || !json.resident) {
+      throw new Error(json.message || json.error || 'Failed to update resident in database.');
     }
 
-    if (!updatedResident) {
-      throw new Error('Resident not found.');
+    const updatedResident: Resident = json.resident;
+
+    const currentLocals = getLocalResidents();
+    const idx = currentLocals.findIndex(r => r.id === id || r.resident_number === updatedResident.resident_number);
+    if (idx >= 0) {
+      currentLocals[idx] = updatedResident;
+    } else {
+      currentLocals.push(updatedResident);
     }
+    saveLocalResidents(currentLocals);
 
     await this.logActivity({
       admin_email: adminEmail,

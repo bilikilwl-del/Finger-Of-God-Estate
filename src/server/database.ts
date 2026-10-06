@@ -411,12 +411,17 @@ export const serverDb = {
   async getResidents(): Promise<any[]> {
     try {
       const { data, error } = await supabaseAdmin.from('residents').select('*').order('resident_number', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         localDb.residents = data;
         saveDbToFile(localDb);
         return data;
       }
-    } catch {}
+      if (error) {
+        console.warn(`[Supabase Notice] getResidents query returned: ${error.message}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Supabase Error] getResidents exception: ${err?.message || err}`);
+    }
     return localDb.residents;
   },
 
@@ -484,7 +489,7 @@ export const serverDb = {
       resident_number: cleanNum,
       phone_number: normPhone || residentData.phone_number,
       additional_phone: normAltPhone || residentData.additional_phone || null,
-      email: residentData.email ? String(residentData.email).trim().toLowerCase() : '',
+      email: residentData.email ? String(residentData.email).trim().toLowerCase() : null,
       house_number: residentData.house_number ? String(residentData.house_number).trim() : 'Phase 1',
       address: residentData.address ? String(residentData.address).trim() : 'Finger of God Estate, Iyiaba, Asaba',
       state: residentData.state || 'Delta',
@@ -499,6 +504,49 @@ export const serverDb = {
       updated_at: new Date().toISOString()
     };
 
+    const dbPayload = {
+      id: residentRecord.id,
+      auth_user_id: residentRecord.auth_user_id && isValidUuid(residentRecord.auth_user_id) ? residentRecord.auth_user_id : null,
+      resident_number: cleanNum,
+      full_name: residentRecord.full_name,
+      phone_number: residentRecord.phone_number,
+      additional_phone: residentRecord.additional_phone || null,
+      email: residentRecord.email || null,
+      house_number: residentRecord.house_number,
+      address: residentRecord.address,
+      state: residentRecord.state,
+      lga: residentRecord.lga,
+      notes: residentRecord.notes || null,
+      registration_date: residentRecord.registration_date,
+      status: residentRecord.status,
+      account_activated: residentRecord.account_activated,
+      profile_completed: residentRecord.profile_completed,
+      account_status: residentRecord.account_status,
+      updated_at: new Date().toISOString()
+    };
+
+    // Primary source of truth: Supabase database
+    const { data: upsertData, error: upsertErr } = await supabaseAdmin
+      .from('residents')
+      .upsert(dbPayload, { onConflict: 'resident_number' })
+      .select()
+      .maybeSingle();
+
+    if (upsertErr) {
+      console.error(`[Supabase Error] Upsert resident ${cleanNum} failed:`, upsertErr.message, upsertErr.details || '');
+      // If table is missing, indicate exact migration requirement
+      if (upsertErr.code === 'PGRST205' || upsertErr.message?.includes('schema cache') || upsertErr.message?.includes('relation "public.residents" does not exist')) {
+        throw new Error(`Database error: The "public.residents" table does not exist in Supabase. Please run the supabase_residents_migration.sql script in your Supabase SQL Editor.`);
+      }
+      throw new Error(`Database error: Could not save resident to Supabase (${upsertErr.message})`);
+    }
+
+    if (upsertData) {
+      console.log(`[Supabase Success] Resident ${cleanNum} permanently persisted in Supabase database. ID: ${upsertData.id}`);
+      residentRecord.id = upsertData.id;
+    }
+
+    // Keep in-memory cache synchronized with confirmed database record
     const index = localDb.residents.findIndex(r => r.id === residentRecord.id || String(r.resident_number).padStart(3, '0') === cleanNum);
     if (index >= 0) {
       localDb.residents[index] = { ...localDb.residents[index], ...residentRecord };
@@ -506,50 +554,6 @@ export const serverDb = {
       localDb.residents.push(residentRecord);
     }
     saveDbToFile(localDb);
-
-    // Persist directly to authoritative Supabase database
-    try {
-      const dbPayload = {
-        id: residentRecord.id,
-        auth_user_id: residentRecord.auth_user_id && isValidUuid(residentRecord.auth_user_id) ? residentRecord.auth_user_id : null,
-        resident_number: cleanNum,
-        full_name: residentRecord.full_name,
-        phone_number: residentRecord.phone_number,
-        additional_phone: residentRecord.additional_phone || null,
-        email: residentRecord.email || null,
-        house_number: residentRecord.house_number,
-        address: residentRecord.address,
-        state: residentRecord.state,
-        lga: residentRecord.lga,
-        notes: residentRecord.notes || null,
-        registration_date: residentRecord.registration_date,
-        status: residentRecord.status,
-        account_activated: residentRecord.account_activated,
-        profile_completed: residentRecord.profile_completed,
-        account_status: residentRecord.account_status,
-        updated_at: new Date().toISOString()
-      };
-
-      const { data: upsertData, error: upsertErr } = await supabaseAdmin
-        .from('residents')
-        .upsert(dbPayload, { onConflict: 'resident_number' })
-        .select()
-        .maybeSingle();
-
-      if (upsertErr) {
-        console.error(`[Supabase Error] Upsert resident ${cleanNum} failed:`, upsertErr.message, upsertErr.details || '');
-      } else if (upsertData) {
-        console.log(`[Supabase Success] Resident ${cleanNum} permanently persisted in Supabase database. ID: ${upsertData.id}`);
-        residentRecord.id = upsertData.id;
-        const finalIdx = localDb.residents.findIndex(r => String(r.resident_number).padStart(3, '0') === cleanNum);
-        if (finalIdx >= 0) {
-          localDb.residents[finalIdx].id = upsertData.id;
-          saveDbToFile(localDb);
-        }
-      }
-    } catch (e: any) {
-      console.warn('[Supabase Warning] Supabase resident upsert network exception:', e?.message || e);
-    }
 
     // If linked to Supabase Auth, keep user metadata in sync
     if (residentRecord.auth_user_id) {

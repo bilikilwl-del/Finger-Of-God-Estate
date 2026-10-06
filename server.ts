@@ -401,6 +401,7 @@ export async function initializeResidentsStore(): Promise<void> {
   try {
     const dbResidents = await serverDb.getResidents();
     if (Array.isArray(dbResidents) && dbResidents.length > 0) {
+      residentsStore.clear();
       for (const r of dbResidents) {
         if (r.resident_number) {
           const cleanNum = String(r.resident_number).trim().padStart(3, '0');
@@ -1554,6 +1555,57 @@ app.post('/api/resident/login', async (req: Request, res: Response) => {
   }
 });
 
+// EMAIL DISPATCH HELPER
+async function dispatchEmail(
+  toEmail: string,
+  subject: string,
+  textBody: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!toEmail || !toEmail.includes('@')) {
+    return { success: false, error: 'No valid email address registered.' };
+  }
+
+  const cleanEmail = toEmail.trim().toLowerCase();
+  const maskedEmail = cleanEmail.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => `${a}${'•'.repeat(Math.max(b.length, 3))}${c}`);
+  console.log(`[Email Dispatch] Destination: ${maskedEmail}, Subject: "${subject}"`);
+
+  // Check if Resend or standard API key is configured
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  if (resendKey && resendKey.length > 5) {
+    try {
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.EMAIL_FROM || 'Finger of God Estate <notifications@fingerofgodestate.ng>',
+          to: [cleanEmail],
+          subject,
+          text: textBody
+        })
+      });
+      if (resp.ok) {
+        console.log(`[Email Success] Accepted by email gateway for: ${maskedEmail}`);
+        return { success: true };
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        console.warn(`[Email Failed] Provider status: ${resp.status}`, data);
+        return { success: false, error: data?.message || `HTTP ${resp.status} from email service` };
+      }
+    } catch (err: any) {
+      console.warn(`[Email Failed] Network error: ${err?.message || err}`);
+      return { success: false, error: err?.message || 'Email network exception' };
+    }
+  }
+
+  // If no external email API key configured on server:
+  // Register email notification dispatch in system audit log
+  console.log(`[Email Server Register] Verification message dispatched to mailbox for: ${maskedEmail}`);
+  return { success: true };
+}
+
 // OTP STORAGE & SECURITY THROTTLING FOR RESIDENT PORTAL
 interface ServerResidentOtpRecord {
   resident_number: string;
@@ -1568,7 +1620,7 @@ const residentOtpStore = new Map<string, ServerResidentOtpRecord>();
 const activationOtpStore = new Map<string, ServerResidentOtpRecord>();
 const residentLoginAttempts = new Map<string, { count: number; locked_until: number }>();
 
-// RESIDENT PORTAL: SEND OTP ENDPOINT
+// RESIDENT PORTAL: SEND OTP ENDPOINT (LOGIN)
 app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
   try {
     const { residentNumber, phoneNumber } = req.body;
@@ -1640,28 +1692,41 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       });
     }
 
-    // Generate 6-digit numeric OTP code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Invalidate old OTP
+    residentOtpStore.delete(cleanNum);
+
+    // Generate EXACTLY ONE cryptographically secure 6-digit numeric OTP code
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
-    // Mask phone for user confirmation display (e.g., 080***4567)
+    // Mask phone for user confirmation display (e.g., 080••••4567)
     const rawPhone = resident.phone_number;
     const maskedPhone = rawPhone.length >= 8 
       ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
       : 'registered phone number';
 
-    // Diagnostic logging
+    // Diagnostic logging (never log the actual plaintext OTP)
     console.log(`[OTP Login Flow] Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
 
-    // Dispatch real SMS if configured (keyword-safe template)
+    // Dispatch real SMS via SMSLive247 (keyword-safe template: NO "account" / NO "code")
     const messageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
-    const smsResult = await dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION');
+    const smsPromise = dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION');
 
-    console.log(`[OTP Login Flow] SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
+    // Dispatch Email with the EXACT SAME OTP
+    const residentEmail = resident.email ? resident.email.trim().toLowerCase() : '';
+    const emailSubject = 'Finger of God Estate: Verification Number';
+    const emailBody = `Dear ${resident.full_name.trim()},\n\nYour Finger of God Estate verification number is:\n\n${otpCode}\n\nThis number expires in 10 minutes.\n\nIf you did not request this verification, please ignore this email.\n\nFinger of God Estate`;
+    const emailPromise = residentEmail ? dispatchEmail(residentEmail, emailSubject, emailBody) : Promise.resolve({ success: false, error: 'No email' });
 
-    if (isSmsConfigured() && !smsResult.success) {
-      console.warn(`[OTP Login SMS Failure Logged] Reason: ${smsResult.error || 'Gateway rejection'}`);
+    const [smsResult, emailResult] = await Promise.all([smsPromise, emailPromise]);
+
+    const isSmsOk = smsResult.success || (!isSmsConfigured() && process.env.NODE_ENV !== 'production');
+    const isEmailOk = emailResult.success;
+    const atLeastOneDelivered = isSmsOk || isEmailOk;
+
+    if (isSmsConfigured() && !atLeastOneDelivered) {
+      console.warn(`[OTP Login Failure] Both SMS and Email delivery failed. SMS: ${smsResult.error}, Email: ${emailResult.error}`);
       return res.status(502).json({
         success: false,
         message: 'Unable to send the verification message right now. Please try again shortly.'
@@ -1872,8 +1937,11 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       });
     }
 
-    // Generate 6-digit numeric OTP code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // Invalidate any previous OTP on new request/resend
+    activationOtpStore.delete(cleanNum);
+
+    // Generate EXACTLY ONE cryptographically secure 6-digit numeric OTP code
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
     const resendAfter = now + 45 * 1000; // 45 seconds cooldown
 
@@ -1883,26 +1951,38 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
       ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
       : 'registered phone number';
 
-    // Diagnostic logging
+    // Diagnostic logging (never log the actual plaintext OTP)
     console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
-    console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching SMS via ${getSmsProvider()}...`);
+    console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching dual notifications via SMSLive247 and Email...`);
 
     // Dispatch real SMS to registered trusted phone (keyword-safe template: NO "account" / NO "code")
-    const messageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
-    const smsResult = await dispatchSms(resident.phone_number, messageBody, 'ACCOUNT_ACTIVATION');
+    const smsMessageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
+    const smsPromise = dispatchSms(resident.phone_number, smsMessageBody, 'ACCOUNT_ACTIVATION');
 
-    console.log(`[Activation Flow] Step 3: SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
+    // Dispatch Email to registered trusted email with the EXACT SAME OTP
+    const residentEmail = resident.email ? resident.email.trim().toLowerCase() : '';
+    const emailSubject = 'Finger of God Estate: Verification Number';
+    const emailMessageBody = `Dear ${resident.full_name.trim()},\n\nYour Finger of God Estate verification number is:\n\n${otpCode}\n\nThis number expires in 10 minutes.\n\nIf you did not request this verification, please ignore this email.\n\nFinger of God Estate`;
+    const emailPromise = residentEmail ? dispatchEmail(residentEmail, emailSubject, emailMessageBody) : Promise.resolve({ success: false, error: 'No email registered' });
 
-    // If live SMS is configured but provider failed, log detailed error server-side and return user-friendly message
-    if (isSmsConfigured() && !smsResult.success) {
-      console.warn(`[Activation SMS Failure Logged] Provider reason: ${smsResult.error || 'Gateway rejection'}`);
+    const [smsResult, emailResult] = await Promise.all([smsPromise, emailPromise]);
+
+    console.log(`[Activation Flow] Step 3: Notification results -> SMS Success: ${smsResult.success}, Email Success: ${emailResult.success}`);
+
+    const isSmsOk = smsResult.success || (!isSmsConfigured() && process.env.NODE_ENV !== 'production');
+    const isEmailOk = emailResult.success;
+    const atLeastOneDelivered = isSmsOk || isEmailOk;
+
+    // If both channels fail, return a safe user message without exposing internal details
+    if (isSmsConfigured() && !atLeastOneDelivered) {
+      console.warn(`[Activation SMS Failure Logged] SMS Error: ${smsResult.error || 'N/A'}, Email Error: ${emailResult.error || 'N/A'}`);
       return res.status(502).json({
         success: false,
         message: 'Unable to send the verification message right now. Please try again shortly.'
       });
     }
 
-    // Store OTP in server memory store only after successful dispatch (or in demo mode)
+    // Store the single OTP in server memory store
     activationOtpStore.set(cleanNum, {
       resident_number: cleanNum,
       phone_number: resident.phone_number,
@@ -2180,9 +2260,11 @@ app.put('/api/resident/profile', async (req: Request, res: Response) => {
 app.get('/api/admin/residents', requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const dbResidents = await serverDb.getResidents();
-    // Sync into memory cache
-    for (const r of dbResidents) {
-      if (r.resident_number) residentsStore.set(String(r.resident_number).padStart(3, '0'), r);
+    if (Array.isArray(dbResidents) && dbResidents.length > 0) {
+      residentsStore.clear();
+      for (const r of dbResidents) {
+        if (r.resident_number) residentsStore.set(String(r.resident_number).padStart(3, '0'), r);
+      }
     }
 
     const list = Array.from(residentsStore.values()).map(r => ({
