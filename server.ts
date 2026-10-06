@@ -187,100 +187,8 @@ const transactionsStore = new Map<string, ServerTransactionRecord>(); // key: re
 const receiptsStore = new Map<string, ServerReceiptRecord>(); // key: reference or receiptNumber
 const announcementsStore = new Map<string, ServerAnnouncementRecord>(); // key: id or slug
 
-// Seed Initial Estate Residents
-const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [
-  {
-    id: 'res-001',
-    resident_number: '001',
-    full_name: 'Engr. Babatunde Adeleke',
-    phone_number: '08023456789',
-    additional_phone: '08091122334',
-    email: 'babatunde.adeleke@gmail.com',
-    house_number: 'Plot 4A, Hibiscus Crescent',
-    address: '4A Hibiscus Crescent, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    registration_date: '2026-08-01'
-  },
-  {
-    id: 'res-002',
-    resident_number: '002',
-    full_name: 'Dr. Chioma Nwachukwu',
-    phone_number: '08098765432',
-    additional_phone: null,
-    email: 'dr.chioma@nwachukwumed.ng',
-    house_number: 'House 12B, Palm Avenue',
-    address: '12B Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    registration_date: '2026-08-05'
-  },
-  {
-    id: 'res-003',
-    resident_number: '003',
-    full_name: 'Alhaji Usman Danladi',
-    phone_number: '08123459876',
-    additional_phone: '08055667788',
-    email: 'usman.danladi@danladigroup.com',
-    house_number: 'Villa 7, Oasis Way',
-    address: 'Villa 7, Oasis Way, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    registration_date: '2026-08-10'
-  },
-  {
-    id: 'res-004',
-    resident_number: '004',
-    full_name: 'Mrs. Folashade Balogun',
-    phone_number: '07033445566',
-    additional_phone: null,
-    email: 'folashade.balogun@outlook.com',
-    house_number: 'Block C, Apt 3, Coral Gardens',
-    address: 'Coral Gardens, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Inactive',
-    registration_date: '2026-08-12'
-  },
-  {
-    id: 'res-005',
-    resident_number: '005',
-    full_name: 'Chief Emeka Okonjo',
-    phone_number: '08011223344',
-    additional_phone: null,
-    email: 'emeka.okonjo@fingerofgodestate.ng',
-    house_number: 'Plot 25, Boulevard',
-    address: 'Plot 25 Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: false,
-    profile_completed: false,
-    account_status: 'NOT ACTIVATED',
-    registration_date: '2026-10-02'
-  },
-  {
-    id: 'res-010',
-    auth_user_id: 'd1b49d39-12aa-46ad-9196-878d609706f2',
-    resident_number: '010',
-    full_name: 'Mrs. Isis Nwabueze',
-    phone_number: '08038383810',
-    additional_phone: null,
-    email: 'isis38f@gmail.com',
-    house_number: 'Plot 10, Palm Avenue',
-    address: '10 Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: true,
-    profile_completed: true,
-    account_status: 'ACTIVE',
-    registration_date: '2026-08-15'
-  }
-];
+// Seed Initial Estate Residents (Empty by default; populated from database)
+const INITIAL_SERVER_RESIDENTS: ServerResidentRecord[] = [];
 
 INITIAL_SERVER_RESIDENTS.forEach(r => residentsStore.set(r.resident_number, r));
 
@@ -494,9 +402,10 @@ receiptsStore.set('RCP-202610-001-A7C8E9', initialReceipt001);
 receiptsStore.set('FOGES-202610-001-A7C8E9F1', initialReceipt001);
 receiptsStore.set(initialReceipt001.id, initialReceipt001);
 
-// Seed unpaids for Resident 002, 003, 004
+// Seed unpaids for Resident 002, 003, 004 if resident exists
 ['002', '003', '004'].forEach(num => {
-  const r = residentsStore.get(num)!;
+  const r = residentsStore.get(num);
+  if (!r) return;
   const p: ServerPaymentRecord = {
     id: `pay-${num}-10-2026`,
     resident_id: r.id,

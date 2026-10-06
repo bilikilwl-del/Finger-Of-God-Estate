@@ -9,6 +9,7 @@
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "verify:supabase": "tsx scripts/verify_supabase_production.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

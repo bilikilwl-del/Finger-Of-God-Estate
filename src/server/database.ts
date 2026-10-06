@@ -49,124 +49,7 @@ const DEFAULT_ESTATE_SETTINGS = {
   road_project_target: 35000000
 };
 
-const DEFAULT_RESIDENTS = [
-  {
-    id: '00000000-0000-0000-0001-000000000001',
-    auth_user_id: 'cb033992-eb57-4a0f-800f-d73b303b9d07',
-    resident_number: '001',
-    full_name: 'Engr. Babatunde Adeleke',
-    phone_number: '08023456789',
-    additional_phone: '08091122334',
-    email: 'babatunde.adeleke@gmail.com',
-    house_number: 'Plot 4A, Hibiscus Crescent',
-    address: '4A Hibiscus Crescent, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: true,
-    profile_completed: true,
-    account_status: 'ACTIVE',
-    registration_date: '2026-08-01',
-    created_at: new Date('2026-08-01T08:00:00Z').toISOString(),
-    updated_at: new Date('2026-08-01T08:00:00Z').toISOString()
-  },
-  {
-    id: '00000000-0000-0000-0001-000000000002',
-    resident_number: '002',
-    full_name: 'Dr. Chioma Nwachukwu',
-    phone_number: '08098765432',
-    additional_phone: null,
-    email: 'dr.chioma@nwachukwumed.ng',
-    house_number: 'House 12B, Palm Avenue',
-    address: '12B Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: false,
-    profile_completed: false,
-    account_status: 'NOT ACTIVATED',
-    registration_date: '2026-08-05',
-    created_at: new Date('2026-08-05T09:30:00Z').toISOString(),
-    updated_at: new Date('2026-08-05T09:30:00Z').toISOString()
-  },
-  {
-    id: '00000000-0000-0000-0001-000000000003',
-    resident_number: '003',
-    full_name: 'Alhaji Usman Danladi',
-    phone_number: '08123459876',
-    additional_phone: '08055667788',
-    email: 'usman.danladi@danladigroup.com',
-    house_number: 'Villa 7, Oasis Way',
-    address: 'Villa 7, Oasis Way, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: false,
-    profile_completed: false,
-    account_status: 'NOT ACTIVATED',
-    registration_date: '2026-08-10',
-    created_at: new Date('2026-08-10T11:15:00Z').toISOString(),
-    updated_at: new Date('2026-08-10T11:15:00Z').toISOString()
-  },
-  {
-    id: '00000000-0000-0000-0001-000000000004',
-    resident_number: '004',
-    full_name: 'Mrs. Folashade Balogun',
-    phone_number: '07033445566',
-    additional_phone: null,
-    email: 'folashade.balogun@outlook.com',
-    house_number: 'Block C, Apt 3, Coral Gardens',
-    address: 'Coral Gardens, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Inactive',
-    account_activated: false,
-    profile_completed: false,
-    account_status: 'NOT ACTIVATED',
-    registration_date: '2026-08-12',
-    created_at: new Date('2026-08-12T14:20:00Z').toISOString(),
-    updated_at: new Date('2026-08-12T14:20:00Z').toISOString()
-  },
-  {
-    id: '00000000-0000-0000-0001-000000000005',
-    resident_number: '005',
-    full_name: 'Chief Emeka Okonjo',
-    phone_number: '08011223344',
-    additional_phone: null,
-    email: 'emeka.okonjo@fingerofgodestate.ng',
-    house_number: 'Plot 25, Boulevard',
-    address: 'Plot 25 Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: false,
-    profile_completed: false,
-    account_status: 'NOT ACTIVATED',
-    registration_date: '2026-10-02',
-    created_at: new Date('2026-10-02T19:51:29Z').toISOString(),
-    updated_at: new Date('2026-10-02T19:51:29Z').toISOString()
-  },
-  {
-    id: '00000000-0000-0000-0001-000000000010',
-    auth_user_id: 'd1b49d39-12aa-46ad-9196-878d609706f2',
-    resident_number: '010',
-    full_name: 'Mrs. Isis Nwabueze',
-    phone_number: '08038383810',
-    additional_phone: null,
-    email: 'isis38f@gmail.com',
-    house_number: 'Plot 10, Palm Avenue',
-    address: '10 Palm Avenue, Phase 1, Finger of God Estate, Iyiaba, Asaba',
-    state: 'Delta',
-    lga: 'Oshimili South',
-    status: 'Active',
-    account_activated: true,
-    profile_completed: true,
-    account_status: 'ACTIVE',
-    registration_date: '2026-08-15',
-    created_at: new Date('2026-08-15T10:00:00Z').toISOString(),
-    updated_at: new Date('2026-08-15T10:00:00Z').toISOString()
-  }
-];
+const DEFAULT_RESIDENTS: any[] = [];
 
 export interface PersistentDatabaseSchema {
   estate_settings: typeof DEFAULT_ESTATE_SETTINGS;
@@ -197,7 +80,7 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
       const parsed = JSON.parse(data);
       return {
         estate_settings: parsed.estate_settings || DEFAULT_ESTATE_SETTINGS,
-        residents: parsed.residents || DEFAULT_RESIDENTS,
+        residents: Array.isArray(parsed.residents) ? parsed.residents : [],
         profiles: parsed.profiles || [
           {
             id: '2aef6033-2600-4d7a-aaa5-7f54c441e429',
@@ -575,6 +458,25 @@ export const serverDb = {
     }
 
     return residentRecord;
+  },
+
+  async clearAllResidents(): Promise<{ success: boolean; deletedCount: number }> {
+    let deletedCount = localDb.residents.length;
+    localDb.residents = [];
+    saveDbToFile(localDb);
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('residents')
+        .delete()
+        .neq('resident_number', '___NONE___')
+        .select();
+      if (!error && Array.isArray(data)) {
+        deletedCount = Math.max(deletedCount, data.length);
+      }
+    } catch (e) {
+      console.warn('Supabase clear residents warning:', e);
+    }
+    return { success: true, deletedCount };
   },
 
   // PAYMENTS & TRANSACTIONS

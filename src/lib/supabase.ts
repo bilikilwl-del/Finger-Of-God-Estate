@@ -98,76 +98,7 @@ const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   first_payment_month: 'October 2026'
 };
 
-const INITIAL_RESIDENTS_SEED: Resident[] = [
-  {
-    id: 'res-001',
-    resident_number: '001',
-    full_name: 'Engr. Babatunde Adeleke',
-    phone_number: '08034567890',
-    additional_phone: '08023334444',
-    email: 'babatunde.adeleke@gmail.com',
-    house_number: 'Plot 4A',
-    address: 'Hibiscus Crescent, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
-    notes: 'Resident Executive Committee Member (Zonal Rep)',
-    registration_date: '2026-09-01',
-    status: 'Active',
-    created_at: new Date('2026-09-01T08:00:00Z').toISOString(),
-    updated_at: new Date('2026-09-01T08:00:00Z').toISOString()
-  },
-  {
-    id: 'res-002',
-    resident_number: '002',
-    full_name: 'Dr. Chioma Nwachukwu',
-    phone_number: '08098765432',
-    additional_phone: null,
-    email: 'dr.chioma.nw@yahoo.com',
-    house_number: 'House 12',
-    address: 'Palm View Boulevard, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
-    notes: 'Primary household contact',
-    registration_date: '2026-09-05',
-    status: 'Active',
-    created_at: new Date('2026-09-05T09:30:00Z').toISOString(),
-    updated_at: new Date('2026-09-05T09:30:00Z').toISOString()
-  },
-  {
-    id: 'res-003',
-    resident_number: '003',
-    full_name: 'Alhaji Usman Danladi',
-    phone_number: '08123459876',
-    additional_phone: '09011223344',
-    email: null,
-    house_number: 'Plot 18B',
-    address: 'Acacia Close, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
-    notes: null,
-    registration_date: '2026-09-10',
-    status: 'Active',
-    created_at: new Date('2026-09-10T11:15:00Z').toISOString(),
-    updated_at: new Date('2026-09-10T11:15:00Z').toISOString()
-  },
-  {
-    id: 'res-004',
-    resident_number: '004',
-    full_name: 'Mrs. Folashade Balogun',
-    phone_number: '07033445566',
-    additional_phone: null,
-    email: 'f.balogun@outlook.com',
-    house_number: 'Flat 3, Block C',
-    address: 'Oak Street, Finger of God Estate',
-    state: 'Lagos',
-    lga: 'Eti-Osa',
-    notes: 'Property leased out temporarily',
-    registration_date: '2026-09-12',
-    status: 'Inactive',
-    created_at: new Date('2026-09-12T14:20:00Z').toISOString(),
-    updated_at: new Date('2026-09-15T16:00:00Z').toISOString()
-  }
-];
+const INITIAL_RESIDENTS_SEED: Resident[] = [];
 
 // ==========================================
 // LOCAL STORAGE KEYS & SYNC HELPERS
@@ -2120,6 +2051,13 @@ export const dbService = {
     });
 
     return createdResident;
+  },
+
+  async addResident(
+    residentData: Omit<Resident, 'id' | 'created_at' | 'updated_at'>,
+    adminEmail: string = 'admin'
+  ): Promise<Resident> {
+    return this.createResident(residentData, adminEmail);
   },
 
   // COMPLETE ONE-TIME FIRST-LOGIN PROFILE SETUP
