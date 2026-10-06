@@ -117,7 +117,7 @@ export function validateNigerianPhone(input: string): PhoneValidationResult {
 
 /**
  * Formats any variation of a Nigerian phone number into the standard international format (2348012345678)
- * required by Nigerian SMS gateways (SmartSMS, Termii, etc.).
+ * required by Nigerian SMS gateways (SMSLive247, Termii, etc.).
  */
 export function formatNigerianPhoneForSMS(input: string): string {
   if (!input) return '';

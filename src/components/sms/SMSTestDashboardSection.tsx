@@ -108,7 +108,7 @@ export const SMSTestDashboardSection: React.FC = () => {
         deliveryLabel: 'Network Error',
         message: 'Network error connecting to estate SMS service.',
         error: err?.message || 'Network exception',
-        provider: configCheck?.provider || 'SmartSMSSolutions',
+        provider: configCheck?.provider || 'SMSLive247',
         senderId: configCheck?.senderId || 'FINGEROFGOD',
         recipientMasked: '234***',
         timestamp: new Date().toISOString()
@@ -202,7 +202,7 @@ export const SMSTestDashboardSection: React.FC = () => {
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
               <span className="text-slate-500 font-medium">SMS Provider:</span>
               <span className="font-bold text-slate-900 font-mono">
-                {configCheck?.provider || 'SmartSMSSolutions'}
+                {configCheck?.provider || 'SMSLive247'}
               </span>
             </div>
 

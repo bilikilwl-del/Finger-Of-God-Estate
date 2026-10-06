@@ -353,7 +353,7 @@ export const OutstandingPaymentSMSSection: React.FC<OutstandingPaymentSMSSection
                 onClick={handleOpenSendModal}
                 disabled={approvedCount === 0 || isSending}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
-                title="Send approved reminders via SmartSMSSolutions"
+                title="Send approved reminders via SMSLive247"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>SEND APPROVED SMS ({approvedCount})</span>
@@ -556,7 +556,7 @@ export const OutstandingPaymentSMSSection: React.FC<OutstandingPaymentSMSSection
             <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start gap-2">
               <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <p>
-                <strong>Provider Delivery Notice:</strong> This action dispatches real SMS messages through SmartSMSSolutions to resident mobile numbers.
+                <strong>Provider Delivery Notice:</strong> This action dispatches real SMS messages through SMSLive247 to resident mobile numbers.
               </p>
             </div>
 

@@ -3492,22 +3492,19 @@ INITIAL_SERVER_SMS.forEach(s => smsLogsStore.set(s.id, s));
 
 // Helper: Read SMS provider configurations from server environment
 function getSmsProvider(): string {
-  const p = (process.env.SMS_PROVIDER || 'termii').toLowerCase().trim();
-  if (p.includes('smart') || p.includes('smartsms')) {
-    return 'smart_sms';
-  }
+  const p = (process.env.SMS_PROVIDER || 'smslive247').toLowerCase().trim();
   if (p.includes('termii')) {
     return 'termii';
   }
-  return p;
+  return 'smslive247';
 }
 
 function getSmsApiKey(): string {
-  return (process.env.SMS_API_KEY || process.env.TERMII_API_KEY || process.env.SMARTSMS_API_KEY || '').trim();
+  return (process.env.SMSLIVE247_API_KEY || process.env.SMS_API_KEY || process.env.TERMII_API_KEY || '').trim();
 }
 
 function getSmsSenderId(): string {
-  return (process.env.SMS_SENDER_ID || process.env.TERMII_SENDER_ID || 'FINGEROFGOD').trim().substring(0, 11);
+  return (process.env.SMSLIVE247_SENDER_ID || process.env.SMS_SENDER_ID || process.env.TERMII_SENDER_ID || 'FINGEROFGOD').trim().substring(0, 11);
 }
 
 function getSmsChannel(): string {
@@ -3605,7 +3602,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
     return {
       success: false,
       status: 'NOT_CONFIGURED',
-      error: 'SMS SERVICE NOT CONFIGURED: No valid SMS_API_KEY detected in server environment. Set SMS_API_KEY in .env to enable live delivery.'
+      error: 'SMS SERVICE NOT CONFIGURED: No valid SMSLIVE247_API_KEY or SMS_API_KEY detected in server environment.'
     };
   }
 
@@ -3617,47 +3614,48 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
   console.log(`[SMS Dispatch Request] Provider: ${provider}, Sender: ${senderId}, Target: ${maskedPhone}, Type: ${reminderType}`);
 
   try {
-    if (provider === 'smart_sms' || provider.includes('smart')) {
-      const params = new URLSearchParams();
-      params.append('token', apiKey);
-      params.append('sender', senderId);
-      params.append('to', normalizedPhone);
-      params.append('message', messageText);
-      params.append('type', '0'); // Plain text
-      params.append('routing', channel === 'corporate' ? '4' : '3'); // Route 3: Basic with DND fallback; Route 4: Corporate
-
-      const response = await fetch('https://app.smartsmssolutions.com/io/api/client/v1/sms/', {
+    if (provider === 'smslive247' || provider.includes('live')) {
+      const response = await fetch('https://api.smslive247.com/api/v4/sms', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
         },
-        body: params
+        body: JSON.stringify({
+          senderID: senderId,
+          mobileNumber: normalizedPhone,
+          messageText: messageText
+        })
       });
 
       const data = await response.json().catch(() => ({}));
 
-      const isSuccess = response.ok && 
-        data.code === 1000 && 
-        !data.failed && 
-        (Boolean(data.successful) || Boolean(data.basic_successful) || Boolean(data.message_id));
+      const isSuccess = response.ok && (
+        data.status === 200 || 
+        data.status === '200' || 
+        data.status === 'success' || 
+        data.status === 'OK' || 
+        Boolean(data.data?.messageID || data.data?.messageId || data.data?.sessionID || data.messageID || data.sessionID) ||
+        (!data.error && !data.errors && data.message && (data.message.toLowerCase().includes('success') || data.message.toLowerCase().includes('sent') || data.message.toLowerCase().includes('accepted')))
+      );
 
       if (isSuccess) {
-        const msgId = data.message_id || `sms-${Date.now()}`;
+        const msgId = data.data?.messageID || data.data?.messageId || data.data?.sessionID || data.messageID || data.message_id || data.sessionID || `live247-${Date.now()}`;
         lastSuccessfulSmsTimestamp = new Date().toISOString();
-        console.log(`[SMS Success] SmartSMSSolutions accepted message. ID: ${msgId}, Recipient: ${maskedPhone}, Units: ${data.units_used || 'N/A'}`);
+        console.log(`[SMS Success] SMSLive247 accepted message. ID: ${msgId}, Recipient: ${maskedPhone}`);
         return {
           success: true,
           status: 'SENT',
           providerMessageId: String(msgId)
         };
       } else {
-        const errMessage = data.comment || data.error || data.failed || data.invalid || data.message || `HTTP ${response.status} from SmartSMSSolutions`;
+        const errMessage = data.message || data.error || (data.errors ? (Array.isArray(data.errors) ? data.errors.join(', ') : JSON.stringify(data.errors)) : `HTTP ${response.status} from SMSLive247`);
         lastFailedSmsTimestamp = new Date().toISOString();
-        console.warn(`[SMS Failed] Provider: SmartSMSSolutions, HTTP: ${response.status}, Code: ${data.code || 'N/A'}, Phone: ${maskedPhone}, Type: ${reminderType}, Reason: ${errMessage}`);
+        console.warn(`[SMS Failed] Provider: SMSLive247, HTTP: ${response.status}, Phone: ${maskedPhone}, Type: ${reminderType}, Reason: ${errMessage}`);
         return {
           success: false,
           status: 'FAILED',
-          error: `SmartSMS Gateway Error: ${errMessage}`
+          error: `SMSLive247 Gateway Error: ${errMessage}`
         };
       }
     } else if (provider === 'termii') {
@@ -3700,7 +3698,7 @@ async function dispatchSms(toPhone: string, messageText: string, reminderType: s
       return {
         success: false,
         status: 'FAILED',
-        error: `Unsupported SMS provider "${provider}". Configured providers: "smart sms solutions", "termii".`
+        error: `Unsupported SMS provider "${provider}". Configured providers: "smslive247", "termii".`
       };
     }
   } catch (err: any) {
@@ -4117,11 +4115,11 @@ let lastAdminTestSmsTimestamp = 0;
 // 1. Check Server SMS Configuration (Without Sending SMS)
 app.get('/api/admin/sms/check-config', requireAdminAuth, (_req: Request, res: Response) => {
   const rawProvider = getSmsProvider();
-  const providerDisplay = rawProvider === 'smart_sms' || rawProvider.includes('smart') 
-    ? 'SmartSMSSolutions' 
+  const providerDisplay = rawProvider === 'smslive247' || rawProvider.includes('live') 
+    ? 'SMSLive247' 
     : rawProvider === 'termii' 
     ? 'Termii' 
-    : rawProvider;
+    : 'SMSLive247';
   const configured = isSmsConfigured();
   const apiKey = getSmsApiKey();
   const senderId = getSmsSenderId();
@@ -4188,11 +4186,11 @@ app.post('/api/admin/sms/test', requireAdminAuth, async (req: Request, res: Resp
     lastAdminTestSmsTimestamp = now;
 
     const rawProvider = getSmsProvider();
-    const providerDisplay = rawProvider === 'smart_sms' || rawProvider.includes('smart') 
-      ? 'SmartSMSSolutions' 
+    const providerDisplay = rawProvider === 'smslive247' || rawProvider.includes('live') 
+      ? 'SMSLive247' 
       : rawProvider === 'termii' 
       ? 'Termii' 
-      : rawProvider;
+      : 'SMSLive247';
     const senderId = getSmsSenderId();
 
     const defaultMsg = 'Finger of God Estate: This is a test SMS from the Resident Portal. If you received this message, the estate SMS service is working correctly.';
