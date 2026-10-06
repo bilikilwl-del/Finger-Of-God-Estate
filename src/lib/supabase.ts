@@ -6244,6 +6244,19 @@ export const authService = {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
+          // 0. Check Supabase Auth user_metadata role
+          const metaRole = session.user.user_metadata?.role;
+          if (metaRole === 'admin' || metaRole === 'Super Admin' || metaRole === 'Administrator') {
+            const userObj = {
+              id: session.user.id,
+              email: session.user.email,
+              full_name: session.user.user_metadata?.full_name || 'Estate Administrator',
+              role: 'admin'
+            };
+            this.setCurrentUser(userObj);
+            return userObj;
+          }
+
           // 1. Check profiles table in Supabase using authenticated user's UUID
           try {
             const { data: profileRecord, error: pErr } = await supabase
@@ -6330,21 +6343,30 @@ export const authService = {
           let isAuthorizedAdmin = false;
           let adminFullName = 'Estate Administrator';
 
-          // 1. Try profiles table in Supabase
-          try {
-            const { data: profileRecord, error: pErr } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', data.user.id)
-              .maybeSingle();
+          // 0. Check Supabase Auth user_metadata role
+          const metaRole = data.user.user_metadata?.role;
+          if (metaRole === 'admin' || metaRole === 'Super Admin' || metaRole === 'Administrator') {
+            isAuthorizedAdmin = true;
+            adminFullName = data.user.user_metadata?.full_name || adminFullName;
+          }
 
-            if (!pErr && profileRecord) {
-              if (profileRecord.role === 'admin' || profileRecord.role === 'Super Admin' || profileRecord.role === 'Administrator') {
-                isAuthorizedAdmin = true;
-                adminFullName = profileRecord.full_name || adminFullName;
+          // 1. Try profiles table in Supabase
+          if (!isAuthorizedAdmin) {
+            try {
+              const { data: profileRecord, error: pErr } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', data.user.id)
+                .maybeSingle();
+
+              if (!pErr && profileRecord) {
+                if (profileRecord.role === 'admin' || profileRecord.role === 'Super Admin' || profileRecord.role === 'Administrator') {
+                  isAuthorizedAdmin = true;
+                  adminFullName = profileRecord.full_name || adminFullName;
+                }
               }
-            }
-          } catch {}
+            } catch {}
+          }
 
           // 2. Try server-side verification with Bearer token
           if (!isAuthorizedAdmin) {

@@ -105,7 +105,10 @@ function getNavFromPathname(pathname: string): { tab: NavigationTab; slug: strin
     return { tab: 'election', slug: '' };
   }
   // Private Admin Routes
-  if (path === '/admin-login' || path === '/admin/login' || path === '/admin' || path === '/admin/dashboard' || path === '/dashboard') {
+  if (path === '/admin_auth' || path === '/admin/auth' || path === '/admin-login' || path === '/admin_login' || path === '/admin/login') {
+    return { tab: 'admin_login', slug: '' };
+  }
+  if (path === '/admin' || path === '/admin/dashboard' || path === '/dashboard') {
     return { tab: 'dashboard', slug: '' };
   }
 
@@ -128,8 +131,9 @@ function getPathnameFromTab(tab: NavigationTab, slug?: string): string {
     case 'public_residents': return '/residents';
     case 'verify_receipt': return '/verify-receipt';
     case 'election': return '/election';
-    case 'admin_election':
     case 'admin_login':
+      return '/admin_auth';
+    case 'admin_election':
     case 'dashboard':
     case 'residents':
     case 'payments':
@@ -346,7 +350,7 @@ export default function App() {
     await authService.logout();
     setAdminUser(null);
     showToast('Signed out of administrative console.', 'info');
-    navigateTo('dashboard');
+    navigateTo('admin_login');
   };
 
   const handleAdminAuthenticated = async (user: any) => {
@@ -943,7 +947,7 @@ export default function App() {
           />
 
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-            {currentTab === 'dashboard' && (
+            {(currentTab === 'dashboard' || currentTab === 'admin_login') && (
               <AdvancedManagementDashboard
                 residents={residents}
                 estateSettings={estateSettings}
