@@ -250,6 +250,12 @@ export default function App() {
         if (savedRes) {
           setCurrentResident(savedRes);
         }
+
+        // If visiting /activate route, open activation flow directly
+        if (typeof window !== 'undefined' && window.location.pathname.toLowerCase().includes('/activate')) {
+          setResidentLoginInitialTab('activate');
+          setIsResidentLoginOpen(true);
+        }
       } catch (err) {
         console.warn('Notice initializing app data:', err);
       } finally {

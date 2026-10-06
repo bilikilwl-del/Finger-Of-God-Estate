@@ -156,6 +156,8 @@ interface ServerResidentRecord {
   lga: string;
   status: 'Active' | 'Inactive';
   registration_date: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface ServerAnnouncementRecord {
@@ -1563,6 +1565,7 @@ interface ServerResidentOtpRecord {
   created_at: number;
 }
 const residentOtpStore = new Map<string, ServerResidentOtpRecord>();
+const activationOtpStore = new Map<string, ServerResidentOtpRecord>();
 const residentLoginAttempts = new Map<string, { count: number; locked_until: number }>();
 
 // RESIDENT PORTAL: SEND OTP ENDPOINT
@@ -1675,8 +1678,8 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
       expiresInSeconds: 600,
       cooldownSeconds: 45,
       // For development/demo environment testing, include simulated code hint safely
-      isDevDemo: !isSmsConfigured(),
-      demoOtp: !isSmsConfigured() ? otpCode : undefined
+      isDevDemo: process.env.NODE_ENV !== 'production' || !isSmsConfigured(),
+      demoOtp: (process.env.NODE_ENV !== 'production' || !isSmsConfigured()) ? otpCode : undefined
     });
   } catch (err: any) {
     console.error('Send OTP error:', err);
@@ -1786,6 +1789,262 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('Verify OTP error:', err);
+    res.status(500).json({
+      success: false,
+      message: "We couldn't complete the request. Please check your internet connection and try again."
+    });
+  }
+});
+
+// RESIDENT PORTAL: REQUEST ACTIVATION CODE (SMS OTP)
+app.post('/api/resident/request-activation-code', async (req: Request, res: Response) => {
+  try {
+    const { residentNumber, phoneNumber } = req.body;
+
+    if (!residentNumber || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter both your Resident Number (001–300) and registered phone number.'
+      });
+    }
+
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+      });
+    }
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
+
+    if (!resident || resident.status !== 'Active') {
+      return res.status(400).json({
+        success: false,
+        message: `Resident record #${cleanNum} could not be verified in the active estate register. Please contact estate administration.`
+      });
+    }
+
+    // Check if account has already been activated
+    if (resident.account_activated) {
+      return res.status(400).json({
+        success: false,
+        isAlreadyActivated: true,
+        message: `This resident account (#${cleanNum} — ${resident.full_name}) is already activated. Please sign in via Resident Login.`
+      });
+    }
+
+    // Verify phone number match against registered record
+    const isPhoneMatch = arePhoneNumbersEqual(phoneNumber, resident.phone_number) ||
+                         (resident.additional_phone && arePhoneNumbersEqual(phoneNumber, resident.additional_phone));
+
+    if (!isPhoneMatch) {
+      return res.status(400).json({
+        success: false,
+        message: `The phone number provided does not match the registered telephone number for Resident #${cleanNum}. Please check your phone number or contact estate administration.`
+      });
+    }
+
+    const now = Date.now();
+    const existingOtp = activationOtpStore.get(cleanNum);
+    if (existingOtp && existingOtp.resend_after > now) {
+      const wait = Math.ceil((existingOtp.resend_after - now) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${wait}s before requesting another activation code.`,
+        cooldownSeconds: wait
+      });
+    }
+
+    // Generate 6-digit numeric OTP code
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes expiry
+    const resendAfter = now + 45 * 1000; // 45 seconds cooldown
+
+    activationOtpStore.set(cleanNum, {
+      resident_number: cleanNum,
+      phone_number: resident.phone_number,
+      otp_code: otpCode,
+      expires_at: expiresAt,
+      attempts: 0,
+      resend_after: resendAfter,
+      created_at: now
+    });
+
+    // Mask phone for user confirmation display (e.g., 080••••4567)
+    const rawPhone = resident.phone_number;
+    const maskedPhone = rawPhone.length >= 8 
+      ? `${rawPhone.substring(0, 4)}••••${rawPhone.substring(rawPhone.length - 3)}`
+      : 'registered phone number';
+
+    // Dispatch real SMS
+    const messageBody = `Finger of God Estate: Your account activation code is ${otpCode}. Valid for 10 minutes. Use this code to activate your Resident Portal account. Resident No: #${cleanNum}.`;
+    dispatchSms(resident.phone_number, messageBody, 'ACCOUNT_ACTIVATION').catch(e => {
+      console.warn('[Activation SMS Dispatch Notice]', e);
+    });
+
+    return res.json({
+      success: true,
+      message: `A 6-digit activation code has been dispatched to ${maskedPhone}.`,
+      maskedPhone,
+      residentName: resident.full_name,
+      residentNumber: cleanNum,
+      expiresInSeconds: 600,
+      cooldownSeconds: 45,
+      isDevDemo: process.env.NODE_ENV !== 'production' || !isSmsConfigured(),
+      demoOtp: (process.env.NODE_ENV !== 'production' || !isSmsConfigured()) ? otpCode : undefined
+    });
+  } catch (err: any) {
+    console.error('Request activation code error:', err);
+    res.status(500).json({
+      success: false,
+      message: "We couldn't complete the request. Please check your internet connection and try again."
+    });
+  }
+});
+
+// RESIDENT PORTAL: VERIFY ACTIVATION CODE & ACTIVATE ACCOUNT
+app.post('/api/resident/verify-activation-otp', async (req: Request, res: Response) => {
+  try {
+    const { residentNumber, phoneNumber, otp, rememberDevice } = req.body;
+
+    if (!residentNumber || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter the 6-digit activation code.'
+      });
+    }
+
+    const cleanNum = normalizeResidentNumber(residentNumber);
+    const cleanOtp = String(otp).trim().replace(/\D/g, '');
+    const now = Date.now();
+
+    const otpRecord = activationOtpStore.get(cleanNum);
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'This activation code has expired or was not requested. Please request a new activation code.'
+      });
+    }
+
+    if (otpRecord.expires_at < now) {
+      activationOtpStore.delete(cleanNum);
+      return res.status(400).json({
+        success: false,
+        message: 'This activation code has expired. Please request a new activation code.'
+      });
+    }
+
+    if (otpRecord.attempts >= 5) {
+      activationOtpStore.delete(cleanNum);
+      return res.status(429).json({
+        success: false,
+        message: 'Too many incorrect attempts. Please request a new activation code.'
+      });
+    }
+
+    if (otpRecord.otp_code !== cleanOtp) {
+      otpRecord.attempts += 1;
+      activationOtpStore.set(cleanNum, otpRecord);
+      const remaining = 5 - otpRecord.attempts;
+
+      return res.status(400).json({
+        success: false,
+        message: remaining > 0
+          ? `Incorrect activation code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Too many incorrect attempts. Please request a new activation code.'
+      });
+    }
+
+    // OTP Verified successfully! Clean up activation OTP record
+    activationOtpStore.delete(cleanNum);
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+    }
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: 'Resident record could not be found.'
+      });
+    }
+
+    // Activate the resident account!
+    resident.account_activated = true;
+    resident.account_status = 'ACTIVE';
+    resident.updated_at = new Date().toISOString();
+
+    residentsStore.set(cleanNum, resident);
+    await serverDb.saveResident(resident);
+
+    // Sync to Supabase if configured
+    if (supabaseAdmin) {
+      try {
+        await supabaseAdmin
+          .from('residents')
+          .update({
+            account_activated: true,
+            account_status: 'ACTIVE',
+            updated_at: new Date().toISOString()
+          })
+          .eq('resident_number', cleanNum);
+      } catch (sbErr) {
+        console.warn('[Supabase Sync Notice during Activation]', sbErr);
+      }
+    }
+
+    // Issue session token
+    const tokenValidityMs = rememberDevice ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const sessionToken = `fog_res_${crypto.randomBytes(24).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, {
+      resident_number: cleanNum,
+      created_at: now
+    });
+
+    // Record audit log
+    const auditEntry: ServerAuditRecord = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      admin_email: 'resident-portal@fingerofgodestate.ng',
+      action: 'RESIDENT_ACCOUNT_ACTIVATION',
+      entity_type: 'resident',
+      entity_id: cleanNum,
+      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account via SMS OTP.`,
+      metadata: { resident_number: cleanNum, resident_name: resident.full_name },
+      created_at: new Date().toISOString()
+    };
+    auditLogsStore.unshift(auditEntry);
+
+    return res.json({
+      success: true,
+      message: `Account activated successfully! Welcome to Finger of God Estate Resident Portal, ${resident.full_name}.`,
+      token: sessionToken,
+      rememberDevice: Boolean(rememberDevice),
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: true,
+        profile_completed: !!resident.profile_completed,
+        account_status: 'ACTIVE',
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Verify activation OTP error:', err);
     res.status(500).json({
       success: false,
       message: "We couldn't complete the request. Please check your internet connection and try again."

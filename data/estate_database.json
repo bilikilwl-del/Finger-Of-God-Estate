@@ -101,12 +101,12 @@
       "state": "Delta",
       "lga": "Oshimili South",
       "status": "Active",
-      "account_activated": false,
+      "account_activated": true,
       "profile_completed": false,
-      "account_status": "NOT ACTIVATED",
+      "account_status": "ACTIVE",
       "registration_date": "2026-10-02",
       "created_at": "2026-10-02T19:51:29.833Z",
-      "updated_at": "2026-10-02T19:51:29.833Z"
+      "updated_at": "2026-10-06T09:24:26.418Z"
     },
     {
       "id": "res-010",
@@ -137,7 +137,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-04T17:25:03.765Z"
+      "updated_at": "2026-10-06T09:24:13.777Z"
     }
   ],
   "admin_users": [
@@ -149,7 +149,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-04T17:25:03.765Z"
+      "updated_at": "2026-10-06T09:24:13.777Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -202,6 +202,36 @@
     }
   ],
   "road_project_transactions": [
+    {
+      "id": "rd-tx-1791216666954-f6fc",
+      "date": "2026-10-05",
+      "type": "CREDIT",
+      "notes": "Verified online contribution via Paystack (bank_transfer). Auth code: AUTH_8f75s23mqt",
+      "amount": 100,
+      "source": "Paystack",
+      "status": "VERIFIED",
+      "paid_at": "2026-10-05T15:48:57.000Z",
+      "category": "Building Contribution",
+      "currency": "NGN",
+      "reference": "FOG-RD-PAY-1791215211242-677530",
+      "created_at": "2026-10-05T15:48:57.000Z",
+      "approved_by": "Paystack Automated Gateway (Server Verified)",
+      "description": "Resident 011 Road Modernization Contribution",
+      "resident_id": null,
+      "verified_at": "2026-10-05T15:48:57.000Z",
+      "project_name": "Finger of God Estate Road Modernization Project",
+      "project_type": "road_modernization",
+      "payment_status": "success",
+      "building_number": "011",
+      "payer_or_vendor": "CJohn",
+      "resident_number": "011",
+      "running_balance": 0,
+      "paystack_reference": "FOG-RD-PAY-1791215211242-677530",
+      "receipt_or_invoice_ref": "RCP-RD-PSTK-666954",
+      "paystack_transaction_id": "6627732816",
+      "provider_transaction_id": "6627732816",
+      "contributor_display_name": "CJohn"
+    },
     {
       "id": "rd-tx-1791133611354-5482",
       "date": "2026-10-04",
@@ -336,5 +366,5 @@
       "created_at": "2026-10-02T19:51:01.698Z"
     }
   ],
-  "last_updated": "2026-10-04T17:30:03.021Z"
+  "last_updated": "2026-10-06T09:24:26.418Z"
 }
