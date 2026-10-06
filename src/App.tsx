@@ -58,6 +58,7 @@ import { PublicResidentsView } from './components/public/PublicResidentsView';
 import { PublicElectionView } from './components/election/PublicElectionView';
 import { AdminElectionView } from './components/admin/AdminElectionView';
 import { NotFoundView } from './components/common/NotFoundView';
+import { TawkToWidget } from './components/common/TawkToWidget';
 
 import { CheckCircle2, AlertCircle, Info, X, ShieldAlert } from 'lucide-react';
 
@@ -394,6 +395,7 @@ export default function App() {
   if (currentTab === 'home') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicHomeView
           estateSettings={estateSettings}
@@ -432,6 +434,7 @@ export default function App() {
   if (currentTab === 'security_public') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicSecurityView
           estateSettings={estateSettings}
@@ -476,6 +479,7 @@ export default function App() {
   if (currentTab === 'road_project') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicRoadProjectView
           estateSettings={estateSettings}
@@ -513,6 +517,7 @@ export default function App() {
   if (currentTab === 'estate_levy') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicEstateLevyView
           estateSettings={estateSettings}
@@ -547,6 +552,7 @@ export default function App() {
   if (currentTab === 'login') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <ResidentLoginView
           isModal={false}
@@ -566,6 +572,7 @@ export default function App() {
   if (currentTab === 'resident_portal') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         {currentResident ? (
           <ResidentDashboardView
@@ -648,6 +655,7 @@ export default function App() {
   if (currentTab === 'public_announcements') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicAnnouncementsView
           estateSettings={estateSettings}
@@ -684,6 +692,7 @@ export default function App() {
   if (currentTab === 'announcement_detail') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <AnnouncementDetailView
           slug={selectedNoticeSlug}
@@ -721,6 +730,7 @@ export default function App() {
   if (currentTab === 'documents') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicDocumentsView
           estateSettings={estateSettings}
@@ -755,6 +765,7 @@ export default function App() {
   if (currentTab === 'contact') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicContactView
           estateSettings={estateSettings}
@@ -789,6 +800,7 @@ export default function App() {
   if (currentTab === 'public_residents') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicResidentsView
           estateSettings={estateSettings}
@@ -823,6 +835,7 @@ export default function App() {
   if (currentTab === 'verify_receipt') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <ReceiptVerificationView
           initialReceiptNumber={receiptToVerify}
@@ -845,6 +858,7 @@ export default function App() {
   if (currentTab === 'election') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <PublicElectionView
           estateSettings={estateSettings}
@@ -862,6 +876,7 @@ export default function App() {
   if (currentTab === 'not_found') {
     return (
       <div className="min-h-screen bg-slate-50">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={false} />
         {renderToast()}
         <NotFoundView
           estateSettings={estateSettings}
@@ -878,6 +893,7 @@ export default function App() {
   if (!adminUser) {
     return (
       <div className="min-h-screen bg-slate-950">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={true} />
         {renderToast()}
         <AdminLoginPage
           estateSettings={estateSettings}
@@ -892,6 +908,7 @@ export default function App() {
   if (adminUser.role !== 'admin') {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col justify-between text-slate-100 font-sans p-6">
+        <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={true} />
         {renderToast()}
         <div className="max-w-md w-full mx-auto my-auto bg-slate-900 border border-rose-500/30 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
           <div className="w-14 h-14 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center justify-center mx-auto shadow-inner">
@@ -926,6 +943,7 @@ export default function App() {
   // When properly authenticated as admin: render Admin Management Dashboard
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+      <TawkToWidget currentResident={currentResident} currentTab={currentTab} isAdminPage={true} />
       {renderToast()}
 
       {/* Main Admin Layout Container */}

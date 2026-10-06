@@ -121,8 +121,17 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
                 <span>Call Gate: {estateSettings.contact_phone || '08023456789'}</span>
               </a>
               <button
+                onClick={() => {
+                  import('../common/TawkToWidget').then(m => m.openTawkToChat());
+                }}
+                className="px-4 py-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/30 font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <span>Start Live Chat</span>
+              </button>
+              <button
                 onClick={() => onNavigate('security_public')}
-                className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Shield className="w-4 h-4 text-emerald-400" />
                 <span>Security Portal</span>

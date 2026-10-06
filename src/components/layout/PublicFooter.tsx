@@ -159,7 +159,18 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
-                  <span>Contact & Support</span>
+                  <span>Contact & Support Desk</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    import('../common/TawkToWidget').then(m => m.openTawkToChat());
+                  }}
+                  className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <ChevronRight className="w-3 h-3 text-emerald-500" />
+                  <span>💬 Live Support Chat</span>
                 </button>
               </li>
               <li>
