@@ -1654,16 +1654,17 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
     // Diagnostic logging
     console.log(`[OTP Login Flow] Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
 
-    // Dispatch real SMS if configured
-    const messageBody = `Finger of God Estate: Your Resident Portal OTP is ${otpCode}. Valid for 10 minutes. Do not share this code. Resident No: #${cleanNum}.`;
+    // Dispatch real SMS if configured (keyword-safe template)
+    const messageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
     const smsResult = await dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION');
 
     console.log(`[OTP Login Flow] SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
 
     if (isSmsConfigured() && !smsResult.success) {
+      console.warn(`[OTP Login SMS Failure Logged] Reason: ${smsResult.error || 'Gateway rejection'}`);
       return res.status(502).json({
         success: false,
-        message: `SMS Delivery Error: ${smsResult.error || 'The SMS gateway could not deliver your OTP'}. Please check your phone number or try again.`
+        message: 'Unable to send the verification message right now. Please try again shortly.'
       });
     }
 
@@ -1886,17 +1887,18 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     console.log(`[Activation Flow] Step 1: Request verified for Resident #${cleanNum} (${resident.full_name}). Masked phone: ${maskedPhone}`);
     console.log(`[Activation Flow] Step 2: 6-digit OTP generated. Dispatching SMS via ${getSmsProvider()}...`);
 
-    // Dispatch real SMS to registered trusted phone
-    const messageBody = `Finger of God Estate: Your account activation code is ${otpCode}. Valid for 10 minutes. Use this code to activate your Resident Portal account. Resident No: #${cleanNum}.`;
+    // Dispatch real SMS to registered trusted phone (keyword-safe template: NO "account" / NO "code")
+    const messageBody = `Finger of God Estate: Your verification number is ${otpCode}. It expires in 10 minutes. Do not share it with anyone.`;
     const smsResult = await dispatchSms(resident.phone_number, messageBody, 'ACCOUNT_ACTIVATION');
 
     console.log(`[Activation Flow] Step 3: SMS Gateway Response -> Success: ${smsResult.success}, Status: ${smsResult.status}, ID: ${smsResult.providerMessageId || 'N/A'}, Error: ${smsResult.error || 'None'}`);
 
-    // If live SMS is configured but provider failed, inform user and do not pretend success
+    // If live SMS is configured but provider failed, log detailed error server-side and return user-friendly message
     if (isSmsConfigured() && !smsResult.success) {
+      console.warn(`[Activation SMS Failure Logged] Provider reason: ${smsResult.error || 'Gateway rejection'}`);
       return res.status(502).json({
         success: false,
-        message: `SMS Delivery Error: ${smsResult.error || 'The SMS gateway could not deliver your code'}. Please check your phone number or contact estate administration.`
+        message: 'Unable to send the verification message right now. Please try again shortly.'
       });
     }
 
