@@ -18,13 +18,14 @@ import {
   Lock
 } from 'lucide-react';
 import { Resident, EstateSettings, MonthlyPayment, Receipt } from '../../types/database';
-import { dbService } from '../../lib/supabase';
+import { dbService, residentSessionService } from '../../lib/supabase';
 import { 
   initializePayment, 
   verifyPayment, 
   formatNaira, 
   loadPaystackInlineScript, 
   getPaystackConfig,
+  getResidentPaymentStatus,
   PaystackConfig 
 } from '../../lib/paystack';
 import { PaystackTestModal } from './PaystackTestModal';
@@ -85,11 +86,12 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle preselected resident
+  // Handle preselected or active session resident
   useEffect(() => {
-    if (isOpen && preselectedResident) {
-      setResidentNumberInput(preselectedResident.resident_number);
-      checkResidentAndLevy(preselectedResident.resident_number);
+    const activeResident = preselectedResident || residentSessionService.getCurrentResident();
+    if (isOpen && activeResident) {
+      setResidentNumberInput(activeResident.resident_number);
+      checkResidentAndLevy(activeResident.resident_number, activeResident);
     } else if (isOpen) {
       // Reset state for new lookup
       setStep('input_resident');
@@ -104,41 +106,71 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
 
   if (!isOpen) return null;
 
-  // STEP 1 & 2: Resident Lookup & Verification
-  const checkResidentAndLevy = async (resNumber: string) => {
+  // STEP 1 & 2: Resident Lookup & Verification (Secure Server-Side & Authenticated)
+  const checkResidentAndLevy = async (resNumber: string, passedResident?: Resident | null) => {
+    const activeRes = passedResident || preselectedResident || residentSessionService.getCurrentResident();
     const formatted = resNumber.trim().padStart(3, '0');
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      const residents = await dbService.getResidents();
-      const resident = residents.find(r => r.resident_number === formatted || r.resident_number === resNumber.trim());
+      // 1. If active resident is provided from authenticated session, use it as baseline
+      if (activeRes && (activeRes.resident_number === formatted || activeRes.resident_number === resNumber.trim())) {
+        setSelectedResident(activeRes);
+      }
 
-      if (!resident) {
-        setErrorMessage(`Resident number "${resNumber}" not found in estate directory.`);
-        setSelectedResident(null);
-        setStep('input_resident');
+      // 2. Authoritative server check with authenticated resident token / session
+      const statusRes = await getResidentPaymentStatus({
+        residentNumber: formatted,
+        periodMonth: targetMonth,
+        periodYear: targetYear
+      });
+
+      if (statusRes.success && statusRes.resident) {
+        setSelectedResident(statusRes.resident);
+        setExistingPayment(statusRes.payment || null);
+        setExistingReceipt(statusRes.receipt || null);
+        setStep('verify_resident');
         setLoading(false);
         return;
       }
 
-      setSelectedResident(resident);
-
-      // Check current levy status for target month & year
-      const payment = await dbService.getMonthlyPaymentForResident(resident.resident_number, targetMonth, targetYear);
-      setExistingPayment(payment);
-
-      if (payment && payment.status.toUpperCase() === 'PAID') {
-        // Fetch receipt if already paid
-        if (payment.paystack_reference) {
-          const rcp = await dbService.getReceiptByReference(payment.paystack_reference);
-          setExistingReceipt(rcp);
-        }
+      // 3. Fallback: if active resident matches, allow proceeding with active resident
+      if (activeRes && (activeRes.resident_number === formatted || activeRes.resident_number === resNumber.trim())) {
+        setSelectedResident(activeRes);
+        setStep('verify_resident');
+        setLoading(false);
+        return;
       }
 
-      setStep('verify_resident');
+      // 4. Fallback: check database via public lookup
+      const pubLookup = await dbService.lookupResidentPublic(formatted);
+      if (pubLookup.found && pubLookup.resident) {
+        setSelectedResident(pubLookup.resident as Resident);
+        setExistingPayment(null);
+        setExistingReceipt(null);
+        setStep('verify_resident');
+        setLoading(false);
+        return;
+      }
+
+      // 5. Resident truly not found or unauthenticated
+      setErrorMessage(
+        statusRes.message ||
+        pubLookup.message ||
+        'We could not find your estate resident account. Please contact the estate administrator.'
+      );
+      setSelectedResident(null);
+      setStep('input_resident');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Error checking resident information.');
+      if (activeRes && (activeRes.resident_number === formatted || activeRes.resident_number === resNumber.trim())) {
+        setSelectedResident(activeRes);
+        setStep('verify_resident');
+      } else {
+        setErrorMessage(err.message || 'We could not find your estate resident account. Please contact the estate administrator.');
+        setSelectedResident(null);
+        setStep('input_resident');
+      }
     } finally {
       setLoading(false);
     }

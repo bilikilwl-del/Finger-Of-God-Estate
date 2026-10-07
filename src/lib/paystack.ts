@@ -62,6 +62,56 @@ export async function getPaystackConfig(): Promise<PaystackConfig> {
   }
 }
 
+import { residentSessionService, supabase, isSupabaseConfigured } from './supabase';
+
+/**
+ * Helper: get authorization headers for resident requests
+ */
+export async function getResidentAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  
+  // 1. Prefer active Supabase Auth session token when authenticated
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+        return headers;
+      }
+    } catch {}
+  }
+
+  // 2. Fallback to stored resident session token
+  const resToken = residentSessionService.getResidentToken();
+  if (resToken) {
+    headers['Authorization'] = `Bearer ${resToken}`;
+  }
+  return headers;
+}
+
+/**
+ * Query authoritative resident payment and levy status from server
+ */
+export async function getResidentPaymentStatus(params: {
+  residentNumber: string;
+  periodMonth?: number;
+  periodYear?: number;
+}): Promise<{
+  success: boolean;
+  resident?: any;
+  payment?: any;
+  receipt?: any;
+  levyAmount?: number;
+  message?: string;
+}> {
+  const headers = await getResidentAuthHeaders();
+  const cleanNum = params.residentNumber.trim().padStart(3, '0');
+  const res = await fetch(`/api/paystack/resident-status?residentNumber=${cleanNum}&periodMonth=${params.periodMonth || 10}&periodYear=${params.periodYear || 2026}`, {
+    headers
+  });
+  return await res.json();
+}
+
 /**
  * Initialize payment on the server.
  * The server securely looks up resident and determines amount due (₦5,000 = 500,000 kobo).
@@ -72,9 +122,10 @@ export async function initializePayment(params: {
   periodYear?: number;
   email?: string;
 }): Promise<InitializePaymentResponse> {
+  const headers = await getResidentAuthHeaders();
   const res = await fetch('/api/paystack/initialize', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       residentNumber: params.residentNumber,
       periodMonth: params.periodMonth || 10,

@@ -74,6 +74,7 @@ export interface PersistentDatabaseSchema {
   profiles: any[];
   admin_users: any[];
   otp_challenges?: PersistentOtpChallenge[];
+  resident_sessions?: Array<{ token: string; resident_number: string; created_at: number }>;
   monthly_payments: any[];
   payment_transactions: any[];
   receipts: any[];
@@ -327,6 +328,48 @@ export const serverDb = {
     return localDb.residents;
   },
 
+  // RESIDENT SESSIONS
+  saveResidentSession(token: string, resident_number: string): void {
+    if (!localDb.resident_sessions) localDb.resident_sessions = [];
+    const cleanNum = String(resident_number).trim().padStart(3, '0');
+    const existing = localDb.resident_sessions.findIndex(s => s.token === token);
+    const sessionObj = { token, resident_number: cleanNum, created_at: Date.now() };
+    if (existing >= 0) {
+      localDb.resident_sessions[existing] = sessionObj;
+    } else {
+      localDb.resident_sessions.push(sessionObj);
+    }
+    saveDbToFile(localDb);
+  },
+
+  getResidentSession(token: string): { resident_number: string; created_at: number } | null {
+    if (localDb.resident_sessions) {
+      const found = localDb.resident_sessions.find(s => s.token === token);
+      if (found) return { resident_number: found.resident_number, created_at: found.created_at };
+    }
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        if (Array.isArray(parsed.resident_sessions)) {
+          localDb.resident_sessions = parsed.resident_sessions;
+          const found = parsed.resident_sessions.find((s: any) => s.token === token);
+          if (found) return { resident_number: found.resident_number, created_at: found.created_at };
+        }
+      }
+    } catch {}
+    return null;
+  },
+
+  deleteResidentSession(token: string): void {
+    if (!localDb.resident_sessions) return;
+    localDb.resident_sessions = localDb.resident_sessions.filter(s => s.token !== token);
+    saveDbToFile(localDb);
+  },
+
+  getAllResidentSessions(): Array<{ token: string; resident_number: string; created_at: number }> {
+    return localDb.resident_sessions || [];
+  },
+
   // =========================================================================
   // PERSISTENT SERVER-AUTHORITATIVE RESIDENT OTP CHALLENGES
   // =========================================================================
@@ -442,15 +485,84 @@ export const serverDb = {
     } catch {}
   },
 
+  async getResidentByAuthId(authUserId: string): Promise<any | null> {
+    if (!authUserId) return null;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('residents')
+        .select('*')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      if (!error && data) {
+        return {
+          ...data,
+          resident_number: String(data.resident_number).trim().padStart(3, '0')
+        };
+      }
+    } catch (e) {
+      console.warn('[Supabase getResidentByAuthId notice]', e);
+    }
+    const found = localDb.residents.find(r => r.auth_user_id === authUserId);
+    if (found) {
+      return {
+        ...found,
+        resident_number: String(found.resident_number).trim().padStart(3, '0')
+      };
+    }
+    return null;
+  },
+
   async getResidentByNumber(num: string): Promise<any | null> {
     const cleanNum = String(num).trim().padStart(3, '0');
+    const rawNum = String(num).trim();
+    const intNum = parseInt(rawNum, 10);
+    const unpadded = !isNaN(intNum) ? String(intNum) : cleanNum;
+
     try {
-      const { data, error } = await supabaseAdmin.from('residents').select('*').eq('resident_number', cleanNum).maybeSingle();
+      // 1. Check formatted 3-digit number (e.g. "016")
+      const { data, error } = await supabaseAdmin
+        .from('residents')
+        .select('*')
+        .eq('resident_number', cleanNum)
+        .maybeSingle();
+
       if (!error && data) {
-        return data;
+        return {
+          ...data,
+          resident_number: cleanNum
+        };
       }
-    } catch {}
-    return localDb.residents.find(r => String(r.resident_number).padStart(3, '0') === cleanNum) || null;
+
+      // 2. Check unpadded number if different (e.g. "16")
+      if (unpadded !== cleanNum) {
+        const { data: data2, error: err2 } = await supabaseAdmin
+          .from('residents')
+          .select('*')
+          .eq('resident_number', unpadded)
+          .maybeSingle();
+
+        if (!err2 && data2) {
+          return {
+            ...data2,
+            resident_number: cleanNum
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('[Supabase getResidentByNumber notice]', e);
+    }
+
+    const localFound = localDb.residents.find(r => 
+      String(r.resident_number).trim().padStart(3, '0') === cleanNum ||
+      String(r.resident_number).trim() === unpadded
+    );
+    if (localFound) {
+      return {
+        ...localFound,
+        resident_number: cleanNum
+      };
+    }
+    return null;
   },
 
   async getResidentById(id: string): Promise<any | null> {

@@ -54,6 +54,14 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<number>(10);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
 
+  // Sync state whenever currentResident is updated or resolved
+  React.useEffect(() => {
+    if (currentResident) {
+      setSearchResidentNumber(currentResident.resident_number);
+      setSearchedResident(currentResident);
+    }
+  }, [currentResident]);
+
   const levyAmount = estateSettings.monthly_security_levy || 5000;
   const formattedLevy = `₦${levyAmount.toLocaleString()}`;
 
@@ -68,6 +76,15 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
     setSearchError('');
     try {
       const cleanInput = searchResidentNumber.trim().padStart(3, '0');
+
+      // If the authenticated resident matches the queried number, use the authenticated resident record
+      if (currentResident && (currentResident.resident_number === cleanInput || currentResident.resident_number === searchResidentNumber.trim())) {
+        setSearchedResident(currentResident);
+        setSearchError('');
+        setSearching(false);
+        return;
+      }
+
       const lookupResult = await dbService.lookupResidentPublic(cleanInput);
 
       if (!lookupResult.found || !lookupResult.resident) {

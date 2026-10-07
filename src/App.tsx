@@ -13,7 +13,9 @@ import {
 import { 
   dbService, 
   authService, 
-  residentSessionService 
+  residentSessionService,
+  supabase,
+  isSupabaseConfigured
 } from './lib/supabase';
 import { diagnoseSupabaseConnection } from './lib/supabaseDiagnostics';
 
@@ -246,10 +248,16 @@ export default function App() {
         setResidents(loadedResidents);
         setActivityLogs(loadedLogs);
 
-        // Load saved resident session if exists
-        const savedRes = residentSessionService.getCurrentResident();
-        if (savedRes) {
-          setCurrentResident(savedRes);
+        // Authoritatively resolve authenticated resident from actual Supabase database record
+        const activeResident = await authService.getActiveResident();
+        if (activeResident) {
+          setCurrentResident(activeResident);
+        } else {
+          // Fallback to saved local resident session if exists
+          const savedRes = residentSessionService.getCurrentResident();
+          if (savedRes) {
+            setCurrentResident(savedRes);
+          }
         }
 
         // If visiting /activate route, open activation flow directly
@@ -265,6 +273,28 @@ export default function App() {
     };
 
     initData();
+
+    // Listen to Supabase Auth state changes for real-time resident session synchronization
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+            if (session?.user) {
+              const res = await authService.getActiveResident();
+              if (res) {
+                setCurrentResident(res);
+              }
+            }
+          }
+        });
+        authSubscription = authListener?.subscription || null;
+      } catch {}
+    }
+
+    return () => {
+      authSubscription?.unsubscribe();
+    };
   }, []);
 
   const handleOpenResidentLogin = (initialTab: 'login' | 'activate' = 'login') => {

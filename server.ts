@@ -226,13 +226,16 @@ export async function requireAuthenticatedResident(
   }
 
   let authResidentNumber: string | null = null;
+  let authUserId: string | null = null;
+  let resident: ServerResidentRecord | null = null;
 
-  // 1. Check local session store
-  const localSession = residentSessionsStore.get(token);
+  // 1. Check persistent/local session store
+  const localSession = residentSessionsStore.get(token) || serverDb.getResidentSession(token);
   if (localSession) {
     const MAX_SESSION_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
     if (Date.now() - localSession.created_at > MAX_SESSION_AGE) {
       residentSessionsStore.delete(token);
+      serverDb.deleteResidentSession(token);
       res.status(401).json({
         success: false,
         message: 'Unauthorized: Your session has expired. Please sign in again.'
@@ -240,19 +243,49 @@ export async function requireAuthenticatedResident(
       return null;
     }
     authResidentNumber = localSession.resident_number;
+    residentSessionsStore.set(token, localSession);
   } else if (token.startsWith('eyJ')) {
     // 2. Validate with Supabase Auth JWT
     try {
       const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
       if (!userErr && user) {
-        if (user.user_metadata?.resident_number) {
-          authResidentNumber = normalizeResidentNumber(user.user_metadata.resident_number);
-        } else {
-          const dbResidents = await serverDb.getResidents();
-          const found = dbResidents.find(r => r.auth_user_id === user.id);
-          if (found) {
-            authResidentNumber = found.resident_number;
+        authUserId = user.id;
+
+        // 1. Direct authoritative lookup in production Supabase residents table by auth_user_id
+        let resolvedRecord = await serverDb.getResidentByAuthId(user.id);
+
+        // 2. Match by authenticated user email if auth_user_id is not yet linked
+        if (!resolvedRecord && user.email) {
+          const { data: emailRes } = await supabaseAdmin
+            .from('residents')
+            .select('*')
+            .eq('email', user.email.toLowerCase())
+            .maybeSingle();
+
+          if (emailRes) {
+            resolvedRecord = {
+              ...emailRes,
+              resident_number: String(emailRes.resident_number).trim().padStart(3, '0')
+            };
+            try {
+              await supabaseAdmin
+                .from('residents')
+                .update({ auth_user_id: user.id })
+                .eq('id', emailRes.id);
+            } catch {}
           }
+        }
+
+        // 3. Fallback: Check user metadata resident number
+        if (!resolvedRecord && user.user_metadata?.resident_number) {
+          const metaNum = normalizeResidentNumber(user.user_metadata.resident_number);
+          resolvedRecord = await serverDb.getResidentByNumber(metaNum);
+        }
+
+        if (resolvedRecord) {
+          authResidentNumber = normalizeResidentNumber(resolvedRecord.resident_number);
+          resident = resolvedRecord as ServerResidentRecord;
+          residentsStore.set(authResidentNumber, resident);
         }
       }
     } catch (e) {
@@ -269,18 +302,26 @@ export async function requireAuthenticatedResident(
   }
 
   const cleanAuthNum = normalizeResidentNumber(authResidentNumber);
-  let resident = residentsStore.get(cleanAuthNum);
   if (!resident) {
     resident = await serverDb.getResidentByNumber(cleanAuthNum);
-    if (resident) residentsStore.set(cleanAuthNum, resident);
+    if (!resident) {
+      resident = residentsStore.get(cleanAuthNum) || null;
+    } else {
+      residentsStore.set(cleanAuthNum, resident);
+    }
   }
 
   if (!resident) {
     res.status(404).json({
       success: false,
-      message: 'Authenticated resident profile could not be found.'
+      message: 'We could not find your estate resident account. Please contact the estate administrator.'
     });
     return null;
+  }
+
+  // Attach authUserId if resolved from token and not already set
+  if (authUserId && !resident.auth_user_id) {
+    resident.auth_user_id = authUserId;
   }
 
   if (resident.status !== 'Active') {
@@ -328,6 +369,14 @@ export async function initializeResidentsStore(): Promise<void> {
       console.log(`[ResidentStore] Synchronized ${residentsStore.size} residents from persistent database.`);
     } else {
       console.log(`[ResidentStore] Persistent database has 0 residents. Resident store initialized empty.`);
+    }
+
+    // Synchronize persistent resident sessions
+    const savedSessions = serverDb.getAllResidentSessions();
+    for (const s of savedSessions) {
+      if (s.token && s.resident_number) {
+        residentSessionsStore.set(s.token, { resident_number: s.resident_number, created_at: s.created_at });
+      }
     }
   } catch (err) {
     console.error('[ResidentStore] Error initializing residents from database:', err);
@@ -544,24 +593,81 @@ app.get('/api/paystack/config', (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 2. PAYMENT INITIALIZATION (SERVER-SIDE DETERMINATION)
+// 1.5. RESIDENT PAYMENT & LEVY STATUS (AUTHENTICATED & SERVER-AUTHORITATIVE)
+// -------------------------------------------------------------
+app.get('/api/paystack/resident-status', async (req: Request, res: Response) => {
+  try {
+    const residentNum = req.query.residentNumber ? normalizeResidentNumber(String(req.query.residentNumber)) : undefined;
+    const periodMonth = parseInt(String(req.query.periodMonth || 10), 10);
+    const periodYear = parseInt(String(req.query.periodYear || 2026), 10);
+
+    // Authoritative Server-side Authentication & Resolution
+    const resident = await requireAuthenticatedResident(req, res, residentNum);
+    if (!resident) return;
+
+    const formattedResidentNumber = resident.resident_number;
+    const paymentKey = `${formattedResidentNumber}_${periodMonth}_${periodYear}`;
+    const payment = paymentsStore.get(paymentKey) || null;
+    let receipt: ServerReceiptRecord | null = null;
+    if (payment && payment.status === 'PAID' && payment.paystack_reference) {
+      receipt = receiptsStore.get(payment.paystack_reference) || null;
+    }
+
+    const settings = await serverDb.getSettings();
+
+    return res.json({
+      success: true,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        email: resident.email,
+        house_number: resident.house_number,
+        status: resident.status,
+        account_status: resident.account_status || 'ACTIVE'
+      },
+      payment: payment ? {
+        ...payment,
+        status: payment.status
+      } : null,
+      receipt: receipt || null,
+      levyAmount: settings.monthly_security_levy || 5000
+    });
+  } catch (err: any) {
+    console.error('[Resident Payment Status Error]', err);
+    res.status(500).json({ success: false, message: 'Failed to verify resident payment status.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 2. PAYMENT INITIALIZATION (SERVER-AUTHORITATIVE DETERMINATION)
 // -------------------------------------------------------------
 app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
   try {
-    const { residentNumber, periodMonth = 10, periodYear = 2026, residentName, houseNumber, residentId, email } = req.body;
+    const { residentNumber, periodMonth = 10, periodYear = 2026, email } = req.body;
 
-    if (!residentNumber) {
-      return res.status(400).json({ success: false, message: 'Resident Number is required.' });
-    }
+    // 1. Authoritative Server-side Authentication & Resolution
+    const resident = await requireAuthenticatedResident(req, res, residentNumber);
+    if (!resident) return; // Error response already sent (401 or 403)
 
-    const formattedResidentNumber = String(residentNumber).trim().padStart(3, '0');
-    const paymentKey = `${formattedResidentNumber}_${periodMonth}_${periodYear}`;
-    const periodLabel = `${new Date(periodYear, periodMonth - 1).toLocaleString('default', { month: 'long' })} ${periodYear}`;
+    const formattedResidentNumber = resident.resident_number;
+    const authUserId = resident.auth_user_id || 'auth-linked';
 
-    // DUPLICATE PAYMENT CHECK
+    // SERVER ONLY Diagnostic Logging (Req 14)
+    console.log(`[Payment Init] Authenticated user ID: ${authUserId}, Resolved resident ID: ${resident.id}, Resolved resident number: ${formattedResidentNumber}, Lookup result: FOUND (Active)`);
+
+    const pMonth = parseInt(String(periodMonth), 10) || 10;
+    const pYear = parseInt(String(periodYear), 10) || 2026;
+    const paymentKey = `${formattedResidentNumber}_${pMonth}_${pYear}`;
+    const periodLabel = `${new Date(pYear, pMonth - 1).toLocaleString('default', { month: 'long' })} ${pYear}`;
+
+    // 2. Duplicate Payment Check
     const existingPayment = paymentsStore.get(paymentKey);
     if (existingPayment && existingPayment.status === 'PAID') {
       const existingReceipt = receiptsStore.get(existingPayment.paystack_reference || '');
+      console.log(`[Payment Init] Duplicate check: Already paid for ${paymentKey}`);
       return res.status(400).json({
         success: false,
         alreadyPaid: true,
@@ -571,40 +677,38 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
       });
     }
 
-    // SERVER-AUTHORITATIVE AMOUNT DETERMINATION: ₦5,000 (NEVER trust client amount)
-    const LEVY_AMOUNT_NAIRA = 5000;
-    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // 500,000 kobo
+    // 3. Authoritative Security Levy Amount Determination (Req 11)
+    const settings = await serverDb.getSettings();
+    const LEVY_AMOUNT_NAIRA = settings.monthly_security_levy || 5000;
+    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // in kobo
 
-    // SECURE UNIQUE REFERENCE GENERATION
-    // Example: FOGES-202610-001-A8B9C0D1
+    // 4. Secure Unique Reference Generation
     const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const reference = `FOGES-${periodYear}${String(periodMonth).padStart(2, '0')}-${formattedResidentNumber}-${randomHex}`;
+    const reference = `FOGES-${pYear}${String(pMonth).padStart(2, '0')}-${formattedResidentNumber}-${randomHex}`;
 
-    // Customer email handling:
-    // If the resident does not have an email address, handle properly without creating an invalid email.
-    // RFC-compliant synthetic domain fallback for Paystack API requirement
-    const customerEmail = email && email.includes('@')
-      ? email.trim()
-      : `resident.${formattedResidentNumber}@fingerofgodestate.ng`;
+    // Customer email handling (authoritative resident email preferred)
+    const customerEmail = (resident.email && resident.email.includes('@'))
+      ? resident.email.trim()
+      : (email && email.includes('@') ? email.trim() : `resident.${formattedResidentNumber}@fingerofgodestate.ng`);
 
-    // Record PENDING payment and transaction
+    // 5. Record PENDING payment and transaction
     const now = new Date().toISOString();
     const paymentId = existingPayment?.id || crypto.randomUUID();
     const txId = crypto.randomUUID();
 
     const paymentRecord: ServerPaymentRecord = {
       id: paymentId,
-      resident_id: residentId || crypto.randomUUID(),
+      resident_id: resident.id,
       resident_number: formattedResidentNumber,
-      resident_name: residentName || `Resident ${formattedResidentNumber}`,
-      house_number: houseNumber || 'Estate Plot',
-      period_month: periodMonth,
-      period_year: periodYear,
+      resident_name: resident.full_name,
+      house_number: resident.house_number || 'Phase 1',
+      period_month: pMonth,
+      period_year: pYear,
       period_label: periodLabel,
       amount_due: LEVY_AMOUNT_NAIRA,
       amount_paid: 0,
       status: 'PENDING',
-      due_date: `${periodYear}-${String(periodMonth).padStart(2, '0')}-01`,
+      due_date: `${pYear}-${String(pMonth).padStart(2, '0')}-01`,
       paid_at: null,
       paystack_reference: reference,
       created_at: existingPayment?.created_at || now,
@@ -615,12 +719,12 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     const transactionRecord: ServerTransactionRecord = {
       id: txId,
       payment_id: paymentId,
-      resident_id: paymentRecord.resident_id,
+      resident_id: resident.id,
       resident_number: formattedResidentNumber,
-      resident_name: paymentRecord.resident_name,
-      house_number: paymentRecord.house_number,
-      period_month: periodMonth,
-      period_year: periodYear,
+      resident_name: resident.full_name,
+      house_number: resident.house_number || 'Phase 1',
+      period_month: pMonth,
+      period_year: pYear,
       period_label: periodLabel,
       transaction_reference: reference,
       paystack_reference: reference,
@@ -663,8 +767,8 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
             resident_number: formattedResidentNumber,
             resident_name: paymentRecord.resident_name,
             house_number: paymentRecord.house_number,
-            period_month: periodMonth,
-            period_year: periodYear,
+            period_month: pMonth,
+            period_year: pYear,
             period_label: periodLabel,
             resident_id: paymentRecord.resident_id,
             estate: 'Finger of God Estate Security Management'
@@ -675,6 +779,7 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
       const paystackData = await paystackRes.json();
 
       if (paystackRes.ok && paystackData.status) {
+        console.log(`[Payment Init] Payment initialization result: SUCCESS, Reference: ${reference}`);
         return res.json({
           success: true,
           authorization_url: paystackData.data.authorization_url,
@@ -689,8 +794,7 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
           is_simulation: false
         });
       } else {
-        console.warn('Paystack API initialize error:', paystackData);
-        // If Paystack API fails (e.g. invalid test keys or sandbox network), gracefully fallback
+        console.warn('[Payment Init] Paystack API initialize error:', paystackData);
         return res.status(400).json({
           success: false,
           message: paystackData.message || 'Paystack initialization failed.'
@@ -699,6 +803,7 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     }
 
     // TEST MODE / SANDBOX SIMULATION (When PAYSTACK_SECRET_KEY is not yet in .env)
+    console.log(`[Payment Init] Payment initialization result: SUCCESS (Sandbox Simulation), Reference: ${reference}`);
     return res.json({
       success: true,
       authorization_url: `/?paystack_simulation=true&reference=${reference}`,
@@ -1438,6 +1543,7 @@ app.post('/api/resident/login', async (req: Request, res: Response) => {
 
     const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
     residentSessionsStore.set(sessionToken, { resident_number: resident.resident_number, created_at: Date.now() });
+    serverDb.saveResidentSession(sessionToken, resident.resident_number);
 
     return res.json({
       success: true,
@@ -1726,7 +1832,7 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
 });
 
 // RESIDENT PORTAL: VERIFY OTP ENDPOINT
-app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
+app.post('/api/resident/verify-otp', async (req: Request, res: Response) => {
   try {
     const { residentNumber, phoneNumber, otp, rememberDevice } = req.body;
 
@@ -1784,7 +1890,14 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
     // OTP Verified successfully! Clean up OTP record
     residentOtpStore.delete(cleanNum);
 
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) {
+        residentsStore.set(cleanNum, resident);
+      }
+    }
+
     if (!resident) {
       return res.status(404).json({
         success: false,
@@ -1799,6 +1912,7 @@ app.post('/api/resident/verify-otp', (req: Request, res: Response) => {
       resident_number: cleanNum,
       created_at: now
     });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
 
     return res.json({
       success: true,
@@ -2168,6 +2282,7 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       resident_number: cleanNum,
       created_at: now
     });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
 
     // Record audit log
     const auditEntry: ServerAuditRecord = {
@@ -2626,6 +2741,41 @@ app.post('/api/resident/first-login-setup', async (req: Request, res: Response) 
   }
 });
 
+// GET AUTHORITATIVE AUTHENTICATED RESIDENT PROFILE
+app.get('/api/resident/me', async (req: Request, res: Response) => {
+  try {
+    const resident = await requireAuthenticatedResident(req, res);
+    if (!resident) return; // Error response (401 or 403) already sent
+
+    return res.json({
+      success: true,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email || null,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
+        status: resident.status,
+        account_activated: !!resident.account_activated,
+        profile_completed: !!resident.profile_completed,
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
+        registration_date: resident.registration_date,
+        created_at: resident.created_at,
+        updated_at: resident.updated_at
+      }
+    });
+  } catch (err: any) {
+    console.error('Resident me error:', err);
+    res.status(500).json({ success: false, message: 'Server error retrieving resident profile.' });
+  }
+});
+
 // RESIDENT DASHBOARD DATA (SCOPED STRICTLY TO THE AUTHENTICATED RESIDENT)
 app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
   try {
@@ -2749,7 +2899,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
 });
 
 // SAFE PUBLIC RESIDENT LOOKUP (NO PHONE, EMAIL, OR PASSWORD EXPOSED)
-app.get('/api/resident/lookup', (req: Request, res: Response) => {
+app.get('/api/resident/lookup', async (req: Request, res: Response) => {
   try {
     const rawNum = req.query.resident_number || req.query.residentNumber;
     if (!rawNum) {
@@ -2757,7 +2907,14 @@ app.get('/api/resident/lookup', (req: Request, res: Response) => {
     }
 
     const cleanNum = normalizeResidentNumber(String(rawNum));
-    const resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) {
+        residentsStore.set(cleanNum, resident);
+      }
+    }
 
     if (!resident) {
       return res.status(404).json({ found: false, message: `Resident #${cleanNum} not found in estate directory.` });

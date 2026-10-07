@@ -113,11 +113,19 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
     setQuickPayError('');
     try {
       const allResidents = await dbService.getResidents();
-      const cleanInput = quickPayResidentNumber.trim();
-      const resident = allResidents.find(
+      const cleanInput = quickPayResidentNumber.trim().padStart(3, '0');
+      let resident = allResidents.find(
         r => r.resident_number === cleanInput || 
-             r.resident_number.padStart(3, '0') === cleanInput.padStart(3, '0')
+             r.resident_number.padStart(3, '0') === cleanInput
       );
+
+      if (!resident) {
+        // Fallback to database lookup via public lookup service
+        const lookup = await dbService.lookupResidentPublic(cleanInput);
+        if (lookup.found && lookup.resident) {
+          resident = lookup.resident as Resident;
+        }
+      }
 
       if (!resident) {
         setQuickPayError(`Resident Number "${cleanInput}" was not found in the estate directory.`);

@@ -3421,15 +3421,48 @@ export const dbService = {
           password
         });
         if (!authErr && authData.user) {
-          // Look up resident by auth_user_id or email
-          const residents = await this.getResidents();
-          const matched = residents.find(r => 
-            r.auth_user_id === authData.user.id || 
-            (r.email && r.email.toLowerCase() === cleanEmail)
-          );
-          if (matched) {
-            residentSessionService.setCurrentResident(matched);
-            return { success: true, resident: matched };
+          if (authData.session?.access_token) {
+            residentSessionService.setResidentToken(authData.session.access_token);
+          }
+
+          // Authoritative direct resolution from Supabase database 'residents' table
+          let matchedResident: Resident | null = null;
+
+          const { data: resByAuthId, error: authIdErr } = await supabase
+            .from('residents')
+            .select('*')
+            .eq('auth_user_id', authData.user.id)
+            .maybeSingle();
+
+          if (!authIdErr && resByAuthId) {
+            matchedResident = resByAuthId as Resident;
+          } else {
+            const { data: resByEmail, error: emailErr } = await supabase
+              .from('residents')
+              .select('*')
+              .eq('email', cleanEmail)
+              .maybeSingle();
+
+            if (!emailErr && resByEmail) {
+              matchedResident = resByEmail as Resident;
+              if (!resByEmail.auth_user_id) {
+                try {
+                  await supabase
+                    .from('residents')
+                    .update({ auth_user_id: authData.user.id })
+                    .eq('id', resByEmail.id);
+                } catch {}
+              }
+            }
+          }
+
+          if (matchedResident) {
+            const formattedResident: Resident = {
+              ...matchedResident,
+              resident_number: String(matchedResident.resident_number).trim().padStart(3, '0')
+            };
+            residentSessionService.setCurrentResident(formattedResident);
+            return { success: true, resident: formattedResident };
           }
         }
       } catch (err) {
@@ -6187,7 +6220,6 @@ export const authService = {
                 this.setCurrentUser(userObj);
                 return userObj;
               } else {
-                await supabase.auth.signOut();
                 this.setCurrentUser(null);
                 return null;
               }
@@ -6217,6 +6249,153 @@ export const authService = {
       return null;
     }
     return null;
+  },
+
+  // Authoritative resolution of authenticated resident from actual Supabase database record
+  async getActiveResident(): Promise<Resident | null> {
+    if (!isSupabaseConfigured || !supabase) {
+      return residentSessionService.getCurrentResident();
+    }
+
+    try {
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr || !session?.user) {
+        // Fallback to local session token if available
+        const localToken = residentSessionService.getResidentToken();
+        if (localToken) {
+          try {
+            const res = await fetch('/api/resident/me', {
+              headers: { Authorization: `Bearer ${localToken}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success && data.resident) {
+                const resObj = {
+                  ...data.resident,
+                  resident_number: String(data.resident_number || data.resident.resident_number).trim().padStart(3, '0')
+                };
+                residentSessionService.setCurrentResident(resObj);
+                return resObj;
+              }
+            }
+          } catch {}
+        }
+        return residentSessionService.getCurrentResident();
+      }
+
+      const authUser = session.user;
+      
+      if (session.access_token) {
+        residentSessionService.setResidentToken(session.access_token);
+      }
+
+      // 1. Direct query against Supabase database 'residents' table using authenticated user ID
+      try {
+        const { data: residentRecord, error: resErr } = await supabase
+          .from('residents')
+          .select('*')
+          .eq('auth_user_id', authUser.id)
+          .maybeSingle();
+
+        if (!resErr && residentRecord) {
+          const resident: Resident = {
+            id: residentRecord.id,
+            auth_user_id: residentRecord.auth_user_id || authUser.id,
+            resident_number: String(residentRecord.resident_number).trim().padStart(3, '0'),
+            full_name: residentRecord.full_name,
+            phone_number: residentRecord.phone_number,
+            additional_phone: residentRecord.additional_phone || null,
+            email: residentRecord.email || authUser.email || null,
+            house_number: residentRecord.house_number,
+            address: residentRecord.address,
+            state: residentRecord.state || 'Delta',
+            lga: residentRecord.lga || 'Oshimili South',
+            notes: residentRecord.notes || null,
+            registration_date: residentRecord.registration_date,
+            status: residentRecord.status as 'Active' | 'Inactive',
+            account_activated: !!residentRecord.account_activated,
+            profile_completed: !!residentRecord.profile_completed,
+            account_status: residentRecord.account_status || 'ACTIVE',
+            created_at: residentRecord.created_at,
+            updated_at: residentRecord.updated_at
+          };
+
+          residentSessionService.setCurrentResident(resident);
+          return resident;
+        }
+      } catch (e) {
+        console.warn('Direct resident lookup notice:', e);
+      }
+
+      // 2. Query by email if auth_user_id is not yet linked in database
+      if (authUser.email) {
+        try {
+          const { data: emailRecord, error: emailErr } = await supabase
+            .from('residents')
+            .select('*')
+            .eq('email', authUser.email.toLowerCase())
+            .maybeSingle();
+
+          if (!emailErr && emailRecord) {
+            if (!emailRecord.auth_user_id) {
+              try {
+                await supabase
+                  .from('residents')
+                  .update({ auth_user_id: authUser.id })
+                  .eq('id', emailRecord.id);
+              } catch {}
+            }
+
+            const resident: Resident = {
+              id: emailRecord.id,
+              auth_user_id: authUser.id,
+              resident_number: String(emailRecord.resident_number).trim().padStart(3, '0'),
+              full_name: emailRecord.full_name,
+              phone_number: emailRecord.phone_number,
+              additional_phone: emailRecord.additional_phone || null,
+              email: emailRecord.email || authUser.email,
+              house_number: emailRecord.house_number,
+              address: emailRecord.address,
+              state: emailRecord.state || 'Delta',
+              lga: emailRecord.lga || 'Oshimili South',
+              notes: emailRecord.notes || null,
+              registration_date: emailRecord.registration_date,
+              status: emailRecord.status as 'Active' | 'Inactive',
+              account_activated: !!emailRecord.account_activated,
+              profile_completed: !!emailRecord.profile_completed,
+              account_status: emailRecord.account_status || 'ACTIVE',
+              created_at: emailRecord.created_at,
+              updated_at: emailRecord.updated_at
+            };
+
+            residentSessionService.setCurrentResident(resident);
+            return resident;
+          }
+        } catch {}
+      }
+
+      // 3. Authoritative server-side endpoint resolution via /api/resident/me
+      try {
+        const res = await fetch('/api/resident/me', {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.resident) {
+            const resObj = {
+              ...data.resident,
+              resident_number: String(data.resident.resident_number).trim().padStart(3, '0')
+            };
+            residentSessionService.setCurrentResident(resObj);
+            return resObj;
+          }
+        }
+      } catch {}
+    } catch (err) {
+      console.warn('Notice resolving authenticated resident from Supabase:', err);
+    }
+
+    return residentSessionService.getCurrentResident();
   },
 
   setCurrentUser(user: any | null) {

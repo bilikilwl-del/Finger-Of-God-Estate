@@ -13,7 +13,45 @@
     "sms_sender_name": "FINGEROFGOD",
     "first_payment_month": "October 2026"
   },
-  "residents": [],
+  "residents": [
+    {
+      "id": "576e0ce6-122f-4191-bccc-0e82ce7d202e",
+      "auth_user_id": "23acf1c2-404e-4246-b8c5-420d3b26b585",
+      "resident_number": "016",
+      "full_name": "Chi John",
+      "phone_number": "09021735272",
+      "additional_phone": "08036985573",
+      "email": "isis30f@gmail.com",
+      "house_number": "238",
+      "address": "Phase 1, Finger of God Estate, Iyiaba, Asaba",
+      "state": "Delta",
+      "lga": "Oshimili South",
+      "notes": null,
+      "registration_date": "2026-10-06",
+      "status": "Active",
+      "account_activated": true,
+      "profile_completed": true,
+      "account_status": "ACTIVE",
+      "created_at": "2026-10-06T14:11:39.551019+00:00",
+      "updated_at": "2026-10-07T08:21:09.791+00:00"
+    }
+  ],
+  "otp_challenges": [
+    {
+      "resident_number": "016",
+      "challenge_type": "LOGIN",
+      "phone_number": "09021735272",
+      "otp_hash": "ea218ecd332175242b96bb8d9aab71a1db60acbbbedd7318d4934568fd6e962e",
+      "salt": "9d17096caacdc13ef8ca27833b3b4ace",
+      "attempts": 0,
+      "max_attempts": 5,
+      "expires_at": 1791362987256,
+      "resend_after": 1791362432256,
+      "verified": false,
+      "updated_at": "2026-10-07T08:39:47.257Z",
+      "created_at": "2026-10-07T08:39:47.257Z"
+    }
+  ],
   "profiles": [
     {
       "id": "2aef6033-2600-4d7a-aaa5-7f54c441e429",
@@ -22,7 +60,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-06T14:02:18.423Z"
+      "updated_at": "2026-10-07T08:38:56.171Z"
     }
   ],
   "admin_users": [
@@ -34,7 +72,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-06T14:02:18.423Z"
+      "updated_at": "2026-10-07T08:38:56.171Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -87,6 +125,36 @@
     }
   ],
   "road_project_transactions": [
+    {
+      "id": "rd-tx-1791313360285-0287",
+      "date": "2026-10-06",
+      "type": "CREDIT",
+      "notes": "Verified online contribution via Paystack (bank_transfer). Auth code: AUTH_gwq8o7dgzz",
+      "amount": 100,
+      "source": "Paystack",
+      "status": "VERIFIED",
+      "paid_at": "2026-10-06T19:02:38.000Z",
+      "category": "Landlord Levy",
+      "currency": "NGN",
+      "reference": "FOG-RD-PAY-1791313274476-13C43A",
+      "created_at": "2026-10-06T19:02:40.285Z",
+      "approved_by": "Paystack Automated Gateway (Server Verified)",
+      "description": "Resident 106 Iyiabi Road Modernization Contribution",
+      "resident_id": null,
+      "verified_at": "2026-10-06T19:02:40.285Z",
+      "project_name": "Finger of God Estate Road Modernization Project",
+      "project_type": "road_modernization",
+      "payment_status": "success",
+      "building_number": "106 Iyiabi",
+      "payer_or_vendor": "C J",
+      "resident_number": "106 Iyiabi",
+      "running_balance": 0,
+      "paystack_reference": "FOG-RD-PAY-1791313274476-13C43A",
+      "receipt_or_invoice_ref": "RCP-RD-PSTK-360285",
+      "paystack_transaction_id": "6631921763",
+      "provider_transaction_id": "6631921763",
+      "contributor_display_name": "C J"
+    },
     {
       "id": "rd-tx-1791216666954-f6fc",
       "date": "2026-10-05",
@@ -251,5 +319,5 @@
       "created_at": "2026-10-02T19:51:01.698Z"
     }
   ],
-  "last_updated": "2026-10-06T14:02:19.136Z"
+  "last_updated": "2026-10-07T08:39:47.257Z"
 }
