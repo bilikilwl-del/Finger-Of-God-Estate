@@ -104,22 +104,22 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
     <div className="w-full relative z-40 bg-white shadow-xs">
       {/* 1. Pre-Header Top Bar */}
       <div className="hidden lg:block bg-slate-900 text-slate-300 border-b border-slate-800 text-[11px] font-medium py-1.5 px-3 sm:px-6 w-full">
-        <div className="max-w-[1440px] mx-auto flex items-center justify-between">
+        <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-3">
           {/* Left: Location & Security Badge */}
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1.5 text-slate-300">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="flex items-center gap-1.5 text-slate-300 min-w-0">
               <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{estateSettings.estate_address || 'Phase 1, Iyiaba, Asaba, Delta State'}</span>
+              <span className="truncate max-w-[220px] xl:max-w-[340px] 2xl:max-w-none">{estateSettings.estate_address || 'Phase 1, Iyiaba, Asaba, Delta State'}</span>
             </span>
-            <span className="w-1 h-1 rounded-full bg-slate-700"></span>
-            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+            <span className="hidden xl:inline-block w-1 h-1 rounded-full bg-slate-700 shrink-0"></span>
+            <span className="hidden xl:flex items-center gap-1.5 text-emerald-400 font-semibold shrink-0">
               <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>24/7 Security Patrol & Access Control Active</span>
             </span>
           </div>
 
           {/* Right: Hotline & Actions */}
-          <div className="flex items-center gap-4 text-slate-300">
+          <div className="flex items-center gap-3 text-slate-300 shrink-0 text-[11px]">
             <span className="flex items-center gap-1.5">
               <Phone className="w-3 h-3 text-slate-400 shrink-0" />
               <span>Hotline: <strong className="text-white font-mono">{estateSettings.contact_phone || '08023456789'}</strong></span>
@@ -138,7 +138,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               className="text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer flex items-center gap-1"
             >
               <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-              <span>Activate Resident ID (001 - 300)</span>
+              <span>Activate Resident ID</span>
             </button>
           </div>
         </div>
@@ -165,7 +165,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
             </div>
 
             {/* Desktop Navigation Menu (Fluid & Compact for Full Width) */}
-            <nav className="hidden xl:flex items-center gap-1">
+            <nav className="hidden xl:flex items-center gap-0.5 2xl:gap-1">
               {publicNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = currentTab === item.tab || (item.tab === 'public_announcements' && currentTab === 'announcement_detail');
@@ -173,7 +173,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
                   <button
                     key={item.tab}
                     onClick={() => handleItemClick(item.tab)}
-                    className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                    className={`px-2 2xl:px-2.5 py-1.5 text-[11.5px] 2xl:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 2xl:gap-1.5 whitespace-nowrap ${
                       isActive
                         ? 'bg-emerald-700 text-white shadow-xs'
                         : 'text-slate-700 hover:text-emerald-800 hover:bg-slate-100/90'
@@ -193,30 +193,8 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               })}
             </nav>
 
-            {/* Tablet/Laptop Nav (1024px to 1279px) */}
-            <nav className="hidden lg:flex xl:hidden items-center gap-0.5">
-              {publicNavItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentTab === item.tab;
-                return (
-                  <button
-                    key={item.tab}
-                    onClick={() => handleItemClick(item.tab)}
-                    className={`px-2 py-1.5 text-[11px] font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap ${
-                      isActive
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'text-slate-700 hover:text-emerald-800 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Icon className="w-3 h-3 shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
             {/* Desktop Action CTAs */}
-            <div className="hidden lg:flex items-center gap-2 shrink-0">
+            <div className="hidden xl:flex items-center gap-2 shrink-0">
               {currentResident ? (
                 <button
                   onClick={() => handleItemClick('resident_portal')}
@@ -248,8 +226,8 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               </button>
             </div>
 
-            {/* Mobile Header Action & Toggle */}
-            <div className="flex lg:hidden items-center gap-1.5">
+            {/* Mobile Header Action & Toggle (Below xl) */}
+            <div className="flex xl:hidden items-center gap-1.5">
               <button
                 onClick={() => handleItemClick('estate_levy')}
                 className="px-2.5 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap"
@@ -281,7 +259,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-slate-200 bg-white shadow-2xl animate-in slide-in-from-top-2 duration-200 w-full">
+          <div className="xl:hidden border-t border-slate-200 bg-white shadow-2xl animate-in slide-in-from-top-2 duration-200 w-full">
             <div className="max-w-full px-4 py-4 space-y-3 max-h-[85vh] overflow-y-auto">
               {currentResident ? (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">

@@ -697,6 +697,31 @@ export function processVerifiedRoadBankTransfer(payload: {
 // -----------------------------------------------------------------
 export const roadProjectRouter = express.Router();
 
+// Admin Authorization Middleware for Road Project
+const requireRoadAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Unauthorized: Administrator authentication token required for road project operations.'
+    });
+  }
+
+  const result = await verifyAdminToken(token);
+  if (!result.valid || !result.user) {
+    const isForbidden = result.error?.includes('not authorized') || result.error?.includes('Access denied');
+    return res.status(isForbidden ? 403 : 401).json({
+      success: false,
+      message: result.error || 'Unauthorized: Invalid administrator credentials.'
+    });
+  }
+
+  (req as any).adminUser = result.user;
+  return next();
+};
+
 // 1. SSE REAL-TIME STREAM FOR WEBSITE VIEWERS
 roadProjectRouter.get('/stream', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -768,8 +793,8 @@ roadProjectRouter.get('/ledger', async (_req: Request, res: Response) => {
   });
 });
 
-// Explicit Sync endpoint for forced database & gateway synchronization
-roadProjectRouter.post('/sync', async (_req: Request, res: Response) => {
+// Explicit Sync endpoint for forced database & gateway synchronization (Admin Only)
+roadProjectRouter.post('/sync', requireRoadAdminAuth, async (_req: Request, res: Response) => {
   try {
     const txs = await syncRoadStoreWithDatabaseAndPaystack();
     const summary = computeRoadProjectSummary();
@@ -953,15 +978,20 @@ roadProjectRouter.post('/paystack/webhook', async (req: any, res: Response) => {
     const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
     const signature = req.headers['x-paystack-signature'];
 
-    if (secretKey && signature) {
-      const hash = crypto
-        .createHmac('sha512', secretKey)
-        .update(req.rawBody || JSON.stringify(req.body))
-        .digest('hex');
+    // Strict signature enforcement: reject if secret is missing or signature header omitted
+    if (!secretKey || !signature) {
+      console.warn('[Road Paystack Webhook] Missing secret key or x-paystack-signature header');
+      return res.status(401).json({ error: 'Unauthorized webhook request.' });
+    }
 
-      if (hash !== signature) {
-        return res.status(401).json({ error: 'Invalid webhook signature.' });
-      }
+    const hash = crypto
+      .createHmac('sha512', secretKey)
+      .update(req.rawBody || JSON.stringify(req.body))
+      .digest('hex');
+
+    if (hash !== signature) {
+      console.warn('[Road Paystack Webhook] Invalid webhook signature detected');
+      return res.status(401).json({ error: 'Invalid webhook signature.' });
     }
 
     const event = req.body;
@@ -981,31 +1011,6 @@ roadProjectRouter.post('/paystack/webhook', async (req: any, res: Response) => {
     res.sendStatus(500);
   }
 });
-
-// Admin Authorization Middleware for Road Project
-const requireRoadAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: 'Unauthorized: Administrator authentication token required for road project operations.'
-    });
-  }
-
-  const result = await verifyAdminToken(token);
-  if (!result.valid || !result.user) {
-    const isForbidden = result.error?.includes('not authorized') || result.error?.includes('Access denied');
-    return res.status(isForbidden ? 403 : 401).json({
-      success: false,
-      message: result.error || 'Unauthorized: Invalid administrator credentials.'
-    });
-  }
-
-  (req as any).adminUser = result.user;
-  return next();
-};
 
 // 6. UPDATE OFFICIAL ROAD PROJECT TARGET (ADMIN ONLY)
 roadProjectRouter.post('/target', requireRoadAdminAuth, async (req: Request, res: Response) => {
@@ -1126,8 +1131,8 @@ roadProjectRouter.post('/expenditure', requireRoadAdminAuth, async (req: Request
   }
 });
 
-// 8. GET RECONCILIATION DASHBOARD ITEMS
-roadProjectRouter.get('/reconciliation', (_req: Request, res: Response) => {
+// 8. GET RECONCILIATION DASHBOARD ITEMS (ADMIN ONLY)
+roadProjectRouter.get('/reconciliation', requireRoadAdminAuth, (_req: Request, res: Response) => {
   const items = Array.from(roadReconciliationStore.values()).sort(
     (a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime()
   );

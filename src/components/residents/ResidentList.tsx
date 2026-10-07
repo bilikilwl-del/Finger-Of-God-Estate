@@ -327,7 +327,7 @@ export const ResidentList: React.FC<ResidentListProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
                   <th className="py-3.5 px-4 w-24">Resident No.</th>
                   <th className="py-3.5 px-4">Resident Name</th>
                   <th className="py-3.5 px-4">Phone Number</th>

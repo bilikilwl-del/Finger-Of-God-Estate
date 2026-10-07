@@ -2898,7 +2898,8 @@ export const dbService = {
   async getAllReceipts(query?: string): Promise<Receipt[]> {
     try {
       const q = query ? `?query=${encodeURIComponent(query)}` : '';
-      const res = await fetch(`/api/payments/receipts${q}`);
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(`/api/payments/receipts${q}`, { headers });
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.receipts)) {
@@ -5995,7 +5996,8 @@ export const dbService = {
   // Get Road Project Reconciliation Console Items
   async getRoadProjectReconciliation(): Promise<{ success: boolean; items: any[]; stats: any }> {
     try {
-      const res = await fetch('/api/road-project/reconciliation');
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch('/api/road-project/reconciliation', { headers });
       if (res.ok) {
         return await res.json();
       }
@@ -6010,9 +6012,10 @@ export const dbService = {
     contributor_name?: string;
   }): Promise<{ success: boolean; item?: any; summary?: any; message?: string }> {
     try {
+      const headers = await getAdminAuthHeaders();
       const res = await fetch('/api/road-project/reconciliation/match', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(params)
       });
       return await res.json();
@@ -6031,9 +6034,10 @@ export const dbService = {
     sender_name?: string;
   }>): Promise<{ success: boolean; importedCount: number; duplicateCount: number; unmatchedCount: number; message?: string }> {
     try {
+      const headers = await getAdminAuthHeaders();
       const res = await fetch('/api/road-project/reconciliation/import-statement', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ statement_rows: statementRows })
       });
       return await res.json();
@@ -6187,19 +6191,6 @@ export const authService = {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.id) {
-          // 0. Check Supabase Auth user_metadata role
-          const metaRole = session.user.user_metadata?.role;
-          if (metaRole === 'admin' || metaRole === 'Super Admin' || metaRole === 'Administrator') {
-            const userObj = {
-              id: session.user.id,
-              email: session.user.email,
-              full_name: session.user.user_metadata?.full_name || 'Estate Administrator',
-              role: 'admin'
-            };
-            this.setCurrentUser(userObj);
-            return userObj;
-          }
-
           // 1. Check profiles table in Supabase using authenticated user's UUID
           try {
             const { data: profileRecord, error: pErr } = await supabase
@@ -6432,30 +6423,21 @@ export const authService = {
           let isAuthorizedAdmin = false;
           let adminFullName = 'Estate Administrator';
 
-          // 0. Check Supabase Auth user_metadata role
-          const metaRole = data.user.user_metadata?.role;
-          if (metaRole === 'admin' || metaRole === 'Super Admin' || metaRole === 'Administrator') {
-            isAuthorizedAdmin = true;
-            adminFullName = data.user.user_metadata?.full_name || adminFullName;
-          }
-
           // 1. Try profiles table in Supabase
-          if (!isAuthorizedAdmin) {
-            try {
-              const { data: profileRecord, error: pErr } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', data.user.id)
-                .maybeSingle();
+          try {
+            const { data: profileRecord, error: pErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', data.user.id)
+              .maybeSingle();
 
-              if (!pErr && profileRecord) {
-                if (profileRecord.role === 'admin' || profileRecord.role === 'Super Admin' || profileRecord.role === 'Administrator') {
-                  isAuthorizedAdmin = true;
-                  adminFullName = profileRecord.full_name || adminFullName;
-                }
+            if (!pErr && profileRecord) {
+              if (profileRecord.role === 'admin' || profileRecord.role === 'Super Admin' || profileRecord.role === 'Administrator') {
+                isAuthorizedAdmin = true;
+                adminFullName = profileRecord.full_name || adminFullName;
               }
-            } catch {}
-          }
+            }
+          } catch {}
 
           // 2. Try server-side verification with Bearer token
           if (!isAuthorizedAdmin) {

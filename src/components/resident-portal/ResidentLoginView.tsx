@@ -1494,7 +1494,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   if (isModal) {
     return (
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 md:p-4 bg-slate-950/80 backdrop-blur-xs overflow-hidden"
+        className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 md:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto"
         role="dialog"
         aria-modal="true"
         aria-labelledby="resident-portal-heading"

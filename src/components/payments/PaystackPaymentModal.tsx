@@ -320,10 +320,10 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto">
-        <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-4">
+        <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[calc(100dvh-2rem)] flex flex-col">
           
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+          <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-white shadow-xs">
                 <ShieldCheck className="w-5 h-5" />
@@ -347,7 +347,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
 
             {/* Error Message Alert */}
             {errorMessage && (

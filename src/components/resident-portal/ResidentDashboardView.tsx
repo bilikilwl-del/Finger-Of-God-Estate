@@ -1139,7 +1139,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
             {/* Responsive Table */}
             <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold whitespace-nowrap">
                   <tr>
                     <th className="py-3 px-4">Billing Month</th>
                     <th className="py-3 px-4">Amount Due</th>

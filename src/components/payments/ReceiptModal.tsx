@@ -47,10 +47,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:static">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-4 print:shadow-none print:border-none print:m-0 print:rounded-none">
+      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[calc(100dvh-2rem)] flex flex-col print:max-h-none print:shadow-none print:border-none print:m-0 print:rounded-none">
         
         {/* Modal Top Bar (Hidden during printing) */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white print:hidden">
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-200">Official Payment Receipt</span>
@@ -83,7 +83,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
 
         {/* Printable Receipt Body */}
-        <div ref={printRef} className="p-6 sm:p-10 space-y-8 bg-white print:p-8">
+        <div ref={printRef} className="p-6 sm:p-10 space-y-8 bg-white overflow-y-auto flex-1 print:p-8 print:overflow-visible">
           
           {/* Official Estate Header */}
           <div className="text-center pb-6 border-b-2 border-slate-900/10 space-y-2 flex flex-col items-center">
