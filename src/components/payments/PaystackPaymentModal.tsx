@@ -26,6 +26,7 @@ import {
   loadPaystackInlineScript, 
   getPaystackConfig,
   getResidentPaymentStatus,
+  getResidentAccessToken,
   PaystackConfig 
 } from '../../lib/paystack';
 import { PaystackTestModal } from './PaystackTestModal';
@@ -199,6 +200,14 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
     setStep('initializing');
     setErrorMessage(null);
 
+    // 1. Authoritative check: verify valid access token exists BEFORE calling backend
+    const currentToken = await getResidentAccessToken();
+    if (!currentToken) {
+      setErrorMessage('Your session has expired. Please sign in again to continue with payment.');
+      setStep('verify_resident');
+      return;
+    }
+
     try {
       const initResult = await initializePayment({
         residentNumber: selectedResident.resident_number,
@@ -243,7 +252,17 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         setIsTestModalOpen(true);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Payment initialization failed.');
+      const msg = err.message || '';
+      if (
+        msg.toLowerCase().includes('unauthorized') || 
+        msg.toLowerCase().includes('expired') || 
+        msg.toLowerCase().includes('token') || 
+        msg.toLowerCase().includes('sign in')
+      ) {
+        setErrorMessage('Your session has expired. Please sign in again to continue with payment.');
+      } else {
+        setErrorMessage(msg || 'Payment initialization failed.');
+      }
       setStep('verify_resident');
     }
   };

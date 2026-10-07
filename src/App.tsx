@@ -280,12 +280,19 @@ export default function App() {
       try {
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+            if (session?.access_token) {
+              residentSessionService.setResidentToken(session.access_token);
+            }
             if (session?.user) {
               const res = await authService.getActiveResident();
               if (res) {
                 setCurrentResident(res);
               }
             }
+          } else if (event === 'SIGNED_OUT') {
+            residentSessionService.setResidentToken(null);
+            residentSessionService.setCurrentResident(null);
+            setCurrentResident(null);
           }
         });
         authSubscription = authListener?.subscription || null;

@@ -6152,6 +6152,9 @@ export const residentSessionService = {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_RESIDENT);
       localStorage.removeItem('estate_resident_token');
       localStorage.removeItem('estate_remembered_device');
+      if (isSupabaseConfigured && supabase) {
+        supabase.auth.signOut().catch(() => {});
+      }
     } catch {}
   }
 };

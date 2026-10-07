@@ -65,26 +65,61 @@ export async function getPaystackConfig(): Promise<PaystackConfig> {
 import { residentSessionService, supabase, isSupabaseConfigured } from './supabase';
 
 /**
- * Helper: get authorization headers for resident requests
+ * Authoritatively retrieves the current authenticated access token:
+ * 1. Obtains the current active Supabase Auth session token at runtime
+ * 2. Checks Supabase Auth session stored in localStorage (sb-*-auth-token)
+ * 3. Falls back to stored resident session token
  */
-export async function getResidentAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  
+export async function getResidentAccessToken(): Promise<string | null> {
   // 1. Prefer active Supabase Auth session token when authenticated
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-        return headers;
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (!error && session?.access_token) {
+        residentSessionService.setResidentToken(session.access_token);
+        return session.access_token;
+      }
+    } catch (err) {
+      console.warn('[Supabase getSession notice]', err);
+    }
+  }
+
+  // 2. Direct inspection of Supabase Auth stored session in localStorage
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed?.access_token) {
+              residentSessionService.setResidentToken(parsed.access_token);
+              return parsed.access_token;
+            }
+          }
+        }
       }
     } catch {}
   }
 
-  // 2. Fallback to stored resident session token
+  // 3. Fallback to residentSessionService token
   const resToken = residentSessionService.getResidentToken();
   if (resToken) {
-    headers['Authorization'] = `Bearer ${resToken}`;
+    return resToken;
+  }
+
+  return null;
+}
+
+/**
+ * Helper: get authorization headers for resident requests
+ */
+export async function getResidentAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = await getResidentAccessToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -122,10 +157,17 @@ export async function initializePayment(params: {
   periodYear?: number;
   email?: string;
 }): Promise<InitializePaymentResponse> {
-  const headers = await getResidentAuthHeaders();
+  const token = await getResidentAccessToken();
+  if (!token) {
+    throw new Error('Your session has expired. Please sign in again to continue with payment.');
+  }
+
   const res = await fetch('/api/paystack/initialize', {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
     body: JSON.stringify({
       residentNumber: params.residentNumber,
       periodMonth: params.periodMonth || 10,
@@ -136,6 +178,9 @@ export async function initializePayment(params: {
 
   const data = await res.json();
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(data.message || 'Your session has expired. Please sign in again to continue with payment.');
+    }
     throw new Error(data.message || 'Payment initialization failed.');
   }
   return data;
