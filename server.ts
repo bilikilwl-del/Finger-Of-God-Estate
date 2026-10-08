@@ -557,38 +557,129 @@ INITIAL_ANNOUNCEMENTS.forEach(ann => {
   announcementsStore.set(ann.id, ann);
 });
 
-// Paystack config helpers
+// -------------------------------------------------------------
+// PAYSTACK DUAL-ACCOUNT RESOLVER & ARCHITECTURE
+// Account 1: Security Levy (PAYSTACK_SECURITY_SECRET_KEY / PAYSTACK_SECURITY_PUBLIC_KEY)
+// Account 2: Estate / Road Modernization (PAYSTACK_ESTATE_SECRET_KEY / PAYSTACK_ESTATE_PUBLIC_KEY)
+// -------------------------------------------------------------
+export type PaymentCategoryType = 'security_levy' | 'road_contribution' | 'estate_levy';
+
+export interface PaystackAccountConfig {
+  accountCategory: 'security' | 'estate';
+  secretKey: string;
+  publicKey: string;
+  isLive: boolean;
+  isConfigured: boolean;
+}
+
+export function resolvePaystackAccount(paymentType: string = 'security_levy'): PaystackAccountConfig {
+  const normalizedType = String(paymentType || '').toLowerCase().trim();
+  if (normalizedType === 'security_levy' || normalizedType === 'security' || normalizedType === 'security_account') {
+    const secretKey = process.env.PAYSTACK_SECURITY_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY || '';
+    const publicKey = process.env.PAYSTACK_SECURITY_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY || '';
+    return {
+      accountCategory: 'security',
+      secretKey,
+      publicKey,
+      isLive: secretKey.startsWith('sk_live_') || publicKey.startsWith('pk_live_'),
+      isConfigured: !!secretKey && !secretKey.includes('xxxx') && (secretKey.startsWith('sk_test_') || secretKey.startsWith('sk_live_'))
+    };
+  } else if (
+    normalizedType === 'road_contribution' ||
+    normalizedType === 'road_project' ||
+    normalizedType === 'road' ||
+    normalizedType === 'estate_levy' ||
+    normalizedType === 'estate' ||
+    normalizedType === 'estate_account'
+  ) {
+    const secretKey = process.env.PAYSTACK_ESTATE_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY || '';
+    const publicKey = process.env.PAYSTACK_ESTATE_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY || '';
+    return {
+      accountCategory: 'estate',
+      secretKey,
+      publicKey,
+      isLive: secretKey.startsWith('sk_live_') || publicKey.startsWith('pk_live_'),
+      isConfigured: !!secretKey && !secretKey.includes('xxxx') && (secretKey.startsWith('sk_test_') || secretKey.startsWith('sk_live_'))
+    };
+  }
+  throw new Error(`Unsupported payment type: '${paymentType}'. Allowed types: 'security_levy', 'road_contribution', 'estate_levy'.`);
+}
+
+function getSecurityPaystackSecret(): string {
+  return process.env.PAYSTACK_SECURITY_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY || '';
+}
+
+function getSecurityPaystackPublic(): string {
+  return process.env.PAYSTACK_SECURITY_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY || '';
+}
+
+function getEstatePaystackSecret(): string {
+  return process.env.PAYSTACK_ESTATE_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY || '';
+}
+
+function getEstatePaystackPublic(): string {
+  return process.env.PAYSTACK_ESTATE_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY || '';
+}
+
+// Backward compatibility helpers defaulting to Security Levy account
 function getPaystackSecret(): string {
-  return process.env.PAYSTACK_SECRET_KEY || '';
+  return getSecurityPaystackSecret();
 }
 
 function getPaystackPublic(): string {
-  return process.env.PAYSTACK_PUBLIC_KEY || '';
+  return getSecurityPaystackPublic();
 }
 
-function isLiveMode(): boolean {
-  const secret = getPaystackSecret();
-  const pub = getPaystackPublic();
-  return secret.startsWith('sk_live_') || pub.startsWith('pk_live_');
+function isLiveMode(category: 'security' | 'estate' = 'security'): boolean {
+  const config = resolvePaystackAccount(category === 'estate' ? 'road_contribution' : 'security_levy');
+  return config.isLive;
 }
 
-function isPaystackConfigured(): boolean {
-  const secret = getPaystackSecret();
-  return !!secret && !secret.includes('xxxx') && (secret.startsWith('sk_test_') || secret.startsWith('sk_live_'));
+function isPaystackConfigured(category: 'security' | 'estate' = 'security'): boolean {
+  const config = resolvePaystackAccount(category === 'estate' ? 'road_contribution' : 'security_levy');
+  return config.isConfigured;
 }
 
 // -------------------------------------------------------------
-// 1. PAYSTACK CONFIGURATION ENDPOINT (SAFE FOR CLIENT)
+// 1. PAYSTACK CONFIGURATION ENDPOINTS (SAFE FOR CLIENT)
 // -------------------------------------------------------------
-app.get('/api/paystack/config', (_req: Request, res: Response) => {
+app.get('/api/paystack/config', (req: Request, res: Response) => {
+  const paymentType = (req.query.type as string) || (req.query.category as string) || 'security_levy';
+  try {
+    const config = resolvePaystackAccount(paymentType);
+    res.json({
+      publicKey: config.publicKey,
+      accountCategory: config.accountCategory,
+      isConfigured: config.isConfigured,
+      mode: config.isLive ? 'live' : 'test',
+      currency: 'NGN',
+      levyAmount: 5000,
+      estateName: 'Finger of God Estate Security Management',
+      firstPaymentMonth: 'October 2026'
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// Multi-account status inspector
+app.get('/api/paystack/accounts', (_req: Request, res: Response) => {
+  const sec = resolvePaystackAccount('security_levy');
+  const est = resolvePaystackAccount('road_contribution');
   res.json({
-    publicKey: getPaystackPublic(),
-    isConfigured: isPaystackConfigured(),
-    mode: isLiveMode() ? 'live' : 'test',
-    currency: 'NGN',
-    levyAmount: 5000,
-    estateName: 'Finger of God Estate Security Management',
-    firstPaymentMonth: 'October 2026'
+    success: true,
+    security: {
+      accountCategory: 'security',
+      publicKey: sec.publicKey,
+      isConfigured: sec.isConfigured,
+      mode: sec.isLive ? 'live' : 'test'
+    },
+    estate: {
+      accountCategory: 'estate',
+      publicKey: est.publicKey,
+      isConfigured: est.isConfigured,
+      mode: est.isLive ? 'live' : 'test'
+    }
   });
 });
 
@@ -648,6 +739,15 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
   try {
     const { residentNumber, periodMonth = 10, periodYear = 2026, email } = req.body;
 
+    // 0. Server-side payment type resolution & account isolation
+    const paymentType = req.body.paymentType || 'security_levy';
+    let accountConfig: PaystackAccountConfig;
+    try {
+      accountConfig = resolvePaystackAccount(paymentType);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
     // 1. Authoritative Server-side Authentication & Resolution
     const resident = await requireAuthenticatedResident(req, res, residentNumber);
     if (!resident) return; // Error response already sent (401 or 403)
@@ -656,7 +756,7 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     const authUserId = resident.auth_user_id || 'auth-linked';
 
     // SERVER ONLY Diagnostic Logging (Req 14)
-    console.log(`[Payment Init] Authenticated user ID: ${authUserId}, Resolved resident ID: ${resident.id}, Resolved resident number: ${formattedResidentNumber}, Lookup result: FOUND (Active)`);
+    console.log(`[Payment Init] Authenticated user ID: ${authUserId}, Resolved resident ID: ${resident.id}, Resolved resident number: ${formattedResidentNumber}, Account: ${accountConfig.accountCategory.toUpperCase()}, Lookup result: FOUND (Active)`);
 
     const pMonth = parseInt(String(periodMonth), 10) || 10;
     const pYear = parseInt(String(periodYear), 10) || 2026;
@@ -682,9 +782,9 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     const LEVY_AMOUNT_NAIRA = settings.monthly_security_levy || 5000;
     const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // in kobo
 
-    // 4. Secure Unique Reference Generation
+    // 4. Secure Unique Reference Generation (Category prefix: SECURITY-)
     const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const reference = `FOGES-${pYear}${String(pMonth).padStart(2, '0')}-${formattedResidentNumber}-${randomHex}`;
+    const reference = `SECURITY-${formattedResidentNumber}-${pYear}${String(pMonth).padStart(2, '0')}-${randomHex}`;
 
     // Customer email handling (authoritative resident email preferred)
     const customerEmail = (resident.email && resident.email.includes('@'))
@@ -743,8 +843,8 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     };
     transactionsStore.set(reference, transactionRecord);
 
-    const secretKey = getPaystackSecret();
-    const isConfigured = isPaystackConfigured();
+    const secretKey = accountConfig.secretKey;
+    const isConfigured = accountConfig.isConfigured;
 
     // If real Paystack Secret Key is configured, make actual call to Paystack API
     if (isConfigured) {
@@ -764,6 +864,8 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
           callback_url: callbackUrl,
           currency: 'NGN',
           metadata: {
+            payment_type: 'security_levy',
+            account_category: 'security',
             resident_number: formattedResidentNumber,
             resident_name: paymentRecord.resident_name,
             house_number: paymentRecord.house_number,
@@ -864,8 +966,13 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       });
     }
 
-    const secretKey = getPaystackSecret();
-    const isConfigured = isPaystackConfigured();
+    // Resolve appropriate account credentials based on reference prefix or payment type
+    let accountConfig = resolvePaystackAccount('security_levy');
+    if (cleanRef.startsWith('FOG-RD-') || cleanRef.startsWith('ESTATE-') || req.body.paymentType === 'road_contribution' || req.body.paymentType === 'estate_levy') {
+      accountConfig = resolvePaystackAccount('estate_levy');
+    }
+    const secretKey = accountConfig.secretKey;
+    const isConfigured = accountConfig.isConfigured;
 
     let verifiedStatus = false;
     let paystackTxId = `sim_${Date.now()}`;
@@ -1032,27 +1139,40 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 4. PAYSTACK WEBHOOK ENDPOINT (IDEMPOTENT + SIGNATURE VALIDATION)
+// 4. PAYSTACK WEBHOOK ENDPOINT (IDEMPOTENT + MULTI-ACCOUNT SIGNATURE VALIDATION)
 // -------------------------------------------------------------
 app.post('/api/paystack/webhook', async (req: any, res: Response) => {
   try {
-    const secretKey = getPaystackSecret();
     const signature = req.headers['x-paystack-signature'];
 
-    // Reject immediately if no secret is configured or no signature supplied
-    if (!secretKey || !signature) {
-      console.warn('[Paystack Webhook] Missing secret key or x-paystack-signature header');
+    if (!signature) {
+      console.warn('[Paystack Webhook] Missing x-paystack-signature header');
       return res.status(401).json({ error: 'Unauthorized webhook request.' });
     }
 
-    // SECURE SIGNATURE VERIFICATION VIA HMAC SHA512
-    const hash = crypto
-      .createHmac('sha512', secretKey)
-      .update(req.rawBody || JSON.stringify(req.body))
-      .digest('hex');
+    const secSecret = getSecurityPaystackSecret();
+    const estSecret = getEstatePaystackSecret();
 
-    if (hash !== signature) {
-      console.warn('[Paystack Webhook] Invalid webhook signature detected');
+    if (!secSecret && !estSecret) {
+      console.warn('[Paystack Webhook] No Paystack secret key configured on server');
+      return res.status(503).json({ error: 'Paystack is not configured on the server.' });
+    }
+
+    const rawPayload = req.rawBody || JSON.stringify(req.body);
+    let matchedAccount: 'security' | 'estate' | null = null;
+
+    if (secSecret) {
+      const secHash = crypto.createHmac('sha512', secSecret).update(rawPayload).digest('hex');
+      if (secHash === signature) matchedAccount = 'security';
+    }
+
+    if (!matchedAccount && estSecret && estSecret !== secSecret) {
+      const estHash = crypto.createHmac('sha512', estSecret).update(rawPayload).digest('hex');
+      if (estHash === signature) matchedAccount = 'estate';
+    }
+
+    if (!matchedAccount) {
+      console.warn('[Paystack Webhook] Invalid webhook signature detected for all configured accounts');
       return res.status(401).json({ error: 'Invalid signature.' });
     }
 
@@ -1067,8 +1187,9 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
         return res.sendStatus(200);
       }
 
-      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security/estate levies)
+      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security levies)
       const isRoadPayment = 
+        matchedAccount === 'estate' ||
         data.metadata?.project_type === 'road_modernization' ||
         data.metadata?.project === 'road_project' ||
         String(reference).startsWith('FOG-RD-');

@@ -173,7 +173,7 @@ export async function syncRoadStoreWithDatabaseAndPaystack(): Promise<ServerRoad
   }
 
   // 2. Query Paystack Live API to guarantee zero lost transactions across redeploys
-  const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+  const secretKey = getEstatePaystackSecret();
   if (secretKey && secretKey.startsWith('sk_')) {
     try {
       const pRes = await fetch('https://api.paystack.co/transaction?status=success&perPage=50', {
@@ -697,6 +697,32 @@ export function processVerifiedRoadBankTransfer(payload: {
 // -----------------------------------------------------------------
 export const roadProjectRouter = express.Router();
 
+/**
+ * Estate Paystack Credentials Resolver (Account 2)
+ * Strictly isolates Road Modernization / Estate payments from Security Levy account.
+ */
+export function getEstatePaystackSecret(): string {
+  return process.env.PAYSTACK_ESTATE_SECRET_KEY || process.env.PAYSTACK_SECRET_KEY || '';
+}
+
+export function getEstatePaystackPublic(): string {
+  return process.env.PAYSTACK_ESTATE_PUBLIC_KEY || process.env.PAYSTACK_PUBLIC_KEY || '';
+}
+
+// Public configuration for Estate / Road Paystack account
+roadProjectRouter.get('/paystack/config', (_req: Request, res: Response) => {
+  const secretKey = getEstatePaystackSecret();
+  const pubKey = getEstatePaystackPublic();
+  res.json({
+    publicKey: pubKey,
+    accountCategory: 'estate',
+    mode: secretKey.startsWith('sk_live_') || pubKey.startsWith('pk_live_') ? 'live' : 'test',
+    isConfigured: !!secretKey && !secretKey.includes('xxxx') && (secretKey.startsWith('sk_test_') || secretKey.startsWith('sk_live_')),
+    currency: 'NGN',
+    minContribution: MIN_ROAD_CONTRIBUTION
+  });
+});
+
 // Admin Authorization Middleware for Road Project
 const requireRoadAdminAuth = async (req: Request, res: Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -832,7 +858,7 @@ roadProjectRouter.post('/paystack/initialize', async (req: Request, res: Respons
     const reference = `FOG-RD-PAY-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const amountKobo = Math.round(amt * 100);
 
-    const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+    const secretKey = getEstatePaystackSecret();
     if (!secretKey || !secretKey.startsWith('sk_')) {
       return res.status(503).json({
         success: false,
@@ -922,7 +948,7 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
       });
     }
 
-    const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+    const secretKey = getEstatePaystackSecret();
     if (!secretKey || !secretKey.startsWith('sk_')) {
       return res.status(503).json({ 
         success: false, 
@@ -975,7 +1001,7 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
 // 5. DEDICATED PAYSTACK WEBHOOK ROUTE FOR ROAD PROJECT
 roadProjectRouter.post('/paystack/webhook', async (req: any, res: Response) => {
   try {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+    const secretKey = getEstatePaystackSecret();
     const signature = req.headers['x-paystack-signature'];
 
     // Strict signature enforcement: reject if secret is missing or signature header omitted

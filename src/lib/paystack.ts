@@ -11,6 +11,7 @@ export interface PaystackConfig {
   mode: 'test' | 'live';
   currency: string;
   levyAmount: number;
+  accountCategory?: 'security' | 'estate';
   webhookUrl?: string;
 }
 
@@ -42,22 +43,24 @@ export interface VerifyPaymentResponse {
 
 /**
  * Fetch public Paystack configuration from backend (safe for frontend)
+ * Optionally specifies the payment account type: 'security_levy' or 'road_contribution'
  */
-export async function getPaystackConfig(): Promise<PaystackConfig> {
+export async function getPaystackConfig(type: 'security_levy' | 'road_contribution' | 'estate_levy' = 'security_levy'): Promise<PaystackConfig> {
   try {
-    const res = await fetch('/api/paystack/config');
+    const res = await fetch(`/api/paystack/config?type=${encodeURIComponent(type)}`);
     if (!res.ok) {
       throw new Error(`Config fetch failed: ${res.statusText}`);
     }
     return await res.json();
   } catch (err) {
-    console.warn('Could not fetch server Paystack config, using default test settings:', err);
+    console.warn('Could not fetch server Paystack config, using default settings:', err);
     return {
       publicKey: '',
       isConfigured: false,
       mode: 'test',
       currency: 'NGN',
-      levyAmount: 5000
+      levyAmount: 5000,
+      accountCategory: type === 'road_contribution' ? 'estate' : 'security'
     };
   }
 }
@@ -156,6 +159,7 @@ export async function initializePayment(params: {
   periodMonth?: number;
   periodYear?: number;
   email?: string;
+  paymentType?: 'security_levy' | 'estate_levy';
 }): Promise<InitializePaymentResponse> {
   const token = await getResidentAccessToken();
   if (!token) {
@@ -172,7 +176,8 @@ export async function initializePayment(params: {
       residentNumber: params.residentNumber,
       periodMonth: params.periodMonth || 10,
       periodYear: params.periodYear || 2026,
-      email: params.email
+      email: params.email,
+      paymentType: params.paymentType || 'security_levy'
     })
   });
 
