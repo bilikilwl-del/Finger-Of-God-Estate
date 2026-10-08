@@ -17,23 +17,28 @@ import {
   MapPin,
   Send,
   Eye,
-  Menu,
-  X,
   CreditCard,
   UserCheck,
   Bell,
   HelpCircle,
   AlertCircle,
-  Coins
+  Coins,
+  Wrench,
+  Radio,
+  Sparkles,
+  ArrowRight,
+  Check
 } from 'lucide-react';
-import { EstateSettings, Announcement, SecurityAlert } from '../../types/database';
+import { EstateSettings, Announcement, SecurityAlert, Resident } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { SEOHead } from '../common/SEOHead';
+import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 
 interface PublicSecurityViewProps {
   estateSettings: EstateSettings;
+  currentResident?: Resident | null;
   onNavigateHome: () => void;
   onNavigateToRoadProject: () => void;
   onNavigateToAnnouncements: () => void;
@@ -46,6 +51,7 @@ interface PublicSecurityViewProps {
 
 export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   estateSettings,
+  currentResident,
   onNavigateHome,
   onNavigateToRoadProject,
   onNavigateToAnnouncements,
@@ -55,10 +61,18 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   onOpenResidentLogin,
   onOpenPayLevy
 }) => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [securityAnnouncements, setSecurityAnnouncements] = useState<Announcement[]>([]);
   const [securityAlerts, setSecurityAlerts] = useState<SecurityAlert[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Paystack Modal State
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [targetResident, setTargetResident] = useState<Resident | null>(currentResident || null);
+
+  // Resident Lookup for Payment
+  const [lookupNumber, setLookupNumber] = useState(currentResident?.resident_number || '');
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupMessage, setLookupMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Incident reporting state
   const [reporterName, setReporterName] = useState('');
@@ -75,6 +89,16 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
 
   // Active protocol tab
   const [activeProtocolTab, setActiveProtocolTab] = useState<'gate' | 'traffic' | 'night' | 'contractors'>('gate');
+
+  const monthlyLevyAmount = estateSettings.monthly_security_levy || 5000;
+  const formattedLevy = `₦${monthlyLevyAmount.toLocaleString()}`;
+
+  useEffect(() => {
+    if (currentResident) {
+      setTargetResident(currentResident);
+      setLookupNumber(currentResident.resident_number);
+    }
+  }, [currentResident]);
 
   useEffect(() => {
     async function loadSecurityData() {
@@ -100,6 +124,32 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
     loadSecurityData();
   }, []);
 
+  const handleLookupResident = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupNumber.trim()) {
+      setLookupMessage({ text: 'Please enter a Resident Number (e.g. 001–300)', type: 'error' });
+      return;
+    }
+
+    setLookingUp(true);
+    setLookupMessage(null);
+    try {
+      const clean = lookupNumber.trim().padStart(3, '0');
+      const res = await dbService.lookupResidentPublic(clean);
+      if (res.found && res.resident) {
+        setTargetResident(res.resident as Resident);
+        setLookupMessage({ text: `Identified: ${res.resident.full_name} (${res.resident.house_number || 'Plot ' + clean})`, type: 'success' });
+        setIsPayModalOpen(true);
+      } else {
+        setLookupMessage({ text: res.message || `Resident ${clean} not found in verified registry.`, type: 'error' });
+      }
+    } catch {
+      setLookupMessage({ text: 'Could not connect to database. Please check connection.', type: 'error' });
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   const handleReportIncident = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim() || !location.trim()) {
@@ -124,7 +174,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         priority: isEmergency ? 'Critical' : priority,
         description: description.trim(),
         reporter_type: 'Resident',
-        reported_by: reporterName.trim() || 'Resident (Security Page Form)',
+        reported_by: reporterName.trim() || 'Resident (Community Security Form)',
         reporter_phone: reporterPhone.trim() || undefined,
         is_emergency: isEmergency,
         evidence: []
@@ -151,31 +201,31 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
 
   const emergencyContacts = [
     {
-      title: 'Chief Security Officer (CSO)',
-      phone: estateSettings.contact_phone || '08023456789',
-      desc: 'Overall security command, escalations & executive coordination',
-      badge: '24/7 Available',
+      title: 'Delta State Unified Vigilante (School Boy Units)',
+      phone: '08034567890',
+      desc: 'Operational vigilante command covering Finger of God Estate & surrounding areas',
+      badge: 'Operational Partner',
       badgeColor: 'bg-emerald-100 text-emerald-800'
     },
     {
-      title: 'Main Gate Security Command Desk',
-      phone: '08034567890',
-      desc: 'Access barrier control, visitor entry verification & pedestrian turnstile',
-      badge: 'Immediate Response',
+      title: 'Chief Security Officer (CSO)',
+      phone: estateSettings.contact_phone || '08023456789',
+      desc: 'Estate security command, resident security coordination & incident escalation',
+      badge: '24/7 Available',
       badgeColor: 'bg-blue-100 text-blue-800'
     },
     {
       title: 'Mobile Patrol Squad Dispatch',
       phone: '08098765432',
-      desc: 'Armed perimeter patrol, nighttime escort & distress dispatch',
-      badge: 'Motorized Unit',
+      desc: 'Perimeter patrol squad, nighttime escort & distress dispatch unit',
+      badge: 'Patrol Dispatch',
       badgeColor: 'bg-amber-100 text-amber-800'
     },
     {
       title: 'Delta State Police (Asaba Division)',
       phone: '112 / 08031234567',
-      desc: 'External law enforcement, emergency reinforcement & tactical liaison',
-      badge: 'State Emergency',
+      desc: 'State law enforcement liaison & external tactical reinforcement',
+      badge: 'State Police',
       badgeColor: 'bg-rose-100 text-rose-800'
     }
   ];
@@ -188,7 +238,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
       points: [
         'All active residents are issued designated RFID gate passes and windshield clearance stickers.',
         'Visitors must be pre-registered by their resident host via the Resident Portal or verified via an authenticated phone call from the gate desk.',
-        'Walk-in visitors without prior resident notification will be politely detained at the reception pavilion until host confirmation is achieved.',
+        'Walk-in visitors without prior resident notification are held at the reception pavilion until host confirmation is completed.',
         'Gate officers record all entry and departure timestamps in the digital gate log for community audit safety.'
       ]
     },
@@ -198,14 +248,14 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
       icon: Car,
       points: [
         'Strict 20 km/h speed limit throughout all estate streets, crescents, and boulevards.',
-        'Reckless driving, blaring of loud horns, and blocking designated fire hydration lanes are strictly prohibited.',
+        'Reckless driving, blaring of loud horns, and blocking designated access lanes are strictly prohibited.',
         'Vehicles must be parked inside designated residential compounds or approved curbside bays without obstructing road widths.',
         'Commercial delivery bikes must turn off high-beam headlights when approaching residential gates.'
       ]
     },
     {
       id: 'night',
-      title: 'Nighttime Curfew & Visitor Protocols',
+      title: 'Nighttime Curfew & Vigilante Patrols',
       icon: Clock,
       points: [
         'Nighttime verification protocol is in effect from 22:00 (10:00 PM) to 05:00 (5:00 AM) daily.',
@@ -230,9 +280,9 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
       <SEOHead
-        title="24/7 Security Department & Emergency Operations — Finger of God Estate"
-        description="24/7 estate security command, access control policies, emergency contact dispatch, visitor protocols, and digital incident reporting for Finger of God Estate."
-        keywords={['Estate Security', 'Gate Access Control', 'Finger of God Estate Security', 'Emergency Numbers Asaba', 'Incident Reporting']}
+        title="Community Security & Vigilante Operations — Finger of God Estate"
+        description="Community security operations for Finger of God Estate in partnership with Delta State Unified Vigilante (School Boy Units). Monthly Security Levy (₦5,000), 24/7 vigilante protection, equipment maintenance, and emergency response."
+        keywords={['Community Security', 'Finger of God Estate', 'Delta State Unified Vigilante', 'School Boy Units', 'Security Levy ₦5000', 'Asaba Security']}
         canonicalPath="/#security"
         ogType="website"
       />
@@ -254,7 +304,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
       />
 
       {/* 2. Breadcrumb Navigation Bar */}
-      <div className="bg-slate-100/80 border-b border-slate-200 py-2 px-4 sm:px-6 lg:px-8 text-xs text-slate-600">
+      <div className="bg-slate-100/90 border-b border-slate-200 py-2.5 px-4 sm:px-6 lg:px-8 text-xs text-slate-600">
         <div className="max-w-7xl mx-auto flex items-center gap-2">
           <button 
             onClick={onNavigateHome}
@@ -263,102 +313,121 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
             <span>Finger of God Estate</span>
           </button>
           <span className="text-slate-400">/</span>
-          <span className="font-semibold text-slate-900">Security Department</span>
+          <span className="font-semibold text-slate-900">Community Security</span>
         </div>
       </div>
 
-      {/* 3. Hero Section - Security Department */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white py-12 sm:py-16">
+      {/* 3. Hero Section - Community Security & Vigilante Partnership */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white py-12 sm:py-16 lg:py-20">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             
-            <div className="lg:col-span-8 flex flex-col justify-center text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold w-fit mb-3">
-                <Shield className="w-3.5 h-3.5" />
-                <span>Finger of God Estate • Department of Security & Access</span>
+            {/* Left Column: Heading and Community Explanation */}
+            <div className="lg:col-span-7 flex flex-col justify-center text-left">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold w-fit mb-4">
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Delta State Unified Vigilante (School Boy Units) Partnership</span>
               </div>
 
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white leading-tight">
-                Estate Security & Community Protection
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white leading-tight tracking-tight">
+                Community Security
               </h1>
 
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-[680px] mt-3">
-                The Security Department of Finger of God Estate operates 24 hours a day, 7 days a week to safeguard lives, assets, and peaceful residential living. Through strictly monitored access barriers, motorized perimeter patrols, digital visitor logging, and swift incident resolution, we guarantee a safe environment for every family.
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-[650px] mt-4">
+                Finger of God Estate is protected through active community collaboration with the{' '}
+                <strong className="text-white font-semibold">Delta State Unified Vigilante (School Boy Units)</strong>, 
+                who provide security coverage across the surrounding areas. The monthly Security Levy helps sustain their day-to-day operations, equipment maintenance, and security response capabilities.
               </p>
 
               {/* Action Buttons */}
-              <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
+              <div className="mt-8 flex flex-wrap items-center gap-3 sm:gap-4">
+                <button
+                  onClick={() => {
+                    if (currentResident) {
+                      setIsPayModalOpen(true);
+                    } else {
+                      document.getElementById('security-contribution-section')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs sm:text-sm shadow-lg shadow-emerald-950/40 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Contribute Security Levy ({formattedLevy})</span>
+                </button>
+
                 <button
                   onClick={() => {
                     document.getElementById('report-incident-section')?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="px-5 py-2.5 sm:py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-xs sm:text-sm border border-slate-700 transition-colors flex items-center gap-2 cursor-pointer"
                 >
-                  <ShieldAlert className="w-4 h-4" />
-                  <span>Report an Incident</span>
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  <span>Report Security Concern</span>
                 </button>
 
                 <button
                   onClick={() => {
                     document.getElementById('emergency-contacts-section')?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="px-5 py-2.5 sm:py-3 bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold rounded-xl text-xs sm:text-sm border border-slate-700 transition-colors flex items-center gap-2 cursor-pointer"
+                  className="px-4 py-3 text-slate-300 hover:text-white font-semibold text-xs sm:text-sm transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <Phone className="w-4 h-4 text-emerald-400" />
                   <span>Emergency Hotlines</span>
                 </button>
-
-                <button
-                  onClick={onNavigateHome}
-                  className="px-4 py-2.5 sm:py-3 text-slate-300 hover:text-white font-semibold text-xs sm:text-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Main Estate Home</span>
-                </button>
               </div>
             </div>
 
-            {/* Quick Metrics Badge Column */}
-            <div className="lg:col-span-4 flex justify-center lg:justify-end">
-              <div className="p-6 rounded-2xl bg-slate-800/90 border border-slate-700/80 shadow-xl backdrop-blur-xs w-full max-w-sm">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-700/80">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            {/* Right Column: Key Operational Overview Card */}
+            <div className="lg:col-span-5 flex justify-center lg:justify-end">
+              <div className="p-6 sm:p-7 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl backdrop-blur-md w-full max-w-md">
+                <div className="flex items-center gap-3 pb-5 border-b border-slate-800">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
                     <ShieldCheck className="w-6 h-6" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Command Status</div>
-                    <div className="text-base font-bold text-emerald-400">Normal • Fully Active</div>
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Security Profile</div>
+                    <div className="text-base font-bold text-white">Community Protection Unit</div>
                   </div>
                 </div>
 
-                <div className="space-y-3.5 mt-4 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Main Gate Manned Lane:</span>
-                    <span className="font-semibold text-slate-200">24/7 Monitored</span>
+                <div className="space-y-4 mt-5 text-xs sm:text-sm">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+                    <span className="text-slate-400">Monthly Contribution:</span>
+                    <span className="font-bold text-emerald-400 font-mono text-base">{formattedLevy} / month</span>
+                  </div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+                    <span className="text-slate-400">Operational Partner:</span>
+                    <span className="font-semibold text-slate-200 text-right">Delta State Unified Vigilante</span>
+                  </div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+                    <span className="text-slate-400">Tactical Unit:</span>
+                    <span className="font-semibold text-slate-200">School Boy Units</span>
+                  </div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+                    <span className="text-slate-400">Coverage:</span>
+                    <span className="font-semibold text-emerald-400">24/7 Patrol & Gate Monitoring</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Motorized Patrol Squad:</span>
-                    <span className="font-semibold text-emerald-400">Active On Route</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Perimeter Solar Lighting:</span>
-                    <span className="font-semibold text-slate-200">100% Operational</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Speed Limit Inside Estate:</span>
-                    <span className="font-mono font-bold text-amber-300">20 km/h Strict</span>
+                    <span className="text-slate-400">Operational Scope:</span>
+                    <span className="font-semibold text-slate-200">Estate & Surrounding Areas</span>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-slate-700/80">
+                <div className="mt-6 pt-5 border-t border-slate-800">
                   <button
-                    onClick={onOpenPayLevy}
-                    className="w-full py-2 px-3 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold text-center transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => {
+                      if (currentResident) {
+                        setIsPayModalOpen(true);
+                      } else {
+                        document.getElementById('security-contribution-section')?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-bold text-center transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                   >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Pay Security Levy (₦5,000)</span>
+                    <Coins className="w-4 h-4" />
+                    <span>Pay Security Levy Online</span>
                   </button>
                 </div>
               </div>
@@ -398,8 +467,202 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </section>
       )}
 
-      {/* 5. Emergency Command Hotlines Section */}
-      <section id="emergency-contacts-section" className="py-12 bg-white border-b border-slate-200">
+      {/* 5. Community Security Purpose & Operational Coverage Cards */}
+      <section className="py-14 bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Transparent Community Security</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Why the Security Levy Exists & How It Works
+            </h2>
+            <p className="text-sm text-slate-600 mt-2.5 leading-relaxed">
+              Security is a collective community responsibility. Our partnership with the Delta State Unified Vigilante ensures professional frontline defense and prompt incident response.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            {/* Card 1: Operational Partner */}
+            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/90 hover:border-emerald-300 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center mb-4">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Who Provides Security?
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 mt-2.5 leading-relaxed">
+                  The <strong className="text-slate-900">Delta State Unified Vigilante (School Boy Units)</strong> are actively deployed across the surrounding areas, including Finger of God Estate, maintaining access integrity and perimeter safety.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-slate-200/80 text-[11px] text-emerald-800 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                <span>Recognized State Security Partner</span>
+              </div>
+            </div>
+
+            {/* Card 2: Why the Levy Exists */}
+            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/90 hover:border-emerald-300 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Why the Levy Exists
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 mt-2.5 leading-relaxed">
+                  The monthly contribution creates a sustainable, pooled operational fund that ensures the vigilant security presence serving the community is never compromised by funding shortfalls.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-slate-200/80 text-[11px] text-blue-800 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                <span>Shared Community Safeguard</span>
+              </div>
+            </div>
+
+            {/* Card 3: What Contributions Support */}
+            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/90 hover:border-emerald-300 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4">
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  What Contributions Support
+                </h3>
+                <ul className="text-xs text-slate-600 mt-2.5 space-y-1.5 leading-relaxed">
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span>Procurement of security equipment</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span>Maintenance & replacement of operational equipment</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span>Day-to-day security activities & logistics</span>
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span>Operational requirements for coverage</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="mt-5 pt-4 border-t border-slate-200/80 text-[11px] text-amber-800 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                <span>Direct Operational Allocation</span>
+              </div>
+            </div>
+
+            {/* Card 4: How Much is the Contribution */}
+            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/90 hover:border-emerald-300 transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center mb-4">
+                  <CreditCard className="w-6 h-6" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Contribution Amount
+                </h3>
+                <div className="mt-2.5">
+                  <div className="text-2xl font-black text-slate-900 font-mono">{formattedLevy}</div>
+                  <div className="text-xs text-slate-500 font-medium">per resident household monthly</div>
+                </div>
+                <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
+                  Every contribution is logged transparently against the resident registry with instantaneous digital receipt issuance for full auditability.
+                </p>
+              </div>
+              <div className="mt-5 pt-4 border-t border-slate-200/80 text-[11px] text-purple-800 font-semibold flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                <span>Instant Verifiable Receipt</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      {/* 6. Online Security Contribution Section */}
+      <section id="security-contribution-section" className="py-14 bg-gradient-to-b from-slate-50 to-slate-100 border-b border-slate-200">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold uppercase tracking-wider mb-1.5">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>Online Dues Clearance</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900">
+                  Contribute Your Monthly Security Levy
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1">
+                  Standard Monthly Security Levy: <strong className="text-emerald-700 font-mono font-bold">{formattedLevy}</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsPayModalOpen(true)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay Now via Paystack</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Resident Number Lookup Form */}
+            <form onSubmit={handleLookupResident} className="mt-6">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                  Enter Resident Number to Pay (e.g. 001–300)
+                </label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    value={lookupNumber}
+                    onChange={e => setLookupNumber(e.target.value)}
+                    placeholder="Enter Resident ID (e.g. 016)"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={lookingUp}
+                    className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {lookingUp ? 'Verifying...' : 'Verify & Continue to Payment'}
+                  </button>
+                </div>
+
+                {lookupMessage && (
+                  <div className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 ${
+                    lookupMessage.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}>
+                    {lookupMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                    <span>{lookupMessage.text}</span>
+                  </div>
+                )}
+
+                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Payments routed via dedicated Security Paystack Account</span>
+                  <button
+                    type="button"
+                    onClick={onNavigateToVerifyReceipt}
+                    className="text-emerald-700 hover:underline font-semibold cursor-pointer"
+                  >
+                    Verify Past Receipt
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* 7. Emergency Command Hotlines Section */}
+      <section id="emergency-contacts-section" className="py-14 bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-10">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold uppercase tracking-wider mb-2">
@@ -448,8 +711,8 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </div>
       </section>
 
-      {/* 6. Security Guidelines & Protocols */}
-      <section className="py-12 bg-slate-50 border-b border-slate-200">
+      {/* 8. Security Guidelines & Protocols */}
+      <section className="py-14 bg-slate-50 border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-10">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider mb-2">
@@ -516,8 +779,8 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </div>
       </section>
 
-      {/* 7. Interactive Incident Reporting Section */}
-      <section id="report-incident-section" className="py-12 sm:py-16 bg-white border-b border-slate-200">
+      {/* 9. Interactive Incident Reporting Section */}
+      <section id="report-incident-section" className="py-14 sm:py-16 bg-white border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-10 shadow-xl border border-slate-800">
             <div className="max-w-2xl">
@@ -529,7 +792,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                 Report an Incident or Security Concern
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
-                If you observe suspicious movement, an electrical hazard, perimeter trespass, excessive noise, or general security concern, submit this direct report. It is recorded immediately in the estate security log and dispatched to the Chief Security Officer.
+                If you observe suspicious movement, an electrical hazard, perimeter trespass, excessive noise, or general security concern, submit this direct report. It is recorded immediately in the estate security log and dispatched to the Chief Security Officer and duty patrol unit.
               </p>
             </div>
 
@@ -704,9 +967,9 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </div>
       </section>
 
-      {/* 8. Security Bulletins & Notices Feed */}
+      {/* 10. Security Bulletins & Notices Feed */}
       {securityAnnouncements.length > 0 && (
-        <section className="py-12 bg-slate-50 border-b border-slate-200">
+        <section className="py-14 bg-slate-50 border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
               <div>
@@ -769,7 +1032,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </section>
       )}
 
-      {/* 9. Security Department Footer */}
+      {/* 11. Security Department Footer */}
       <footer className="bg-slate-950 text-slate-400 py-10 text-xs border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-slate-800/80">
@@ -779,10 +1042,10 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                 variant="horizontal"
                 theme="dark"
                 estateName={estateSettings.estate_name || 'Finger of God Estate'}
-                subtitle="DEPARTMENT OF SECURITY • ASABA"
+                subtitle="COMMUNITY SECURITY • ASABA"
               />
               <p className="mt-3 text-slate-400 text-xs leading-relaxed max-w-sm">
-                Dedicated to safeguarding Finger of God Estate, Iyiaba, Asaba, Delta State through professional vigilance, technology-driven access management, and community collaboration.
+                Dedicated to safeguarding Finger of God Estate, Iyiaba, Asaba, Delta State in operational partnership with the Delta State Unified Vigilante (School Boy Units).
               </p>
             </div>
 
@@ -832,11 +1095,26 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
               © {new Date().getFullYear()} Finger of God Estate Management. All rights reserved.
             </div>
             <div>
-              Security Operations Center • Delta State, Nigeria
+              Community Security Operations • Delta State Unified Vigilante (School Boy Units)
             </div>
           </div>
         </div>
       </footer>
+
+      {/* 12. Paystack Payment Modal */}
+      {isPayModalOpen && (
+        <PaystackPaymentModal
+          isOpen={isPayModalOpen}
+          onClose={() => setIsPayModalOpen(false)}
+          preselectedResident={targetResident}
+          estateSettings={estateSettings}
+          targetMonth={10}
+          targetYear={2026}
+          onPaymentSuccess={() => {
+            setIsPayModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

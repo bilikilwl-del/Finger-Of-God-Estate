@@ -475,6 +475,7 @@ export default function App() {
         {renderToast()}
         <PublicSecurityView
           estateSettings={estateSettings}
+          currentResident={currentResident}
           onNavigateHome={() => navigateTo('home')}
           onNavigateToRoadProject={() => navigateTo('road_project')}
           onNavigateToAnnouncements={() => navigateTo('public_announcements')}
