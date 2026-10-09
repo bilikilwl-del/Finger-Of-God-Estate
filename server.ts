@@ -1159,17 +1159,35 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
       return res.status(503).json({ error: 'Paystack is not configured on the server.' });
     }
 
-    const rawPayload = req.rawBody || JSON.stringify(req.body);
+    // STRICT RAW BYTES REQUIREMENT: Raw request buffer must be present; JSON.stringify fallback is forbidden
+    if (!req.rawBody || !Buffer.isBuffer(req.rawBody)) {
+      console.warn('[Paystack Webhook] Raw request bytes missing or not a buffer');
+      return res.status(400).json({ error: 'Missing raw request bytes for webhook verification.' });
+    }
+
+    const rawSig = typeof signature === 'string' ? signature.trim().toLowerCase() : '';
+    if (!/^[a-f0-9]{128}$/.test(rawSig)) {
+      console.warn('[Paystack Webhook] Malformed signature format or length');
+      return res.status(401).json({ error: 'Invalid signature format.' });
+    }
+
+    const sigBuf = Buffer.from(rawSig, 'utf8');
     let matchedAccount: 'security' | 'estate' | null = null;
 
     if (secSecret) {
-      const secHash = crypto.createHmac('sha512', secSecret).update(rawPayload).digest('hex');
-      if (secHash === signature) matchedAccount = 'security';
+      const secHash = crypto.createHmac('sha512', secSecret).update(req.rawBody).digest('hex').toLowerCase();
+      const secBuf = Buffer.from(secHash, 'utf8');
+      if (secBuf.length === sigBuf.length && crypto.timingSafeEqual(secBuf, sigBuf)) {
+        matchedAccount = 'security';
+      }
     }
 
     if (!matchedAccount && estSecret && estSecret !== secSecret) {
-      const estHash = crypto.createHmac('sha512', estSecret).update(rawPayload).digest('hex');
-      if (estHash === signature) matchedAccount = 'estate';
+      const estHash = crypto.createHmac('sha512', estSecret).update(req.rawBody).digest('hex').toLowerCase();
+      const estBuf = Buffer.from(estHash, 'utf8');
+      if (estBuf.length === sigBuf.length && crypto.timingSafeEqual(estBuf, sigBuf)) {
+        matchedAccount = 'estate';
+      }
     }
 
     if (!matchedAccount) {
@@ -1182,7 +1200,7 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
     // Process 'charge.success'
     if (event.event === 'charge.success') {
       const data = event.data;
-      const reference = data.reference;
+      const reference = data?.reference;
 
       if (!reference) {
         return res.sendStatus(200);
@@ -1197,8 +1215,13 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
 
       if (isFlatSecurityPayment) {
         console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Building & Flat Security Levy ledger...`);
-        await processVerifiedSecurityLevyPaystackEvent(data);
-        return res.sendStatus(200);
+        try {
+          await processVerifiedSecurityLevyPaystackEvent(data);
+          return res.sendStatus(200);
+        } catch (err: any) {
+          console.error(`[Paystack Webhook] Security Levy allocation failed for ${reference}:`, err?.message || err);
+          return res.status(500).json({ error: 'Authoritative database ledger processing failed. Retryable.' });
+        }
       }
 
       // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security levies)

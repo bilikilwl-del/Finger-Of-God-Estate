@@ -362,9 +362,10 @@ BEGIN
             FROM public.flat_payment_allocations
             WHERE obligation_id = v_obligation.id;
 
+            -- Calculate balance directly from persisted allocations (no GREATEST clamping to conceal negative balance anomaly)
             UPDATE public.flat_security_levy_obligations
             SET amount_paid = v_calc_paid,
-                balance_due = GREATEST(0.00, amount_due - v_calc_paid),
+                balance_due = amount_due - v_calc_paid,
                 status = CASE 
                     WHEN v_calc_paid >= amount_due THEN 'PAID'
                     WHEN v_calc_paid > 0.00 THEN 'PARTIALLY_PAID'
@@ -382,8 +383,8 @@ BEGIN
         -- Over-allocation anomaly detected: record discrepancy for urgent reconciliation
         UPDATE public.security_levy_transactions
         SET allocated_amount = v_total_allocated,
-            unallocated_amount = 0.00,
-            allocation_status = 'PARTIALLY_ALLOCATED',
+            unallocated_amount = COALESCE(v_tx.verified_amount, 0.00) - v_total_allocated,
+            allocation_status = 'OVER_ALLOCATION_DISCREPANCY',
             reconciliation_notes = 'CRITICAL DISCREPANCY: Allocations (₦' || v_total_allocated || ') exceeded verified amount (₦' || COALESCE(v_tx.verified_amount, 0.00) || '). Urgent administrative audit required.',
             updated_at = NOW()
         WHERE id = v_tx.id;
@@ -394,7 +395,7 @@ BEGIN
             'allocated_count', v_allocated_count,
             'conflict_count', v_conflict_count + 1,
             'total_allocated', v_total_allocated,
-            'total_unallocated', 0.00
+            'total_unallocated', COALESCE(v_tx.verified_amount, 0.00) - v_total_allocated
         );
     END IF;
 

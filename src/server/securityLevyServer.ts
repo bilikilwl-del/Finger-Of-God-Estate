@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser } from './database.ts';
+import { arePhoneNumbersEqual } from '../lib/phoneUtils.js';
 
 export const securityLevyRouter = express.Router();
 
@@ -476,12 +477,16 @@ securityLevyRouter.post('/initialize-payment', async (req: Request, res: Respons
       return res.status(400).json({ success: false, message: 'One or more selected flats could not be found.' });
     }
 
-    // Check billing active status
-    const inactiveFlats = targetFlats.filter(f => !f.is_billing_active);
-    if (inactiveFlats.length > 0) {
+    // Check flat eligibility: must be ACTIVE, approved, and enabled for billing
+    const ineligibleFlats = targetFlats.filter(f => 
+      !f.is_billing_active || 
+      f.status !== 'ACTIVE' || 
+      (f.is_approved !== undefined && f.is_approved === false)
+    );
+    if (ineligibleFlats.length > 0) {
       return res.status(400).json({
         success: false,
-        message: `Flat ${inactiveFlats.map(f => f.flat_number).join(', ')} is not currently activated for billing. Please contact estate administration.`
+        message: `Flat ${ineligibleFlats.map(f => f.flat_number).join(', ')} is not currently active, approved, or enabled for billing. Please contact estate administration.`
       });
     }
 
@@ -1071,37 +1076,130 @@ securityLevyRouter.get('/audit-logs', requireSecurityAdmin, async (req: Request,
 // POST /api/security-levy/cancel-checkout
 securityLevyRouter.post('/cancel-checkout', async (req: Request, res: Response) => {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Authentication required to cancel checkout session.'
+      });
+    }
+
     const { reference } = req.body;
     if (!reference || typeof reference !== 'string') {
       return res.status(400).json({ success: false, message: 'Payment reference is required.' });
     }
 
-    const tx = await serverDb.getSecurityLevyTransactionByRef(reference.trim());
+    const cleanRef = reference.trim();
+    const tx = await serverDb.getSecurityLevyTransactionByRef(cleanRef);
     if (!tx) {
       return res.status(404).json({ success: false, message: 'Transaction not found.' });
     }
 
-    if (tx.payment_status === 'PENDING') {
-      // Release reservation locks on obligations
-      const obligations = await serverDb.getObligations({ billingMonth: tx.billing_month });
-      const targetFlats = Array.isArray(tx.target_flat_ids) ? tx.target_flat_ids : [];
-      for (const fId of targetFlats) {
-        const ob = obligations.find(o => o.flat_id === fId && o.locked_by_reference === tx.paystack_reference);
-        if (ob) {
-          await serverDb.updateObligation(ob.id, {
-            locked_by_reference: null,
-            lock_expires_at: null
-          });
-        }
+    // 1. Authenticate caller (Admin OR Resident)
+    let isAuthorized = false;
+    let actorDescription = 'UNKNOWN';
+
+    // Check if Administrator
+    const adminCheck = await verifyAdminToken(token);
+    if (adminCheck.valid && adminCheck.user) {
+      isAuthorized = true;
+      actorDescription = `ADMIN:${adminCheck.user.email}`;
+    } else {
+      // Check if Resident session
+      const session = serverDb.getResidentSession(token);
+      let resident: any = null;
+
+      if (session) {
+        resident = await serverDb.getResidentByNumber(session.resident_number);
+      } else if (token.startsWith('eyJ')) {
+        // Try Supabase Auth user token
+        try {
+          const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+          if (!userErr && user) {
+            resident = await serverDb.getResidentByAuthId(user.id);
+            if (!resident && user.email) {
+              const residents = await serverDb.getResidents();
+              resident = residents.find((r: any) => r.email?.toLowerCase() === user.email?.toLowerCase());
+            }
+          }
+        } catch {}
       }
 
-      await serverDb.updateSecurityLevyTransaction(tx.id, {
-        payment_status: 'CANCELLED',
-        reconciliation_notes: 'Checkout cancelled by resident.'
+      if (!resident) {
+        return res.status(401).json({
+          success: false,
+          message: 'Unauthorized: Invalid or expired resident session token.'
+        });
+      }
+
+      // 2. Strict Ownership Verification: Verify transaction belongs to this resident
+      const flats = await serverDb.getFlats();
+      const residentFlats = flats.filter(f => f.resident_id === resident.id || (resident.house_number && f.flat_number && resident.house_number.includes(f.flat_number)));
+      const residentFlatIds = new Set(residentFlats.map(f => f.id));
+
+      const isOwnerByEmail = Boolean(resident.email && tx.payer_email && resident.email.toLowerCase() === tx.payer_email.toLowerCase());
+      const isOwnerByPhone = Boolean(resident.phone_number && tx.payer_phone && arePhoneNumbersEqual(resident.phone_number, tx.payer_phone));
+      const isOwnerByNumber = Boolean(resident.resident_number && tx.payer_name && (tx.payer_name.includes(resident.resident_number) || resident.full_name?.toLowerCase() === tx.payer_name.toLowerCase()));
+      const isOwnerByFlat = Array.isArray(tx.target_flat_ids) && tx.target_flat_ids.some((fid: string) => residentFlatIds.has(fid));
+
+      if (isOwnerByEmail || isOwnerByPhone || isOwnerByNumber || isOwnerByFlat) {
+        isAuthorized = true;
+        actorDescription = `RESIDENT:${resident.resident_number}`;
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: You are not authorized to cancel this checkout session. Transaction does not belong to your resident profile.'
+        });
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Unauthorized access.' });
+    }
+
+    // 3. Status checks: never cancel settled payments
+    if (tx.payment_status === 'CANCELLED') {
+      return res.json({ success: true, message: 'Checkout session is already cancelled.' });
+    }
+
+    if (tx.payment_status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel transaction with status ${tx.payment_status}. Only pending checkout sessions can be cancelled.`
       });
     }
 
-    return res.json({ success: true, message: 'Checkout session cancelled and flat reservations released.' });
+    // 4. Concurrency & atomic lock release: release ONLY locks for this reference and target obligations
+    const targetObligations = Array.isArray(tx.target_obligation_ids) && tx.target_obligation_ids.length > 0
+      ? tx.target_obligation_ids
+      : (await serverDb.getObligations({ billingMonth: tx.billing_month })).filter((o: any) => tx.target_flat_ids?.includes(o.flat_id)).map((o: any) => o.id);
+
+    for (const obId of targetObligations) {
+      const ob = (await serverDb.getObligations()).find((o: any) => o.id === obId);
+      if (ob && ob.locked_by_reference === tx.paystack_reference) {
+        await serverDb.updateObligation(ob.id, {
+          locked_by_reference: null,
+          lock_expires_at: null
+        });
+      }
+    }
+
+    const updated = await serverDb.updateSecurityLevyTransaction(tx.id, {
+      payment_status: 'CANCELLED',
+      reconciliation_notes: `Checkout cancelled by ${actorDescription} at ${new Date().toISOString()}.`
+    });
+
+    if (!updated) {
+      return res.status(500).json({ success: false, message: 'Failed to update transaction status in database.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Checkout session cancelled and flat reservations released successfully.',
+      transaction_id: tx.id
+    });
   } catch (error: any) {
     console.error('Error cancelling checkout:', error);
     return res.status(500).json({ success: false, message: 'Server error cancelling checkout.' });
@@ -1112,7 +1210,7 @@ securityLevyRouter.post('/cancel-checkout', async (req: Request, res: Response) 
 // 8. WEBHOOK DELEGATE FOR SERVER.TS
 // -------------------------------------------------------------
 export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promise<void> {
-  const reference = data.reference;
+  const reference = data?.reference;
   if (!reference) return;
 
   const transaction = await serverDb.getSecurityLevyTransactionByRef(reference);
@@ -1127,9 +1225,15 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
     return;
   }
 
-  // Currency validation
-  if (data.currency && data.currency !== 'NGN') {
-    console.warn(`[Security Levy Webhook Warning] Non-NGN currency (${data.currency}) received for ref ${reference}`);
+  // Status validation: Gateway status must be strictly 'success'
+  if (!data.status || data.status !== 'success') {
+    console.warn(`[Security Levy Webhook Warning] Non-success gateway status (${data.status}) received for ref ${reference}`);
+    return;
+  }
+
+  // Currency validation: Currency must be explicitly present and NGN
+  if (!data.currency || data.currency !== 'NGN') {
+    console.warn(`[Security Levy Webhook Warning] Missing or non-NGN currency (${data.currency}) received for ref ${reference}`);
     return;
   }
 
@@ -1156,17 +1260,16 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
   }
 
   const now = new Date().toISOString();
-  try {
-    await serverDb.updateSecurityLevyTransaction(transaction.id, {
-      payment_status: 'SUCCESSFUL',
-      verified_amount: paidKobo / 100,
-      verified_at: data.paid_at || now,
-      channel_payload: data
-    });
+  await serverDb.updateSecurityLevyTransaction(transaction.id, {
+    payment_status: 'SUCCESSFUL',
+    verified_amount: paidKobo / 100,
+    verified_at: data.paid_at || now,
+    channel_payload: data
+  });
 
-    const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
-    console.log(`[Security Levy Webhook] Successfully processed and allocated transaction ${reference}:`, allocResult);
-  } catch (err: any) {
-    console.error(`[Security Levy Webhook Error] Failed to allocate transaction ${reference}:`, err);
+  const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
+  console.log(`[Security Levy Webhook] Processed and allocated transaction ${reference}:`, allocResult);
+  if (!allocResult.success && allocResult.error?.includes('SUPABASE_')) {
+    throw new Error(`Authoritative allocation failed: ${allocResult.error}`);
   }
 }

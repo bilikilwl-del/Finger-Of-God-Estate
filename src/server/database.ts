@@ -26,7 +26,9 @@ const SUPABASE_URL: string = process.env.SUPABASE_URL || process.env.VITE_SUPABA
 const SUPABASE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 export function isSupabaseAdminConfigured(): boolean {
-  return Boolean(SUPABASE_URL && SUPABASE_KEY && SUPABASE_KEY.trim().length > 20);
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return Boolean(url && key && key.trim().length > 20);
 }
 
 // In production, missing credentials fail closed. In dev/test, use safe placeholder so imports succeed.
@@ -1855,9 +1857,9 @@ export const serverDb = {
     const generatedReceipts: string[] = [];
 
     for (const flatId of targetFlats) {
-      // Validate flat eligibility: must exist, be active, approved, and have billing enabled
+      // Validate flat eligibility: must exist, be ACTIVE, approved, and have billing enabled
       const flat = await this.getFlatById(flatId);
-      if (!flat || flat.status === 'ARCHIVED' || flat.is_approved === false || flat.is_billing_active === false) {
+      if (!flat || flat.status !== 'ACTIVE' || flat.is_approved === false || flat.is_billing_active === false) {
         // Inactive, unapproved, or billing-disabled: funds preserved as unallocated credit
         conflictCount++;
         continue;
@@ -1920,7 +1922,11 @@ export const serverDb = {
           const allObligAllocs = (localDb.flat_payment_allocations || []).filter(a => a.obligation_id === obligation.id);
           const newPaid = allObligAllocs.reduce((sum, a) => sum + Number(a.allocated_amount || 0), 0);
           const due = Number(obligation.amount_due) || 1500.00;
-          const balance = Math.max(0, due - newPaid);
+          // Calculate balance directly from persisted allocations (no Math.max(0, ...) clamping to conceal negative balance anomaly)
+          const balance = due - newPaid;
+          if (balance < 0) {
+            console.warn(`[BALANCE ANOMALY] Obligation ${obligation.id} balance is negative (₦${balance}). Persisted allocations exceed due.`);
+          }
           const newStatus = newPaid >= due ? 'PAID' : (newPaid > 0 ? 'PARTIALLY_PAID' : 'UNPAID');
 
           await this.updateObligation(obligation.id, {
@@ -1946,11 +1952,11 @@ export const serverDb = {
     // Explicitly detect when total allocations exceed the verified amount (anomaly detection)
     if (totalAllocated > verifiedTotal) {
       console.error(`[FINANCIAL INVARIANT VIOLATION] Total allocated (₦${totalAllocated}) exceeds verified amount (₦${verifiedTotal}) for transaction ${tx.id}!`);
-      // Cap allocated at verified and flag for urgent reconciliation
+      const unallocated = verifiedTotal - totalAllocated;
       await this.updateSecurityLevyTransaction(tx.id, {
         allocated_amount: totalAllocated,
-        unallocated_amount: 0,
-        allocation_status: 'PARTIALLY_ALLOCATED',
+        unallocated_amount: unallocated,
+        allocation_status: 'OVER_ALLOCATION_DISCREPANCY',
         reconciliation_notes: `CRITICAL DISCREPANCY: Allocations (₦${totalAllocated}) exceeded verified amount (₦${verifiedTotal}). Urgent administrative audit required.`
       });
       return {
@@ -1959,7 +1965,7 @@ export const serverDb = {
         allocated_count: allocatedCount,
         conflict_count: conflictCount + 1,
         total_allocated: totalAllocated,
-        total_unallocated: 0,
+        total_unallocated: unallocated,
         error: 'OVER_ALLOCATION_DISCREPANCY'
       };
     }
