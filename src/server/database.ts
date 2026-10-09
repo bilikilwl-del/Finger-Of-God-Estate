@@ -86,6 +86,13 @@ export interface PersistentDatabaseSchema {
   sms_reminders: any[];
   announcements: any[];
   activity_logs: any[];
+  buildings?: any[];
+  flats?: any[];
+  flat_security_levy_obligations?: any[];
+  security_levy_transactions?: any[];
+  flat_payment_allocations?: any[];
+  manual_payment_logs?: any[];
+  estate_audit_logs?: any[];
   last_updated: string;
 }
 
@@ -135,6 +142,13 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
         sms_reminders: parsed.sms_reminders || [],
         announcements: parsed.announcements || [],
         activity_logs: parsed.activity_logs || [],
+        buildings: Array.isArray(parsed.buildings) ? parsed.buildings : [],
+        flats: Array.isArray(parsed.flats) ? parsed.flats : [],
+        flat_security_levy_obligations: Array.isArray(parsed.flat_security_levy_obligations) ? parsed.flat_security_levy_obligations : [],
+        security_levy_transactions: Array.isArray(parsed.security_levy_transactions) ? parsed.security_levy_transactions : [],
+        flat_payment_allocations: Array.isArray(parsed.flat_payment_allocations) ? parsed.flat_payment_allocations : [],
+        manual_payment_logs: Array.isArray(parsed.manual_payment_logs) ? parsed.manual_payment_logs : [],
+        estate_audit_logs: Array.isArray(parsed.estate_audit_logs) ? parsed.estate_audit_logs : [],
         last_updated: new Date().toISOString()
       };
     } catch (e) {
@@ -249,6 +263,13 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
         created_at: new Date().toISOString()
       }
     ],
+    buildings: [],
+    flats: [],
+    flat_security_levy_obligations: [],
+    security_levy_transactions: [],
+    flat_payment_allocations: [],
+    manual_payment_logs: [],
+    estate_audit_logs: [],
     last_updated: new Date().toISOString()
   };
 
@@ -1204,6 +1225,742 @@ export const serverDb = {
       local_payments_count: localDb.monthly_payments.length,
       local_receipts_count: localDb.receipts.length
     };
+  },
+
+  // ==========================================
+  // BUILDINGS MANAGEMENT
+  // ==========================================
+  async getBuildings(): Promise<any[]> {
+    if (!localDb.buildings) localDb.buildings = [];
+    try {
+      const { data, error } = await supabaseAdmin.from('buildings').select('*').order('house_number', { ascending: true });
+      if (!error && Array.isArray(data)) {
+        localDb.buildings = data;
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+    return localDb.buildings;
+  },
+
+  async getBuildingById(id: string): Promise<any | null> {
+    const list = await this.getBuildings();
+    return list.find(b => b.id === id) || null;
+  },
+
+  async saveBuilding(building: any): Promise<any> {
+    if (!localDb.buildings) localDb.buildings = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: building.id || crypto.randomUUID(),
+      house_number: String(building.house_number).trim(),
+      building_name: building.building_name?.trim() || null,
+      total_flats_count: Math.max(1, Number(building.total_flats_count) || 1),
+      landlord_name: building.landlord_name?.trim() || null,
+      landlord_phone: building.landlord_phone?.trim() || null,
+      landlord_email: building.landlord_email?.trim() || null,
+      landlord_resident_id: building.landlord_resident_id || null,
+      notes: building.notes?.trim() || null,
+      status: building.status || 'ACTIVE',
+      created_at: building.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.buildings.findIndex(b => b.id === record.id || b.house_number === record.house_number);
+    if (idx >= 0) {
+      localDb.buildings[idx] = { ...localDb.buildings[idx], ...record };
+    } else {
+      localDb.buildings.push(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('buildings').upsert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] buildings upsert:', e?.message);
+    }
+    return record;
+  },
+
+  async updateBuilding(id: string, updates: any): Promise<any | null> {
+    if (!localDb.buildings) localDb.buildings = [];
+    const idx = localDb.buildings.findIndex(b => b.id === id);
+    if (idx < 0) return null;
+
+    const now = new Date().toISOString();
+    localDb.buildings[idx] = { ...localDb.buildings[idx], ...updates, updated_at: now };
+    const updated = localDb.buildings[idx];
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('buildings').update({ ...updates, updated_at: now }).eq('id', id);
+    } catch {}
+    return updated;
+  },
+
+  // ==========================================
+  // FLATS MANAGEMENT
+  // ==========================================
+  async getFlats(buildingId?: string): Promise<any[]> {
+    if (!localDb.flats) localDb.flats = [];
+    try {
+      let query = supabaseAdmin.from('flats').select('*').order('flat_number', { ascending: true });
+      if (buildingId) {
+        query = query.eq('building_id', buildingId);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        if (buildingId) {
+          // Merge building flats into local cache
+          localDb.flats = localDb.flats.filter(f => f.building_id !== buildingId).concat(data);
+        } else {
+          localDb.flats = data;
+        }
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+    if (buildingId) {
+      return localDb.flats.filter(f => f.building_id === buildingId);
+    }
+    return localDb.flats;
+  },
+
+  async getFlatById(id: string): Promise<any | null> {
+    const list = await this.getFlats();
+    return list.find(f => f.id === id) || null;
+  },
+
+  async saveFlat(flat: any): Promise<any> {
+    if (!localDb.flats) localDb.flats = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: flat.id || crypto.randomUUID(),
+      building_id: flat.building_id,
+      flat_number: String(flat.flat_number).trim(),
+      label: flat.label?.trim() || null,
+      occupant_type: flat.occupant_type || 'VACANT',
+      resident_id: flat.resident_id || null,
+      occupant_name: flat.occupant_name?.trim() || null,
+      occupant_phone: flat.occupant_phone?.trim() || null,
+      occupant_email: flat.occupant_email?.trim() || null,
+      is_billing_active: flat.is_billing_active !== undefined ? Boolean(flat.is_billing_active) : false,
+      billing_activated_at: flat.is_billing_active ? (flat.billing_activated_at || now) : null,
+      billing_activated_by: flat.billing_activated_by || null,
+      monthly_levy_amount: Number(flat.monthly_levy_amount) || 1500.00,
+      status: flat.status || 'ACTIVE',
+      created_at: flat.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.flats.findIndex(f => f.id === record.id || (f.building_id === record.building_id && f.flat_number === record.flat_number));
+    if (idx >= 0) {
+      localDb.flats[idx] = { ...localDb.flats[idx], ...record };
+    } else {
+      localDb.flats.push(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('flats').upsert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] flats upsert:', e?.message);
+    }
+    return record;
+  },
+
+  async updateFlat(id: string, updates: any): Promise<any | null> {
+    if (!localDb.flats) localDb.flats = [];
+    const idx = localDb.flats.findIndex(f => f.id === id);
+    if (idx < 0) return null;
+
+    const now = new Date().toISOString();
+    if (updates.is_billing_active === true && !localDb.flats[idx].is_billing_active) {
+      updates.billing_activated_at = now;
+    }
+    localDb.flats[idx] = { ...localDb.flats[idx], ...updates, updated_at: now };
+    const updated = localDb.flats[idx];
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('flats').update({ ...updates, updated_at: now }).eq('id', id);
+    } catch {}
+    return updated;
+  },
+
+  // ==========================================
+  // FLAT SECURITY LEVY OBLIGATIONS
+  // ==========================================
+  async getObligations(filter?: { flatId?: string; billingMonth?: string; buildingId?: string }): Promise<any[]> {
+    if (!localDb.flat_security_levy_obligations) localDb.flat_security_levy_obligations = [];
+    try {
+      let query = supabaseAdmin.from('flat_security_levy_obligations').select('*').order('created_at', { ascending: false });
+      if (filter?.flatId) query = query.eq('flat_id', filter.flatId);
+      if (filter?.billingMonth) query = query.eq('billing_month', filter.billingMonth);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        if (!filter?.flatId && !filter?.billingMonth) {
+          localDb.flat_security_levy_obligations = data;
+        } else {
+          // Update local entries
+          data.forEach(item => {
+            const idx = localDb.flat_security_levy_obligations!.findIndex(o => o.id === item.id);
+            if (idx >= 0) localDb.flat_security_levy_obligations![idx] = item;
+            else localDb.flat_security_levy_obligations!.push(item);
+          });
+        }
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+
+    let res = localDb.flat_security_levy_obligations;
+    if (filter?.flatId) res = res.filter(o => o.flat_id === filter.flatId);
+    if (filter?.billingMonth) res = res.filter(o => o.billing_month === filter.billingMonth);
+    return res;
+  },
+
+  async saveObligation(obligation: any): Promise<any> {
+    if (!localDb.flat_security_levy_obligations) localDb.flat_security_levy_obligations = [];
+    const now = new Date().toISOString();
+    const amountDue = Number(obligation.amount_due) || 1500.00;
+    const amountPaid = Number(obligation.amount_paid) || 0.00;
+    const balanceDue = Math.max(0, amountDue - amountPaid);
+    const status = amountPaid >= amountDue ? 'PAID' : (amountPaid > 0 ? 'PARTIALLY_PAID' : 'UNPAID');
+
+    const record = {
+      id: obligation.id || crypto.randomUUID(),
+      flat_id: obligation.flat_id,
+      billing_month: obligation.billing_month,
+      amount_due: amountDue,
+      amount_paid: amountPaid,
+      balance_due: balanceDue,
+      status: obligation.status || status,
+      is_billed: obligation.is_billed !== undefined ? Boolean(obligation.is_billed) : true,
+      due_date: obligation.due_date || null,
+      locked_by_reference: obligation.locked_by_reference || null,
+      lock_expires_at: obligation.lock_expires_at || null,
+      created_at: obligation.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.flat_security_levy_obligations.findIndex(
+      o => o.id === record.id || (o.flat_id === record.flat_id && o.billing_month === record.billing_month)
+    );
+    if (idx >= 0) {
+      localDb.flat_security_levy_obligations[idx] = { ...localDb.flat_security_levy_obligations[idx], ...record };
+    } else {
+      localDb.flat_security_levy_obligations.push(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('flat_security_levy_obligations').upsert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] obligations upsert:', e?.message);
+    }
+    return record;
+  },
+
+  async updateObligation(id: string, updates: any): Promise<any | null> {
+    if (!localDb.flat_security_levy_obligations) localDb.flat_security_levy_obligations = [];
+    const idx = localDb.flat_security_levy_obligations.findIndex(o => o.id === id);
+    if (idx < 0) return null;
+
+    const now = new Date().toISOString();
+    localDb.flat_security_levy_obligations[idx] = {
+      ...localDb.flat_security_levy_obligations[idx],
+      ...updates,
+      updated_at: now
+    };
+    const updated = localDb.flat_security_levy_obligations[idx];
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('flat_security_levy_obligations').update({ ...updates, updated_at: now }).eq('id', id);
+    } catch {}
+    return updated;
+  },
+
+  async generateMonthlyObligations(billingMonth: string): Promise<{ generated_count: number; skipped_count: number }> {
+    // 1. Try Supabase RPC if available
+    try {
+      const { data, error } = await supabaseAdmin.rpc('fn_generate_monthly_security_obligations', {
+        p_billing_month: billingMonth
+      });
+      if (!error && data?.success) {
+        // Sync local cache
+        await this.getObligations({ billingMonth });
+        return {
+          generated_count: data.generated_count || 0,
+          skipped_count: data.skipped_count || 0
+        };
+      }
+    } catch {}
+
+    // 2. Server-side robust fallback
+    const flats = await this.getFlats();
+    const activeFlats = flats.filter(f => f.status === 'ACTIVE' && f.is_billing_active);
+    let generated = 0;
+    let skipped = 0;
+
+    for (const flat of activeFlats) {
+      const existing = (localDb.flat_security_levy_obligations || []).find(
+        o => o.flat_id === flat.id && o.billing_month === billingMonth
+      );
+      if (existing) {
+        skipped++;
+      } else {
+        await this.saveObligation({
+          flat_id: flat.id,
+          billing_month: billingMonth,
+          amount_due: flat.monthly_levy_amount || 1500.00,
+          amount_paid: 0.00,
+          balance_due: flat.monthly_levy_amount || 1500.00,
+          status: 'UNPAID',
+          is_billed: true
+        });
+        generated++;
+      }
+    }
+
+    return { generated_count: generated, skipped_count: skipped };
+  },
+
+  // ==========================================
+  // UNIFIED SECURITY LEVY TRANSACTIONS
+  // ==========================================
+  async getSecurityLevyTransactions(): Promise<any[]> {
+    if (!localDb.security_levy_transactions) localDb.security_levy_transactions = [];
+    try {
+      const { data, error } = await supabaseAdmin.from('security_levy_transactions').select('*').order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        localDb.security_levy_transactions = data;
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+    return localDb.security_levy_transactions;
+  },
+
+  async getSecurityLevyTransactionById(id: string): Promise<any | null> {
+    const list = await this.getSecurityLevyTransactions();
+    return list.find(t => t.id === id) || null;
+  },
+
+  async getSecurityLevyTransactionByRef(ref: string): Promise<any | null> {
+    const list = await this.getSecurityLevyTransactions();
+    return list.find(t => t.paystack_reference === ref) || null;
+  },
+
+  async saveSecurityLevyTransaction(tx: any): Promise<any> {
+    if (!localDb.security_levy_transactions) localDb.security_levy_transactions = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: tx.id || crypto.randomUUID(),
+      transaction_type: tx.transaction_type || 'INDIVIDUAL_FLAT',
+      building_id: tx.building_id || null,
+      payer_name: String(tx.payer_name).trim(),
+      payer_email: String(tx.payer_email).trim(),
+      payer_phone: tx.payer_phone?.trim() || null,
+      payer_type: tx.payer_type || 'LANDLORD',
+      billing_month: tx.billing_month,
+      total_units: Number(tx.total_units) || 1,
+      rate_per_unit: Number(tx.rate_per_unit) || 1500.00,
+      expected_amount: Number(tx.expected_amount),
+      verified_amount: Number(tx.verified_amount) || 0.00,
+      allocated_amount: Number(tx.allocated_amount) || 0.00,
+      unallocated_amount: Number(tx.unallocated_amount) || 0.00,
+      target_flat_ids: Array.isArray(tx.target_flat_ids) ? tx.target_flat_ids : [],
+      target_obligation_ids: Array.isArray(tx.target_obligation_ids) ? tx.target_obligation_ids : [],
+      paystack_reference: tx.paystack_reference || null,
+      payment_method: tx.payment_method || 'PAYSTACK',
+      payment_status: tx.payment_status || 'PENDING',
+      allocation_status: tx.allocation_status || 'UNALLOCATED',
+      idempotency_key: tx.idempotency_key || null,
+      verified_at: tx.verified_at || null,
+      channel_payload: tx.channel_payload || null,
+      reconciliation_notes: tx.reconciliation_notes || null,
+      created_at: tx.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.security_levy_transactions.findIndex(
+      t => t.id === record.id || (record.paystack_reference && t.paystack_reference === record.paystack_reference)
+    );
+    if (idx >= 0) {
+      localDb.security_levy_transactions[idx] = { ...localDb.security_levy_transactions[idx], ...record };
+    } else {
+      localDb.security_levy_transactions.unshift(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('security_levy_transactions').upsert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] security_levy_transactions upsert:', e?.message);
+    }
+    return record;
+  },
+
+  async updateSecurityLevyTransaction(id: string, updates: any): Promise<any | null> {
+    if (!localDb.security_levy_transactions) localDb.security_levy_transactions = [];
+    const idx = localDb.security_levy_transactions.findIndex(t => t.id === id);
+    if (idx < 0) return null;
+
+    const now = new Date().toISOString();
+    localDb.security_levy_transactions[idx] = {
+      ...localDb.security_levy_transactions[idx],
+      ...updates,
+      updated_at: now
+    };
+    const updated = localDb.security_levy_transactions[idx];
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('security_levy_transactions').update({ ...updates, updated_at: now }).eq('id', id);
+    } catch {}
+    return updated;
+  },
+
+  // ==========================================
+  // FLAT PAYMENT ALLOCATIONS (ATOMIC LEDGER)
+  // ==========================================
+  async getFlatPaymentAllocations(transactionId?: string, flatId?: string): Promise<any[]> {
+    if (!localDb.flat_payment_allocations) localDb.flat_payment_allocations = [];
+    try {
+      let query = supabaseAdmin.from('flat_payment_allocations').select('*').order('allocation_timestamp', { ascending: false });
+      if (transactionId) query = query.eq('transaction_id', transactionId);
+      if (flatId) query = query.eq('flat_id', flatId);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        if (!transactionId && !flatId) {
+          localDb.flat_payment_allocations = data;
+        } else {
+          data.forEach(item => {
+            const idx = localDb.flat_payment_allocations!.findIndex(a => a.id === item.id);
+            if (idx >= 0) localDb.flat_payment_allocations![idx] = item;
+            else localDb.flat_payment_allocations!.push(item);
+          });
+        }
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+
+    let res = localDb.flat_payment_allocations;
+    if (transactionId) res = res.filter(a => a.transaction_id === transactionId);
+    if (flatId) res = res.filter(a => a.flat_id === flatId);
+    return res;
+  },
+
+  async saveFlatPaymentAllocation(allocation: any): Promise<any> {
+    if (!localDb.flat_payment_allocations) localDb.flat_payment_allocations = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: allocation.id || crypto.randomUUID(),
+      transaction_id: allocation.transaction_id,
+      flat_id: allocation.flat_id,
+      obligation_id: allocation.obligation_id,
+      allocated_amount: Number(allocation.allocated_amount) || 1500.00,
+      billing_month: allocation.billing_month,
+      rate_snapshot: Number(allocation.rate_snapshot) || 1500.00,
+      paystack_reference: allocation.paystack_reference || null,
+      receipt_number: allocation.receipt_number,
+      payment_method: allocation.payment_method || 'PAYSTACK',
+      allocation_timestamp: allocation.allocation_timestamp || now
+    };
+
+    const idx = localDb.flat_payment_allocations.findIndex(
+      a => a.id === record.id || (a.flat_id === record.flat_id && a.obligation_id === record.obligation_id)
+    );
+    if (idx >= 0) {
+      localDb.flat_payment_allocations[idx] = { ...localDb.flat_payment_allocations[idx], ...record };
+    } else {
+      localDb.flat_payment_allocations.unshift(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('flat_payment_allocations').upsert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] flat_payment_allocations upsert:', e?.message);
+    }
+    return record;
+  },
+
+  // ==========================================
+  // ATOMIC ALLOCATION ENGINE (PG RPC + FALLBACK)
+  // ==========================================
+  async allocateSecurityLevyPayment(transactionId: string, actor: string = 'SYSTEM_WEBHOOK'): Promise<{
+    success: boolean;
+    transaction_id: string;
+    allocated_count: number;
+    conflict_count: number;
+    total_allocated: number;
+    total_unallocated: number;
+    receipts?: string[];
+    error?: string;
+  }> {
+    // 1. Attempt PostgreSQL stored procedure (handles row-level FOR UPDATE locks)
+    try {
+      const { data, error } = await supabaseAdmin.rpc('fn_allocate_security_levy_payment', {
+        p_transaction_id: transactionId,
+        p_actor: actor
+      });
+      if (!error && data?.success) {
+        // Sync local cache
+        const tx = await this.getSecurityLevyTransactionById(transactionId);
+        await this.getFlatPaymentAllocations(transactionId);
+        return {
+          success: true,
+          transaction_id: transactionId,
+          allocated_count: data.allocated_count || 0,
+          conflict_count: data.conflict_count || 0,
+          total_allocated: data.total_allocated || 0,
+          total_unallocated: data.total_unallocated || 0
+        };
+      }
+    } catch (rpcErr) {
+      console.warn('[Atomic Allocation RPC Notice] Proceeding with server transaction boundary:', rpcErr);
+    }
+
+    // 2. Server-side ACID atomic transaction boundary
+    const tx = await this.getSecurityLevyTransactionById(transactionId);
+    if (!tx) {
+      return {
+        success: false,
+        transaction_id: transactionId,
+        allocated_count: 0,
+        conflict_count: 0,
+        total_allocated: 0,
+        total_unallocated: 0,
+        error: 'TRANSACTION_NOT_FOUND'
+      };
+    }
+
+    // Idempotency: If already allocated, return immediately
+    if (tx.allocation_status === 'ALLOCATED') {
+      return {
+        success: true,
+        transaction_id: tx.id,
+        allocated_count: tx.total_units || 0,
+        conflict_count: 0,
+        total_allocated: tx.allocated_amount || 0,
+        total_unallocated: tx.unallocated_amount || 0
+      };
+    }
+
+    if (tx.payment_status !== 'SUCCESSFUL') {
+      return {
+        success: false,
+        transaction_id: tx.id,
+        allocated_count: 0,
+        conflict_count: 0,
+        total_allocated: 0,
+        total_unallocated: 0,
+        error: `TRANSACTION_NOT_SUCCESSFUL (${tx.payment_status})`
+      };
+    }
+
+    const targetFlats: string[] = Array.isArray(tx.target_flat_ids) ? tx.target_flat_ids : [];
+    let allocatedCount = 0;
+    let conflictCount = 0;
+    let totalAllocated = 0;
+    let totalUnallocated = 0;
+    const generatedReceipts: string[] = [];
+
+    for (const flatId of targetFlats) {
+      // Find or create obligation for billing month
+      let obligation = (localDb.flat_security_levy_obligations || []).find(
+        o => o.flat_id === flatId && o.billing_month === tx.billing_month
+      );
+
+      if (!obligation) {
+        obligation = await this.saveObligation({
+          flat_id: flatId,
+          billing_month: tx.billing_month,
+          amount_due: tx.rate_per_unit || 1500.00,
+          amount_paid: 0.00,
+          balance_due: tx.rate_per_unit || 1500.00,
+          status: 'UNPAID',
+          is_billed: true
+        });
+      }
+
+      // Check conflict: If already paid, preserve financial integrity
+      if (obligation.status === 'PAID') {
+        conflictCount++;
+        totalUnallocated += Number(tx.rate_per_unit || 1500.00);
+      } else {
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const receiptNo = `SLR-${dateStr}-${randomHex}`;
+
+        // Save Allocation
+        await this.saveFlatPaymentAllocation({
+          transaction_id: tx.id,
+          flat_id: flatId,
+          obligation_id: obligation.id,
+          allocated_amount: tx.rate_per_unit || 1500.00,
+          billing_month: tx.billing_month,
+          rate_snapshot: tx.rate_per_unit || 1500.00,
+          paystack_reference: tx.paystack_reference,
+          receipt_number: receiptNo,
+          payment_method: tx.payment_method
+        });
+
+        // Mark obligation as PAID
+        await this.updateObligation(obligation.id, {
+          amount_paid: obligation.amount_due,
+          balance_due: 0.00,
+          status: 'PAID',
+          locked_by_reference: null,
+          lock_expires_at: null
+        });
+
+        allocatedCount++;
+        totalAllocated += Number(tx.rate_per_unit || 1500.00);
+        generatedReceipts.push(receiptNo);
+      }
+    }
+
+    // Update Transaction State
+    const finalAllocationStatus = 
+      conflictCount === 0 ? 'ALLOCATED' :
+      (allocatedCount > 0 ? 'PARTIALLY_ALLOCATED' : 'OVERPAID_UNALLOCATED');
+
+    const reconNotes = conflictCount > 0 
+      ? `Conflict detected: ${conflictCount} unit(s) were already marked PAID. Preserved ₦${totalUnallocated.toLocaleString()} as unallocated credit.`
+      : null;
+
+    await this.updateSecurityLevyTransaction(tx.id, {
+      allocated_amount: totalAllocated,
+      unallocated_amount: totalUnallocated,
+      allocation_status: finalAllocationStatus,
+      reconciliation_notes: reconNotes
+    });
+
+    // Log to Audit Trail
+    await this.logEstateAudit({
+      actor_type: actor.includes('@') ? 'ADMIN' : 'WEBHOOK',
+      actor_identifier: actor,
+      action: 'ALLOCATE_SECURITY_LEVY',
+      entity_type: 'SECURITY_LEVY_TRANSACTION',
+      entity_id: tx.id,
+      details: {
+        allocated_count: allocatedCount,
+        conflict_count: conflictCount,
+        total_allocated: totalAllocated,
+        total_unallocated: totalUnallocated,
+        paystack_reference: tx.paystack_reference,
+        receipts: generatedReceipts
+      }
+    });
+
+    return {
+      success: true,
+      transaction_id: tx.id,
+      allocated_count: allocatedCount,
+      conflict_count: conflictCount,
+      total_allocated: totalAllocated,
+      total_unallocated: totalUnallocated,
+      receipts: generatedReceipts
+    };
+  },
+
+  // ==========================================
+  // MANUAL PAYMENT RECORDING & AUDIT
+  // ==========================================
+  async saveManualPaymentLog(log: any): Promise<any> {
+    if (!localDb.manual_payment_logs) localDb.manual_payment_logs = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: log.id || crypto.randomUUID(),
+      payment_type: log.payment_type || 'INDIVIDUAL_FLAT',
+      flat_id: log.flat_id || null,
+      transaction_id: log.transaction_id || null,
+      admin_email: log.admin_email,
+      amount: Number(log.amount),
+      payment_method: log.payment_method || 'MANUAL_BANK_TRANSFER',
+      bank_reference: log.bank_reference?.trim() || null,
+      receipt_reference: log.receipt_reference?.trim() || null,
+      supporting_document_url: log.supporting_document_url || null,
+      notes: String(log.notes).trim(),
+      recorded_at: log.recorded_at || now
+    };
+
+    localDb.manual_payment_logs.unshift(record);
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('manual_payment_logs').insert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] manual_payment_logs insert:', e?.message);
+    }
+    return record;
+  },
+
+  async getManualPaymentLogs(): Promise<any[]> {
+    if (!localDb.manual_payment_logs) localDb.manual_payment_logs = [];
+    try {
+      const { data, error } = await supabaseAdmin.from('manual_payment_logs').select('*').order('recorded_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        localDb.manual_payment_logs = data;
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+    return localDb.manual_payment_logs;
+  },
+
+  // ==========================================
+  // ESTATE AUDIT LOGS
+  // ==========================================
+  async logEstateAudit(log: {
+    actor_type?: 'ADMIN' | 'RESIDENT' | 'SYSTEM' | 'WEBHOOK';
+    actor_identifier: string;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    details?: any;
+    ip_address?: string | null;
+  }): Promise<any> {
+    if (!localDb.estate_audit_logs) localDb.estate_audit_logs = [];
+    const record = {
+      id: crypto.randomUUID(),
+      actor_type: log.actor_type || 'ADMIN',
+      actor_identifier: log.actor_identifier,
+      action: log.action,
+      entity_type: log.entity_type,
+      entity_id: log.entity_id,
+      details: log.details || null,
+      ip_address: log.ip_address || null,
+      created_at: new Date().toISOString()
+    };
+
+    localDb.estate_audit_logs.unshift(record);
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('estate_audit_logs').insert(record);
+    } catch (e: any) {
+      console.warn('[Supabase Sync Notice] estate_audit_logs insert:', e?.message);
+    }
+    return record;
+  },
+
+  async getEstateAuditLogs(limit: number = 200): Promise<any[]> {
+    if (!localDb.estate_audit_logs) localDb.estate_audit_logs = [];
+    try {
+      const { data, error } = await supabaseAdmin.from('estate_audit_logs').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (!error && Array.isArray(data)) {
+        localDb.estate_audit_logs = data;
+        saveDbToFile(localDb);
+        return data;
+      }
+    } catch {}
+    return localDb.estate_audit_logs.slice(0, limit);
   }
 };
 

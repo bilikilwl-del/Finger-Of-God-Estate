@@ -27,7 +27,10 @@ import {
   Radio,
   Sparkles,
   ArrowRight,
-  Check
+  Check,
+  Building2,
+  Home,
+  Layers
 } from 'lucide-react';
 import { EstateSettings, Announcement, SecurityAlert, Resident } from '../../types/database';
 import { dbService } from '../../lib/supabase';
@@ -35,6 +38,7 @@ import { EstateLogo } from '../common/EstateLogo';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { SEOHead } from '../common/SEOHead';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
+import { FlatSecurityPaymentModal } from '../payments/FlatSecurityPaymentModal';
 
 interface PublicSecurityViewProps {
   estateSettings: EstateSettings;
@@ -67,6 +71,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
 
   // Paystack Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isFlatPayModalOpen, setIsFlatPayModalOpen] = useState(false);
   const [targetResident, setTargetResident] = useState<Resident | null>(currentResident || null);
 
   // Resident Lookup for Payment
@@ -586,38 +591,103 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
 
       {/* 6. Online Security Contribution Section */}
       <section id="security-contribution-section" className="py-14 bg-gradient-to-b from-slate-50 to-slate-100 border-b border-slate-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          {/* Main Card: Approved Flat-Based Security Levy (₦1,500/month) */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-emerald-500 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold uppercase tracking-wider mb-1.5">
-                  <Coins className="w-3.5 h-3.5" />
-                  <span>Online Dues Clearance</span>
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Approved Flat-Based Structure</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900">
-                  Contribute Your Monthly Security Levy
+                  Flat Security Levy Contribution
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                  Standard Monthly Security Levy: <strong className="text-emerald-700 font-mono font-bold">{formattedLevy}</strong>
+                  Approved Rate: <strong className="text-emerald-700 font-mono font-bold text-base">₦1,500</strong> per flat monthly.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsPayModalOpen(true)}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Pay Now via Paystack</span>
-                </button>
+              <button
+                onClick={() => setIsFlatPayModalOpen(true)}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-md"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Pay Flat Levy (₦1,500)</span>
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 flex items-start gap-3">
+                <span className="p-2 bg-emerald-100 text-emerald-800 rounded-lg shrink-0 mt-0.5">
+                  <Home className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Individual Flat Occupants</h4>
+                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    Select your building house number, choose your flat (e.g. Flat 1, Suite A), and clear your monthly ₦1,500 dues.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-100 flex items-start gap-3">
+                <span className="p-2 bg-purple-100 text-purple-800 rounded-lg shrink-0 mt-0.5">
+                  <Layers className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Landlords & Compound Bulk Pay</h4>
+                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    Compound owners and landlords can select multiple flats under their building and pay in one single transaction (₦1,500 × N flats).
+                  </p>
+                </div>
               </div>
             </div>
 
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+              <span className="flex items-center gap-1.5 text-emerald-800 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Zero duplicate billing & immediate digital receipts issued</span>
+              </span>
+              <button
+                type="button"
+                onClick={onNavigateToVerifyReceipt}
+                className="text-emerald-700 hover:underline font-semibold cursor-pointer"
+              >
+                Verify Past Receipt
+              </button>
+            </div>
+          </div>
+
+          {/* Secondary Card: Resident Number Lookup (Legacy ₦5,000) */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Resident Directory Account</span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">
+                  Pay by Registered Resident ID
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  For residents registered with official resident numbers (001–300) paying household levy ({formattedLevy}).
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsPayModalOpen(true)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Pay by Resident ID</span>
+              </button>
+            </div>
+
             {/* Resident Number Lookup Form */}
-            <form onSubmit={handleLookupResident} className="mt-6">
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200">
+            <form onSubmit={handleLookupResident} className="mt-5">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                  Enter Resident Number to Pay (e.g. 001–300)
+                  Enter Resident Number (e.g. 001–300)
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <input
@@ -625,14 +695,14 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                     value={lookupNumber}
                     onChange={e => setLookupNumber(e.target.value)}
                     placeholder="Enter Resident ID (e.g. 016)"
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     type="submit"
                     disabled={lookingUp}
                     className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {lookingUp ? 'Verifying...' : 'Verify & Continue to Payment'}
+                    {lookingUp ? 'Verifying...' : 'Verify & Continue'}
                   </button>
                 </div>
 
@@ -644,17 +714,6 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                     <span>{lookupMessage.text}</span>
                   </div>
                 )}
-
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Payments routed via dedicated Security Paystack Account</span>
-                  <button
-                    type="button"
-                    onClick={onNavigateToVerifyReceipt}
-                    className="text-emerald-700 hover:underline font-semibold cursor-pointer"
-                  >
-                    Verify Past Receipt
-                  </button>
-                </div>
               </div>
             </form>
           </div>
@@ -1101,7 +1160,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
         </div>
       </footer>
 
-      {/* 12. Paystack Payment Modal */}
+      {/* 12. Paystack Payment Modal (Resident ID) */}
       {isPayModalOpen && (
         <PaystackPaymentModal
           isOpen={isPayModalOpen}
@@ -1113,6 +1172,14 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
           onPaymentSuccess={() => {
             setIsPayModalOpen(false);
           }}
+        />
+      )}
+
+      {/* 13. Flat Security Payment Modal (₦1,500/flat Approved Structure) */}
+      {isFlatPayModalOpen && (
+        <FlatSecurityPaymentModal
+          isOpen={isFlatPayModalOpen}
+          onClose={() => setIsFlatPayModalOpen(false)}
         />
       )}
     </div>

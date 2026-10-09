@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import cron from 'node-cron';
 import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
 import { electionRouter } from './src/server/electionServer.ts';
+import { securityLevyRouter, processVerifiedSecurityLevyPaystackEvent } from './src/server/securityLevyServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
 import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual, formatNigerianPhoneForSMS } from './src/lib/phoneUtils.ts';
 import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
@@ -1197,6 +1198,19 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
       if (isRoadPayment) {
         console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
         await processVerifiedRoadPaystackEvent(data);
+        return res.sendStatus(200);
+      }
+
+      // Check if this payment belongs to the Building & Flat Security Levy system
+      const isFlatSecurityPayment = 
+        String(reference).startsWith('FOG-SL-') ||
+        data.metadata?.payment_type === 'flat_security_levy' ||
+        data.metadata?.transaction_type === 'BULK_FLATS' ||
+        data.metadata?.transaction_type === 'INDIVIDUAL_FLAT';
+
+      if (isFlatSecurityPayment) {
+        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Building & Flat Security Levy ledger...`);
+        await processVerifiedSecurityLevyPaystackEvent(data);
         return res.sendStatus(200);
       }
 
@@ -5903,6 +5917,11 @@ app.use('/api/road-project', roadProjectRouter);
 // 6.6. ESTATE ELECTION & SECRET BALLOT VOTING SYSTEM API
 // -------------------------------------------------------------
 app.use('/api/election', electionRouter);
+
+// -------------------------------------------------------------
+// 6.7. BUILDING & FLAT MANAGEMENT AND SECURITY LEVY API
+// -------------------------------------------------------------
+app.use('/api/security-levy', securityLevyRouter);
 
 // -------------------------------------------------------------
 // 7. HEALTH CHECK

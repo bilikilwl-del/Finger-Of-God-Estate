@@ -59,6 +59,7 @@ import { AnnouncementDetailView } from './components/public/AnnouncementDetailVi
 import { PublicResidentsView } from './components/public/PublicResidentsView';
 import { PublicElectionView } from './components/election/PublicElectionView';
 import { AdminElectionView } from './components/admin/AdminElectionView';
+import { BuildingFlatManagementView } from './components/admin/BuildingFlatManagementView';
 import { NotFoundView } from './components/common/NotFoundView';
 import { TawkToWidget } from './components/common/TawkToWidget';
 
@@ -150,6 +151,7 @@ function getPathnameFromTab(tab: NavigationTab, slug?: string): string {
     case 'logs':
     case 'gate_security':
     case 'security_ops':
+    case 'building_management':
     case 'road_project_admin':
       return '/admin';
     default: return '/';
@@ -1046,6 +1048,14 @@ export default function App() {
                     navigateTo('residents');
                   }
                 }}
+              />
+            )}
+
+            {currentTab === 'building_management' && (
+              <BuildingFlatManagementView
+                estateSettings={estateSettings}
+                adminUser={adminUser}
+                residents={residents}
               />
             )}
 

@@ -16,7 +16,8 @@ import {
   DoorOpen,
   Coins,
   ArrowLeft,
-  Vote
+  Vote,
+  Building2
 } from 'lucide-react';
 import { NavigationTab, EstateSettings } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
@@ -48,6 +49,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'dashboard', label: 'Admin Dashboard', icon: LayoutDashboard },
     { id: 'gate_security', label: 'Gate Security & Access', icon: DoorOpen },
     { id: 'security_ops', label: 'Security Operations', icon: ShieldCheck },
+    { id: 'building_management', label: 'Buildings & Flats', icon: Building2 },
     { id: 'residents', label: 'Resident Directory', icon: Users, badge: residentCount },
     { id: 'paid_residents', label: 'Paid Residents', icon: CheckCircle2 },
     { id: 'unpaid_residents', label: 'Unpaid Residents', icon: AlertCircle },

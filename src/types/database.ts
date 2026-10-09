@@ -418,6 +418,7 @@ export type NavigationTab =
   | 'sms'
   | 'reports'
   | 'announcements'
+  | 'building_management'
   | 'admins'
   | 'settings'
   | 'logs'
@@ -1104,6 +1105,157 @@ export interface EstateDocument {
   download_url?: string;
   badge?: string;
 }
+
+// ==========================================
+// BUILDING & FLAT MANAGEMENT AND SECURITY LEVY
+// ==========================================
+
+export type BuildingStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type FlatOccupantType = 'TENANT' | 'LANDLORD' | 'VACANT' | 'COMMERCIAL';
+export type FlatStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type ObligationStatus = 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | 'WAIVED' | 'EXEMPT';
+export type SecurityLevyTransactionType = 'INDIVIDUAL_FLAT' | 'BULK_FLATS';
+export type SecurityLevyPayerType = 'LANDLORD' | 'AGENT' | 'RESIDENT' | 'ADMIN';
+export type SecurityLevyPaymentMethod = 'PAYSTACK' | 'MANUAL_BANK_TRANSFER' | 'MANUAL_CASH' | 'MANUAL_POS';
+export type SecurityLevyPaymentStatus = 'PENDING' | 'PROCESSING' | 'SUCCESSFUL' | 'FAILED' | 'REVERSED';
+export type SecurityLevyAllocationStatus = 'UNALLOCATED' | 'ALLOCATED' | 'PARTIALLY_ALLOCATED' | 'OVERPAID_UNALLOCATED' | 'FAILED';
+
+export interface Building {
+  id: string;
+  house_number: string;
+  building_name?: string | null;
+  total_flats_count: number;
+  landlord_name?: string | null;
+  landlord_phone?: string | null;
+  landlord_email?: string | null;
+  landlord_resident_id?: string | null;
+  notes?: string | null;
+  status: BuildingStatus;
+  created_at: string;
+  updated_at: string;
+  // Computed client-side
+  flats_count?: number;
+  active_billing_flats_count?: number;
+}
+
+export interface Flat {
+  id: string;
+  building_id: string;
+  flat_number: string;
+  label?: string | null;
+  occupant_type: FlatOccupantType;
+  resident_id?: string | null;
+  occupant_name?: string | null;
+  occupant_phone?: string | null;
+  occupant_email?: string | null;
+  is_billing_active: boolean;
+  billing_activated_at?: string | null;
+  billing_activated_by?: string | null;
+  monthly_levy_amount: number; // ₦1,500 approved
+  status: FlatStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  building_house_number?: string;
+  building_name?: string | null;
+  landlord_name?: string | null;
+  current_month_status?: ObligationStatus;
+}
+
+export interface FlatObligation {
+  id: string;
+  flat_id: string;
+  billing_month: string; // YYYY-MM
+  amount_due: number;
+  amount_paid: number;
+  balance_due: number;
+  status: ObligationStatus;
+  is_billed: boolean;
+  due_date?: string | null;
+  locked_by_reference?: string | null;
+  lock_expires_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  flat_number?: string;
+  building_id?: string;
+  building_house_number?: string;
+  occupant_name?: string | null;
+}
+
+export interface SecurityLevyTransaction {
+  id: string;
+  transaction_type: SecurityLevyTransactionType;
+  building_id?: string | null;
+  payer_name: string;
+  payer_email: string;
+  payer_phone?: string | null;
+  payer_type: SecurityLevyPayerType;
+  billing_month: string;
+  total_units: number;
+  rate_per_unit: number;
+  expected_amount: number;
+  verified_amount: number;
+  allocated_amount: number;
+  unallocated_amount: number;
+  target_flat_ids: string[];
+  target_obligation_ids: string[];
+  paystack_reference?: string | null;
+  payment_method: SecurityLevyPaymentMethod;
+  payment_status: SecurityLevyPaymentStatus;
+  allocation_status: SecurityLevyAllocationStatus;
+  idempotency_key?: string | null;
+  verified_at?: string | null;
+  channel_payload?: any;
+  reconciliation_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FlatPaymentAllocation {
+  id: string;
+  transaction_id: string;
+  flat_id: string;
+  obligation_id: string;
+  allocated_amount: number;
+  billing_month: string;
+  rate_snapshot: number;
+  paystack_reference?: string | null;
+  receipt_number: string;
+  payment_method: string;
+  allocation_timestamp: string;
+  // Joined
+  flat_number?: string;
+  building_house_number?: string;
+}
+
+export interface ManualPaymentLog {
+  id: string;
+  payment_type: SecurityLevyTransactionType;
+  flat_id?: string | null;
+  transaction_id?: string | null;
+  admin_email: string;
+  amount: number;
+  payment_method: SecurityLevyPaymentMethod;
+  bank_reference?: string | null;
+  receipt_reference?: string | null;
+  supporting_document_url?: string | null;
+  notes: string;
+  recorded_at: string;
+}
+
+export interface EstateAuditLog {
+  id: string;
+  actor_type: 'ADMIN' | 'RESIDENT' | 'SYSTEM' | 'WEBHOOK';
+  actor_identifier: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  details?: any;
+  ip_address?: string | null;
+  created_at: string;
+}
+
 
 
 
