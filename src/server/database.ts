@@ -1745,15 +1745,15 @@ export const serverDb = {
       };
     }
 
-    // Idempotency: If already allocated, return immediately
-    if (tx.allocation_status === 'ALLOCATED') {
+    // Idempotency: If already processed and allocated (or handled), return existing status immediately
+    if (['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(tx.allocation_status)) {
       return {
-        success: true,
+        success: tx.allocation_status === 'ALLOCATED',
         transaction_id: tx.id,
-        allocated_count: tx.total_units || 0,
-        conflict_count: 0,
-        total_allocated: tx.allocated_amount || 0,
-        total_unallocated: tx.unallocated_amount || 0
+        allocated_count: tx.allocated_amount ? Math.round(Number(tx.allocated_amount) / Number(tx.rate_per_unit || 1500)) : 0,
+        conflict_count: tx.allocation_status === 'ALLOCATED' ? 0 : (Number(tx.unallocated_amount || 0) > 0 ? 1 : 0),
+        total_allocated: Number(tx.allocated_amount || 0),
+        total_unallocated: Number(tx.unallocated_amount || 0)
       };
     }
 
@@ -1773,7 +1773,6 @@ export const serverDb = {
     let allocatedCount = 0;
     let conflictCount = 0;
     let totalAllocated = 0;
-    let totalUnallocated = 0;
     const generatedReceipts: string[] = [];
 
     for (const flatId of targetFlats) {
@@ -1794,14 +1793,22 @@ export const serverDb = {
         });
       }
 
-      // Check conflict: If already paid or already allocated to another transaction
-      const existingAlloc = (localDb.flat_payment_allocations || []).find(
+      // Check existing allocations
+      const existingAllocForThisTx = (localDb.flat_payment_allocations || []).find(
+        a => a.flat_id === flatId && a.obligation_id === obligation.id && a.transaction_id === tx.id
+      );
+      const existingAllocForOtherTx = (localDb.flat_payment_allocations || []).find(
         a => a.flat_id === flatId && a.obligation_id === obligation.id && a.transaction_id !== tx.id
       );
 
-      if (obligation.status === 'PAID' || existingAlloc) {
+      if (existingAllocForThisTx) {
+        // Valid existing allocation belonging to THIS SAME transaction (replay/idempotent retry)
+        allocatedCount++;
+        totalAllocated += Number(existingAllocForThisTx.allocated_amount || tx.rate_per_unit || 1500.00);
+        generatedReceipts.push(existingAllocForThisTx.receipt_number);
+      } else if (existingAllocForOtherTx || obligation.status === 'PAID') {
+        // Allocation belongs to a different transaction or obligation already settled elsewhere
         conflictCount++;
-        totalUnallocated += Number(tx.rate_per_unit || 1500.00);
       } else {
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -1822,12 +1829,12 @@ export const serverDb = {
 
         // CRITICAL INVARIANT: Only update obligation if allocation record was actually persisted
         if (savedAlloc) {
-          const currentPaid = Number(obligation.amount_paid) || 0;
-          const rateUnit = Number(tx.rate_per_unit || 1500.00);
-          const newPaid = currentPaid + rateUnit;
+          // Re-calculate strictly from persisted allocations for this obligation
+          const allObligAllocs = (localDb.flat_payment_allocations || []).filter(a => a.obligation_id === obligation.id);
+          const newPaid = allObligAllocs.reduce((sum, a) => sum + Number(a.allocated_amount || 0), 0);
           const due = Number(obligation.amount_due) || 1500.00;
           const balance = Math.max(0, due - newPaid);
-          const newStatus = newPaid >= due ? 'PAID' : 'PARTIALLY_PAID';
+          const newStatus = newPaid >= due ? 'PAID' : (newPaid > 0 ? 'PARTIALLY_PAID' : 'UNPAID');
 
           await this.updateObligation(obligation.id, {
             amount_paid: newPaid,
@@ -1838,22 +1845,25 @@ export const serverDb = {
           });
 
           allocatedCount++;
-          totalAllocated += rateUnit;
+          totalAllocated += Number(tx.rate_per_unit || 1500.00);
           generatedReceipts.push(receiptNo);
         } else {
           conflictCount++;
-          totalUnallocated += Number(tx.rate_per_unit || 1500.00);
         }
       }
     }
 
+    // Mathematical Financial Conservation: total_allocated + total_unallocated = verified_amount
+    const verifiedTotal = Number(tx.verified_amount || tx.expected_amount || 0);
+    const totalUnallocated = Math.max(0, verifiedTotal - totalAllocated);
+
     // Update Transaction State
     const finalAllocationStatus = 
-      (conflictCount === 0 && allocatedCount > 0) ? 'ALLOCATED' :
-      (allocatedCount > 0 && conflictCount > 0 ? 'PARTIALLY_ALLOCATED' : 'OVERPAID_UNALLOCATED');
+      (conflictCount === 0 && allocatedCount > 0 && totalUnallocated === 0) ? 'ALLOCATED' :
+      (allocatedCount > 0 ? 'PARTIALLY_ALLOCATED' : 'OVERPAID_UNALLOCATED');
 
-    const reconNotes = conflictCount > 0 
-      ? `Conflict detected: ${conflictCount} unit(s) were already marked PAID or allocated. Preserved ₦${totalUnallocated.toLocaleString()} as unallocated credit.`
+    const reconNotes = (conflictCount > 0 || totalUnallocated > 0)
+      ? `Reconciliation notice: ${conflictCount} conflict unit(s). Preserved ₦${totalUnallocated.toLocaleString()} as unallocated credit.`
       : null;
 
     await this.updateSecurityLevyTransaction(tx.id, {

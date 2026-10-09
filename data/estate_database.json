@@ -60,7 +60,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-09T21:16:27.261Z"
+      "updated_at": "2026-10-09T21:22:23.711Z"
     }
   ],
   "admin_users": [
@@ -72,7 +72,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-09T21:16:27.261Z"
+      "updated_at": "2026-10-09T21:22:23.711Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -489,6 +489,34 @@
       "status": "ACTIVE",
       "created_at": "2026-10-09T21:21:45.934Z",
       "updated_at": "2026-10-09T21:21:45.934Z"
+    },
+    {
+      "id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "house_number": "Plot-1791582131474",
+      "building_name": "Test Compound Beta",
+      "total_flats_count": 3,
+      "landlord_name": "Chief Test Landlord",
+      "landlord_phone": "08011223344",
+      "landlord_email": null,
+      "landlord_resident_id": null,
+      "notes": null,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:11.474Z",
+      "updated_at": "2026-10-09T21:42:11.474Z"
+    },
+    {
+      "id": "16531f95-c905-4958-8d99-62e25091320c",
+      "house_number": "Plot-1791582155221",
+      "building_name": "Test Compound Beta",
+      "total_flats_count": 3,
+      "landlord_name": "Chief Test Landlord",
+      "landlord_phone": "08011223344",
+      "landlord_email": null,
+      "landlord_resident_id": null,
+      "notes": null,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:35.221Z",
+      "updated_at": "2026-10-09T21:42:35.221Z"
     }
   ],
   "flats": [
@@ -1013,6 +1041,114 @@
       "status": "ACTIVE",
       "created_at": "2026-10-09T21:21:47.099Z",
       "updated_at": "2026-10-09T21:21:47.099Z"
+    },
+    {
+      "id": "7ec46ec0-996b-4a51-b287-ce5bc7d3e90e",
+      "building_id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "flat_number": "Flat 1A",
+      "label": null,
+      "occupant_type": "TENANT",
+      "resident_id": null,
+      "occupant_name": "Resident Tenant 1",
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T21:42:11.919Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:11.919Z",
+      "updated_at": "2026-10-09T21:42:11.919Z"
+    },
+    {
+      "id": "d7b0eacf-cd0e-4c3e-977b-ef96a09e437b",
+      "building_id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "flat_number": "Flat 1B",
+      "label": null,
+      "occupant_type": "TENANT",
+      "resident_id": null,
+      "occupant_name": "Resident Tenant 2",
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T21:42:12.205Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:12.205Z",
+      "updated_at": "2026-10-09T21:42:12.205Z"
+    },
+    {
+      "id": "948369da-0a31-47d2-a62b-811ab98ec909",
+      "building_id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "flat_number": "Flat 2A",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": false,
+      "billing_activated_at": null,
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:12.484Z",
+      "updated_at": "2026-10-09T21:42:12.484Z"
+    },
+    {
+      "id": "65ff9c77-c753-4d55-a9be-bfd9420a07e9",
+      "building_id": "16531f95-c905-4958-8d99-62e25091320c",
+      "flat_number": "Flat 1A",
+      "label": null,
+      "occupant_type": "TENANT",
+      "resident_id": null,
+      "occupant_name": "Resident Tenant 1",
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T21:42:35.592Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:35.592Z",
+      "updated_at": "2026-10-09T21:42:35.592Z"
+    },
+    {
+      "id": "696fc530-2c74-47d2-b56a-94414b2fbc5e",
+      "building_id": "16531f95-c905-4958-8d99-62e25091320c",
+      "flat_number": "Flat 1B",
+      "label": null,
+      "occupant_type": "TENANT",
+      "resident_id": null,
+      "occupant_name": "Resident Tenant 2",
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T21:42:35.907Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:35.907Z",
+      "updated_at": "2026-10-09T21:42:35.907Z"
+    },
+    {
+      "id": "65cfa0d3-0939-4869-a979-6ebe109edab4",
+      "building_id": "16531f95-c905-4958-8d99-62e25091320c",
+      "flat_number": "Flat 2A",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": false,
+      "billing_activated_at": null,
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T21:42:36.028Z",
+      "updated_at": "2026-10-09T21:42:36.028Z"
     }
   ],
   "flat_security_levy_obligations": [
@@ -1495,9 +1631,199 @@
       "lock_expires_at": null,
       "created_at": "2026-10-09T21:21:48.240Z",
       "updated_at": "2026-10-09T21:21:50.351Z"
+    },
+    {
+      "id": "3eb35cb2-af13-46f8-bb0b-9f3e7f34ac6c",
+      "flat_id": "7ec46ec0-996b-4a51-b287-ce5bc7d3e90e",
+      "billing_month": "2026-10",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T21:42:13.356Z",
+      "updated_at": "2026-10-09T21:42:14.862Z"
+    },
+    {
+      "id": "3b98583d-6cb2-4bd0-ad3d-d167a13a81ea",
+      "flat_id": "d7b0eacf-cd0e-4c3e-977b-ef96a09e437b",
+      "billing_month": "2026-10",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T21:42:13.469Z",
+      "updated_at": "2026-10-09T21:42:15.256Z"
+    },
+    {
+      "id": "a6dfb98d-0108-43cc-9aef-70f4aa91a2c9",
+      "flat_id": "65ff9c77-c753-4d55-a9be-bfd9420a07e9",
+      "billing_month": "2026-10",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T21:42:36.745Z",
+      "updated_at": "2026-10-09T21:42:40.767Z"
+    },
+    {
+      "id": "4d547c7b-62fc-4b2c-8f4a-0cfc9e452a91",
+      "flat_id": "696fc530-2c74-47d2-b56a-94414b2fbc5e",
+      "billing_month": "2026-10",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T21:42:36.869Z",
+      "updated_at": "2026-10-09T21:42:38.023Z"
     }
   ],
   "security_levy_transactions": [
+    {
+      "id": "cd5da553-cdb6-4796-8d16-18b220928c98",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": "16531f95-c905-4958-8d99-62e25091320c",
+      "payer_name": "Late Payer Conflict",
+      "payer_email": "late@test.ng",
+      "payer_phone": null,
+      "payer_type": "TENANT",
+      "billing_month": "2026-10",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1500,
+      "allocated_amount": 0,
+      "unallocated_amount": 1500,
+      "target_flat_ids": [
+        "65ff9c77-c753-4d55-a9be-bfd9420a07e9"
+      ],
+      "target_obligation_ids": [
+        "a6dfb98d-0108-43cc-9aef-70f4aa91a2c9"
+      ],
+      "paystack_reference": "LATE-SL-1791582159049",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "OVERPAID_UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": "Reconciliation notice: 1 conflict unit(s). Preserved ₦1,500 as unallocated credit.",
+      "created_at": "2026-10-09T21:42:39.049Z",
+      "updated_at": "2026-10-09T21:42:39.425Z"
+    },
+    {
+      "id": "3fe22823-a2d9-4543-acaf-a4a50cb68cb5",
+      "transaction_type": "BULK_FLATS",
+      "building_id": "16531f95-c905-4958-8d99-62e25091320c",
+      "payer_name": "Chief Test Landlord",
+      "payer_email": "landlord@test.ng",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-10",
+      "total_units": 2,
+      "rate_per_unit": 1500,
+      "expected_amount": 3000,
+      "verified_amount": 3000,
+      "allocated_amount": 3000,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "65ff9c77-c753-4d55-a9be-bfd9420a07e9",
+        "696fc530-2c74-47d2-b56a-94414b2fbc5e"
+      ],
+      "target_obligation_ids": [
+        "a6dfb98d-0108-43cc-9aef-70f4aa91a2c9"
+      ],
+      "paystack_reference": "TEST-SL-1791582157118",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "ALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T21:42:37.118Z",
+      "updated_at": "2026-10-09T21:42:38.153Z"
+    },
+    {
+      "id": "126104ff-7fcb-42f0-babc-8992bf9504d2",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "payer_name": "Late Payer Conflict",
+      "payer_email": "late@test.ng",
+      "payer_phone": null,
+      "payer_type": "TENANT",
+      "billing_month": "2026-10",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1500,
+      "allocated_amount": 0,
+      "unallocated_amount": 1500,
+      "target_flat_ids": [
+        "7ec46ec0-996b-4a51-b287-ce5bc7d3e90e"
+      ],
+      "target_obligation_ids": [
+        "3eb35cb2-af13-46f8-bb0b-9f3e7f34ac6c"
+      ],
+      "paystack_reference": "LATE-SL-1791582136205",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "OVERPAID_UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": "Reconciliation notice: 1 conflict unit(s). Preserved ₦1,500 as unallocated credit.",
+      "created_at": "2026-10-09T21:42:16.205Z",
+      "updated_at": "2026-10-09T21:42:16.899Z"
+    },
+    {
+      "id": "59412841-1dc0-4157-8ad6-59d70ed6d9f6",
+      "transaction_type": "BULK_FLATS",
+      "building_id": "7c034ca8-26ef-47c8-a954-f38b50df3e82",
+      "payer_name": "Chief Test Landlord",
+      "payer_email": "landlord@test.ng",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-10",
+      "total_units": 2,
+      "rate_per_unit": 1500,
+      "expected_amount": 3000,
+      "verified_amount": 3000,
+      "allocated_amount": 3000,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "7ec46ec0-996b-4a51-b287-ce5bc7d3e90e",
+        "d7b0eacf-cd0e-4c3e-977b-ef96a09e437b"
+      ],
+      "target_obligation_ids": [
+        "3eb35cb2-af13-46f8-bb0b-9f3e7f34ac6c"
+      ],
+      "paystack_reference": "TEST-SL-1791582133861",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "ALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T21:42:13.861Z",
+      "updated_at": "2026-10-09T21:42:15.366Z"
+    },
     {
       "id": "e5555fa6-404f-48dd-ac79-1b9f792b79b0",
       "transaction_type": "INDIVIDUAL_FLAT",
@@ -2056,6 +2382,58 @@
   ],
   "flat_payment_allocations": [
     {
+      "id": "d9c70384-0c47-4441-b7e5-3423fdcc8e4e",
+      "transaction_id": "3fe22823-a2d9-4543-acaf-a4a50cb68cb5",
+      "flat_id": "696fc530-2c74-47d2-b56a-94414b2fbc5e",
+      "obligation_id": "4d547c7b-62fc-4b2c-8f4a-0cfc9e452a91",
+      "allocated_amount": 1500,
+      "billing_month": "2026-10",
+      "rate_snapshot": 1500,
+      "paystack_reference": "TEST-SL-1791582157118",
+      "receipt_number": "SLR-20261009-AE4D54AE",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T21:42:37.904Z"
+    },
+    {
+      "id": "8e3a3f4e-eb9a-4bf6-bb09-4025f74ca1b2",
+      "transaction_id": "3fe22823-a2d9-4543-acaf-a4a50cb68cb5",
+      "flat_id": "65ff9c77-c753-4d55-a9be-bfd9420a07e9",
+      "obligation_id": "a6dfb98d-0108-43cc-9aef-70f4aa91a2c9",
+      "allocated_amount": 1500,
+      "billing_month": "2026-10",
+      "rate_snapshot": 1500,
+      "paystack_reference": "TEST-SL-1791582157118",
+      "receipt_number": "SLR-20261009-AD816889",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T21:42:37.494Z"
+    },
+    {
+      "id": "c1f8efe1-ce12-44d7-b61b-122db3ff0145",
+      "transaction_id": "59412841-1dc0-4157-8ad6-59d70ed6d9f6",
+      "flat_id": "d7b0eacf-cd0e-4c3e-977b-ef96a09e437b",
+      "obligation_id": "3b98583d-6cb2-4bd0-ad3d-d167a13a81ea",
+      "allocated_amount": 1500,
+      "billing_month": "2026-10",
+      "rate_snapshot": 1500,
+      "paystack_reference": "TEST-SL-1791582133861",
+      "receipt_number": "SLR-20261009-B0B0F57D",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T21:42:15.148Z"
+    },
+    {
+      "id": "6b1dc744-0712-4d9a-ba40-e6fbbd145b10",
+      "transaction_id": "59412841-1dc0-4157-8ad6-59d70ed6d9f6",
+      "flat_id": "7ec46ec0-996b-4a51-b287-ce5bc7d3e90e",
+      "obligation_id": "3eb35cb2-af13-46f8-bb0b-9f3e7f34ac6c",
+      "allocated_amount": 1500,
+      "billing_month": "2026-10",
+      "rate_snapshot": 1500,
+      "paystack_reference": "TEST-SL-1791582133861",
+      "receipt_number": "SLR-20261009-FE0CF78A",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T21:42:14.750Z"
+    },
+    {
       "id": "33f1a48f-dd26-4a76-890b-4598ca26c47e",
       "transaction_id": "fdebe906-7949-4220-b5b7-8aaffdcbd725",
       "flat_id": "1a060328-a9f6-4cda-b0af-b92041e08616",
@@ -2318,6 +2696,84 @@
   ],
   "manual_payment_logs": [],
   "estate_audit_logs": [
+    {
+      "id": "7b68ee67-f2f5-43c3-93eb-4cca071e34f2",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "TEST_SUITE",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "cd5da553-cdb6-4796-8d16-18b220928c98",
+      "details": {
+        "allocated_count": 0,
+        "conflict_count": 1,
+        "total_allocated": 0,
+        "total_unallocated": 1500,
+        "paystack_reference": "LATE-SL-1791582159049",
+        "receipts": []
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T21:42:39.545Z"
+    },
+    {
+      "id": "5d289fd9-2622-4d6d-bc55-7570f7e18d21",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "TEST_SUITE",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "3fe22823-a2d9-4543-acaf-a4a50cb68cb5",
+      "details": {
+        "allocated_count": 2,
+        "conflict_count": 0,
+        "total_allocated": 3000,
+        "total_unallocated": 0,
+        "paystack_reference": "TEST-SL-1791582157118",
+        "receipts": [
+          "SLR-20261009-AD816889",
+          "SLR-20261009-AE4D54AE"
+        ]
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T21:42:38.272Z"
+    },
+    {
+      "id": "93d2d7f8-672a-4070-a619-6cb57042bdcd",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "TEST_SUITE",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "126104ff-7fcb-42f0-babc-8992bf9504d2",
+      "details": {
+        "allocated_count": 0,
+        "conflict_count": 1,
+        "total_allocated": 0,
+        "total_unallocated": 1500,
+        "paystack_reference": "LATE-SL-1791582136205",
+        "receipts": []
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T21:42:17.010Z"
+    },
+    {
+      "id": "cb8ef5ba-fbab-4ab0-ae3e-283435fbe1b6",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "TEST_SUITE",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "59412841-1dc0-4157-8ad6-59d70ed6d9f6",
+      "details": {
+        "allocated_count": 2,
+        "conflict_count": 0,
+        "total_allocated": 3000,
+        "total_unallocated": 0,
+        "paystack_reference": "TEST-SL-1791582133861",
+        "receipts": [
+          "SLR-20261009-FE0CF78A",
+          "SLR-20261009-B0B0F57D"
+        ]
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T21:42:15.486Z"
+    },
     {
       "id": "43cab1b1-3ea5-48a1-b0b6-9589302bf620",
       "actor_type": "WEBHOOK",
@@ -2637,5 +3093,5 @@
       "created_at": "2026-10-09T16:03:08.915Z"
     }
   ],
-  "last_updated": "2026-10-09T21:21:52.965Z"
+  "last_updated": "2026-10-09T21:42:40.767Z"
 }

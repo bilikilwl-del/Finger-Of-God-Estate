@@ -236,13 +236,15 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'TRANSACTION_NOT_FOUND');
     END IF;
 
-    -- 2. Idempotency Check: if already processed and allocated, return existing status immediately
-    IF v_tx.allocation_status = 'ALLOCATED' THEN
+    -- 2. Idempotency Check: if already processed and allocated (or handled), return existing status immediately
+    IF v_tx.allocation_status IN ('ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED') THEN
         RETURN jsonb_build_object(
-            'success', true,
-            'status', 'ALREADY_ALLOCATED',
+            'success', (v_tx.allocation_status = 'ALLOCATED'),
+            'status', 'ALREADY_PROCESSED',
+            'allocation_status', v_tx.allocation_status,
             'transaction_id', v_tx.id,
-            'allocated_amount', v_tx.allocated_amount
+            'allocated_amount', v_tx.allocated_amount,
+            'unallocated_amount', v_tx.unallocated_amount
         );
     END IF;
 
@@ -360,18 +362,20 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- 6. Update transaction allocation state
+    -- 6. Financial conservation: ensure all verified funds are accounted for
+    v_total_unallocated := GREATEST(0.00, COALESCE(v_tx.verified_amount, 0.00) - v_total_allocated);
+
     UPDATE public.security_levy_transactions
     SET allocated_amount = v_total_allocated,
         unallocated_amount = v_total_unallocated,
         allocation_status = CASE 
-            WHEN v_conflict_count = 0 AND v_allocated_count > 0 THEN 'ALLOCATED'
-            WHEN v_allocated_count > 0 AND v_conflict_count > 0 THEN 'PARTIALLY_ALLOCATED'
+            WHEN v_conflict_count = 0 AND v_allocated_count > 0 AND v_total_unallocated = 0.00 THEN 'ALLOCATED'
+            WHEN v_allocated_count > 0 THEN 'PARTIALLY_ALLOCATED'
             ELSE 'OVERPAID_UNALLOCATED'
         END,
         reconciliation_notes = CASE
-            WHEN v_conflict_count > 0 THEN 
-                'Conflict detected: ' || v_conflict_count || ' unit(s) were already marked PAID or allocated. Preserved ₦' || v_total_unallocated || ' as unallocated credit.'
+            WHEN v_conflict_count > 0 OR v_total_unallocated > 0.00 THEN 
+                'Reconciliation notice: ' || v_conflict_count || ' conflict unit(s). Preserved ₦' || v_total_unallocated || ' as unallocated credit.'
             ELSE NULL
         END,
         updated_at = NOW()

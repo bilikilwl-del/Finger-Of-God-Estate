@@ -670,13 +670,19 @@ securityLevyRouter.post('/verify-payment', async (req: Request, res: Response) =
       return res.status(404).json({ success: false, verified: false, message: 'Payment attempt record not found.' });
     }
 
-    // If already verified and allocated, return existing status immediately (idempotent)
-    if (transaction.payment_status === 'SUCCESSFUL' && transaction.allocation_status === 'ALLOCATED') {
+    // If already verified and processed, return existing status immediately (idempotent)
+    if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
       const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
+      const isFullyAllocated = transaction.allocation_status === 'ALLOCATED';
       return res.json({
-        success: true,
+        success: isFullyAllocated,
         verified: true,
-        message: 'Payment verified and allocated successfully.',
+        allocation_status: transaction.allocation_status,
+        message: isFullyAllocated
+          ? 'Payment verified and allocated successfully.'
+          : (transaction.allocation_status === 'PARTIALLY_ALLOCATED'
+              ? 'Payment verified with partial allocation. Some flats had conflicts.'
+              : 'Payment verified but unallocated due to conflicts. Funds held as credit.'),
         transaction,
         allocations
       });
@@ -756,10 +762,24 @@ securityLevyRouter.post('/verify-payment', async (req: Request, res: Response) =
       const updatedTx = await serverDb.getSecurityLevyTransactionById(transaction.id);
       const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
 
+      // CRITICAL: Payment success requires complete, conflict-free allocation
+      const isFullyAllocated = 
+        updatedTx.allocation_status === 'ALLOCATED' &&
+        allocResult.success &&
+        allocResult.conflict_count === 0 &&
+        Number(updatedTx.unallocated_amount || 0) === 0;
+
+      const message = isFullyAllocated
+        ? 'Payment verified and allocated to flat ledger successfully.'
+        : (updatedTx.allocation_status === 'PARTIALLY_ALLOCATED'
+            ? 'Payment verified with partial allocation. Some flats were already paid.'
+            : 'Payment verified but could not be allocated due to conflicts. Funds held as unallocated credit.');
+
       return res.json({
-        success: true,
+        success: isFullyAllocated,
         verified: true,
-        message: 'Payment verified and allocated to flat ledger successfully.',
+        allocation_status: updatedTx.allocation_status,
+        message,
         transaction: updatedTx,
         allocation_result: allocResult,
         allocations
@@ -1023,6 +1043,46 @@ securityLevyRouter.get('/audit-logs', requireSecurityAdmin, async (req: Request,
   }
 });
 
+// POST /api/security-levy/cancel-checkout
+securityLevyRouter.post('/cancel-checkout', async (req: Request, res: Response) => {
+  try {
+    const { reference } = req.body;
+    if (!reference || typeof reference !== 'string') {
+      return res.status(400).json({ success: false, message: 'Payment reference is required.' });
+    }
+
+    const tx = await serverDb.getSecurityLevyTransactionByRef(reference.trim());
+    if (!tx) {
+      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+    }
+
+    if (tx.payment_status === 'PENDING') {
+      // Release reservation locks on obligations
+      const obligations = await serverDb.getObligations({ billingMonth: tx.billing_month });
+      const targetFlats = Array.isArray(tx.target_flat_ids) ? tx.target_flat_ids : [];
+      for (const fId of targetFlats) {
+        const ob = obligations.find(o => o.flat_id === fId && o.locked_by_reference === tx.paystack_reference);
+        if (ob) {
+          await serverDb.updateObligation(ob.id, {
+            locked_by_reference: null,
+            lock_expires_at: null
+          });
+        }
+      }
+
+      await serverDb.updateSecurityLevyTransaction(tx.id, {
+        payment_status: 'CANCELLED',
+        reconciliation_notes: 'Checkout cancelled by resident.'
+      });
+    }
+
+    return res.json({ success: true, message: 'Checkout session cancelled and flat reservations released.' });
+  } catch (error: any) {
+    console.error('Error cancelling checkout:', error);
+    return res.status(500).json({ success: false, message: 'Server error cancelling checkout.' });
+  }
+});
+
 // -------------------------------------------------------------
 // 8. WEBHOOK DELEGATE FOR SERVER.TS
 // -------------------------------------------------------------
@@ -1036,9 +1096,9 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
     return;
   }
 
-  // Idempotency: If already allocated, return immediately
-  if (transaction.payment_status === 'SUCCESSFUL' && transaction.allocation_status === 'ALLOCATED') {
-    console.log(`[Security Levy Webhook] Transaction ${reference} already allocated.`);
+  // Idempotency: If already allocated or processed, return immediately
+  if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
+    console.log(`[Security Levy Webhook] Transaction ${reference} already processed (status: ${transaction.allocation_status}).`);
     return;
   }
 

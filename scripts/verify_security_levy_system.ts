@@ -151,6 +151,58 @@ async function runVerification() {
   }
   console.log(`✓ Verified conflicting funds preserved as unallocated: ₦${updatedConflictTx.unallocated_amount}, Status: ${updatedConflictTx.allocation_status}`);
 
+  // 10. Repeated Allocation on Conflicted Transaction is Idempotent
+  console.log('\n[TEST 9] Testing idempotency replay on conflicted transaction...');
+  const replayConflictAlloc = await serverDb.allocateSecurityLevyPayment(conflictingTx.id, 'TEST_SUITE');
+  console.log(`✓ Replay conflict allocation result:`, replayConflictAlloc);
+
+  if (replayConflictAlloc.success !== false || replayConflictAlloc.total_unallocated !== 1500 || replayConflictAlloc.total_allocated !== 0) {
+    throw new Error('Replay on conflicted transaction violated idempotency or altered allocation amounts!');
+  }
+  const replayCheckTx = await serverDb.getSecurityLevyTransactionById(conflictingTx.id);
+  if (replayCheckTx.allocation_status !== 'OVERPAID_UNALLOCATED' || Number(replayCheckTx.unallocated_amount) !== 1500) {
+    throw new Error('Replay altered conflicted transaction state!');
+  }
+  console.log('✓ Verified: Replay of conflicted transaction preserved exact state without double crediting.');
+
+  // 11. Strict Accounting Conservation Invariant: allocated_amount + unallocated_amount === verified_amount
+  console.log('\n[TEST 10] Testing mathematical conservation law (allocated + unallocated === verified)...');
+  const allTestTxs = [transaction, conflictingTx];
+  for (const t of allTestTxs) {
+    const fresh = await serverDb.getSecurityLevyTransactionById(t.id);
+    const totalAccounted = Number(fresh.allocated_amount) + Number(fresh.unallocated_amount);
+    const verified = Number(fresh.verified_amount);
+    if (totalAccounted !== verified) {
+      throw new Error(`Conservation invariant failed for ${fresh.paystack_reference}! Accounted: ${totalAccounted}, Verified: ${verified}`);
+    }
+    console.log(`✓ Conservation satisfied for ${fresh.paystack_reference}: ₦${fresh.allocated_amount} allocated + ₦${fresh.unallocated_amount} unallocated = ₦${verified} verified.`);
+  }
+
+  // 12. Checkout Reservation Lock & Clean Cancellation Test
+  console.log('\n[TEST 11] Testing checkout reservation concurrency lock & cancellation...');
+  const lockRef = `LOCK-TEST-${Date.now()}`;
+  const lockExpiry = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  await serverDb.updateObligation(flat1Obs[0].id, {
+    locked_by_reference: lockRef,
+    lock_expires_at: lockExpiry
+  });
+  const lockedOb = (await serverDb.getObligations({ flatId: flat1.id, billingMonth: testMonth }))[0];
+  if (lockedOb.locked_by_reference !== lockRef) {
+    throw new Error('Reservation lock was not persisted!');
+  }
+  console.log(`✓ Reservation lock active for reference ${lockedOb.locked_by_reference}, expires at ${lockedOb.lock_expires_at}`);
+
+  // Release lock
+  await serverDb.updateObligation(flat1Obs[0].id, {
+    locked_by_reference: null,
+    lock_expires_at: null
+  });
+  const releasedOb = (await serverDb.getObligations({ flatId: flat1.id, billingMonth: testMonth }))[0];
+  if (releasedOb.locked_by_reference !== null) {
+    throw new Error('Reservation lock was not released!');
+  }
+  console.log('✓ Reservation lock successfully released.');
+
   console.log('\n===============================================================');
   console.log('ALL VERIFICATION TESTS COMPLETED SUCCESSFULLY! SYSTEM PRODUCTION-READY.');
   console.log('===============================================================');
