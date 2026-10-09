@@ -1188,20 +1188,7 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
         return res.sendStatus(200);
       }
 
-      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security levies)
-      const isRoadPayment = 
-        matchedAccount === 'estate' ||
-        data.metadata?.project_type === 'road_modernization' ||
-        data.metadata?.project === 'road_project' ||
-        String(reference).startsWith('FOG-RD-');
-
-      if (isRoadPayment) {
-        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
-        await processVerifiedRoadPaystackEvent(data);
-        return res.sendStatus(200);
-      }
-
-      // Check if this payment belongs to the Building & Flat Security Levy system
+      // Check if this payment belongs to the Building & Flat Security Levy system (Strictly isolated)
       const isFlatSecurityPayment = 
         String(reference).startsWith('FOG-SL-') ||
         data.metadata?.payment_type === 'flat_security_levy' ||
@@ -1211,6 +1198,19 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
       if (isFlatSecurityPayment) {
         console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Building & Flat Security Levy ledger...`);
         await processVerifiedSecurityLevyPaystackEvent(data);
+        return res.sendStatus(200);
+      }
+
+      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security levies)
+      const isRoadPayment = 
+        String(reference).startsWith('FOG-RD-') ||
+        data.metadata?.project_type === 'road_modernization' ||
+        data.metadata?.project === 'road_project' ||
+        (matchedAccount === 'estate' && !String(reference).startsWith('FOG-SL-') && !String(reference).startsWith('FOG-SEC-') && data.metadata?.payment_type !== 'flat_security_levy');
+
+      if (isRoadPayment) {
+        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
+        await processVerifiedRoadPaystackEvent(data);
         return res.sendStatus(200);
       }
 

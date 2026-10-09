@@ -499,6 +499,22 @@ securityLevyRouter.post('/initialize-payment', async (req: Request, res: Respons
       });
     }
 
+    // Reservation Check: ensure no active, unexpired checkout session on these flats
+    const nowMs = Date.now();
+    const activeLockedFlats = targetFlats.filter(f => {
+      const ob = obligations.find(o => o.flat_id === f.id);
+      if (!ob || !ob.locked_by_reference || !ob.lock_expires_at) return false;
+      const expiry = new Date(ob.lock_expires_at).getTime();
+      return expiry > nowMs;
+    });
+
+    if (activeLockedFlats.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Checkout is currently in progress for flat(s): ${activeLockedFlats.map(f => f.flat_number).join(', ')}. Please wait a few moments for the transaction to complete or expire before trying again.`
+      });
+    }
+
     // Calculate official amounts: strictly ₦1,500 per flat
     const ratePerUnit = 1500.00;
     const totalUnits = targetFlats.length;
@@ -1021,8 +1037,14 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
   }
 
   // Idempotency: If already allocated, return immediately
-  if (transaction.allocation_status === 'ALLOCATED') {
+  if (transaction.payment_status === 'SUCCESSFUL' && transaction.allocation_status === 'ALLOCATED') {
     console.log(`[Security Levy Webhook] Transaction ${reference} already allocated.`);
+    return;
+  }
+
+  // Currency validation
+  if (data.currency && data.currency !== 'NGN') {
+    console.warn(`[Security Levy Webhook Warning] Non-NGN currency (${data.currency}) received for ref ${reference}`);
     return;
   }
 
@@ -1031,17 +1053,29 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
   const expectedKobo = transaction.expected_amount * 100;
   if (paidKobo !== expectedKobo) {
     console.warn(`[Security Levy Webhook Warning] Amount mismatch on ${reference}. Expected ${expectedKobo}, got ${paidKobo}`);
-    return;
+    // If underpaid, record as partial payment note and do not allocate as fully successful
+    if (paidKobo < expectedKobo) {
+      await serverDb.updateSecurityLevyTransaction(transaction.id, {
+        payment_status: 'PARTIALLY_PAID',
+        verified_amount: paidKobo / 100,
+        reconciliation_notes: `Underpayment detected: expected ₦${transaction.expected_amount}, received ₦${paidKobo / 100}. Manual reconciliation required.`
+      });
+      return;
+    }
   }
 
   const now = new Date().toISOString();
-  await serverDb.updateSecurityLevyTransaction(transaction.id, {
-    payment_status: 'SUCCESSFUL',
-    verified_amount: paidKobo / 100,
-    verified_at: data.paid_at || now,
-    channel_payload: data
-  });
+  try {
+    await serverDb.updateSecurityLevyTransaction(transaction.id, {
+      payment_status: 'SUCCESSFUL',
+      verified_amount: paidKobo / 100,
+      verified_at: data.paid_at || now,
+      channel_payload: data
+    });
 
-  await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
-  console.log(`[Security Levy Webhook] Successfully processed and allocated transaction ${reference}`);
+    const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
+    console.log(`[Security Levy Webhook] Successfully processed and allocated transaction ${reference}:`, allocResult);
+  } catch (err: any) {
+    console.error(`[Security Levy Webhook Error] Failed to allocate transaction ${reference}:`, err);
+  }
 }

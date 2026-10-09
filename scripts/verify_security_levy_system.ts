@@ -117,6 +117,40 @@ async function runVerification() {
   console.log(`✓ Road project milestones count preserved: ${milestones.length}`);
   console.log('✓ Road project financial ledger remains completely isolated.');
 
+  // 9. Financial Invariant & Conflict Preservation Test
+  console.log('\n[TEST 8] Testing conflict handling and non-double crediting invariant...');
+  const conflictingTx = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    building_id: building.id,
+    payer_name: 'Late Payer Conflict',
+    payer_email: 'late@test.ng',
+    payer_type: 'TENANT',
+    billing_month: testMonth,
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    verified_amount: 1500.00,
+    target_flat_ids: [flat1.id],
+    target_obligation_ids: [flat1Obs[0].id],
+    paystack_reference: `LATE-SL-${Date.now()}`,
+    payment_method: 'PAYSTACK',
+    payment_status: 'SUCCESSFUL',
+    allocation_status: 'UNALLOCATED'
+  });
+
+  const conflictAllocResult = await serverDb.allocateSecurityLevyPayment(conflictingTx.id, 'TEST_SUITE');
+  console.log(`✓ Conflict allocation result:`, conflictAllocResult);
+
+  if (conflictAllocResult.conflict_count !== 1 || conflictAllocResult.total_unallocated !== 1500) {
+    throw new Error('Conflict preservation invariant failed! Overlapping payment was not safely held as unallocated.');
+  }
+
+  const updatedConflictTx = await serverDb.getSecurityLevyTransactionById(conflictingTx.id);
+  if (updatedConflictTx.allocation_status !== 'OVERPAID_UNALLOCATED') {
+    throw new Error(`Expected OVERPAID_UNALLOCATED status, got: ${updatedConflictTx.allocation_status}`);
+  }
+  console.log(`✓ Verified conflicting funds preserved as unallocated: ₦${updatedConflictTx.unallocated_amount}, Status: ${updatedConflictTx.allocation_status}`);
+
   console.log('\n===============================================================');
   console.log('ALL VERIFICATION TESTS COMPLETED SUCCESSFULLY! SYSTEM PRODUCTION-READY.');
   console.log('===============================================================');

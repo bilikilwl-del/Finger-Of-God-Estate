@@ -4,7 +4,7 @@
 -- =========================================================================
 -- Target Database: PostgreSQL 15+ / Supabase
 -- Target Schema: public
--- File: /supabase_building_flat_security_levy_migration.sql
+-- File: /supabase_building_flat_security_levy_migration_proposed.sql
 -- Status: PREPARED FOR REVIEW ONLY (NOT YET EXECUTED)
 -- =========================================================================
 

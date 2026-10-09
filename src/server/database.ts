@@ -1671,14 +1671,20 @@ export const serverDb = {
       allocation_timestamp: allocation.allocation_timestamp || now
     };
 
-    const idx = localDb.flat_payment_allocations.findIndex(
-      a => a.id === record.id || (a.flat_id === record.flat_id && a.obligation_id === record.obligation_id)
+    const existingIdx = localDb.flat_payment_allocations.findIndex(
+      a => a.flat_id === record.flat_id && a.obligation_id === record.obligation_id
     );
-    if (idx >= 0) {
-      localDb.flat_payment_allocations[idx] = { ...localDb.flat_payment_allocations[idx], ...record };
-    } else {
-      localDb.flat_payment_allocations.unshift(record);
+    if (existingIdx >= 0) {
+      if (localDb.flat_payment_allocations[existingIdx].id === record.id) {
+        localDb.flat_payment_allocations[existingIdx] = { ...localDb.flat_payment_allocations[existingIdx], ...record };
+        saveDbToFile(localDb);
+        return record;
+      }
+      // Unique constraint violation on (flat_id, obligation_id)
+      return null;
     }
+
+    localDb.flat_payment_allocations.unshift(record);
     saveDbToFile(localDb);
 
     try {
@@ -1788,8 +1794,12 @@ export const serverDb = {
         });
       }
 
-      // Check conflict: If already paid, preserve financial integrity
-      if (obligation.status === 'PAID') {
+      // Check conflict: If already paid or already allocated to another transaction
+      const existingAlloc = (localDb.flat_payment_allocations || []).find(
+        a => a.flat_id === flatId && a.obligation_id === obligation.id && a.transaction_id !== tx.id
+      );
+
+      if (obligation.status === 'PAID' || existingAlloc) {
         conflictCount++;
         totalUnallocated += Number(tx.rate_per_unit || 1500.00);
       } else {
@@ -1798,7 +1808,7 @@ export const serverDb = {
         const receiptNo = `SLR-${dateStr}-${randomHex}`;
 
         // Save Allocation
-        await this.saveFlatPaymentAllocation({
+        const savedAlloc = await this.saveFlatPaymentAllocation({
           transaction_id: tx.id,
           flat_id: flatId,
           obligation_id: obligation.id,
@@ -1810,28 +1820,40 @@ export const serverDb = {
           payment_method: tx.payment_method
         });
 
-        // Mark obligation as PAID
-        await this.updateObligation(obligation.id, {
-          amount_paid: obligation.amount_due,
-          balance_due: 0.00,
-          status: 'PAID',
-          locked_by_reference: null,
-          lock_expires_at: null
-        });
+        // CRITICAL INVARIANT: Only update obligation if allocation record was actually persisted
+        if (savedAlloc) {
+          const currentPaid = Number(obligation.amount_paid) || 0;
+          const rateUnit = Number(tx.rate_per_unit || 1500.00);
+          const newPaid = currentPaid + rateUnit;
+          const due = Number(obligation.amount_due) || 1500.00;
+          const balance = Math.max(0, due - newPaid);
+          const newStatus = newPaid >= due ? 'PAID' : 'PARTIALLY_PAID';
 
-        allocatedCount++;
-        totalAllocated += Number(tx.rate_per_unit || 1500.00);
-        generatedReceipts.push(receiptNo);
+          await this.updateObligation(obligation.id, {
+            amount_paid: newPaid,
+            balance_due: balance,
+            status: newStatus,
+            locked_by_reference: null,
+            lock_expires_at: null
+          });
+
+          allocatedCount++;
+          totalAllocated += rateUnit;
+          generatedReceipts.push(receiptNo);
+        } else {
+          conflictCount++;
+          totalUnallocated += Number(tx.rate_per_unit || 1500.00);
+        }
       }
     }
 
     // Update Transaction State
     const finalAllocationStatus = 
-      conflictCount === 0 ? 'ALLOCATED' :
-      (allocatedCount > 0 ? 'PARTIALLY_ALLOCATED' : 'OVERPAID_UNALLOCATED');
+      (conflictCount === 0 && allocatedCount > 0) ? 'ALLOCATED' :
+      (allocatedCount > 0 && conflictCount > 0 ? 'PARTIALLY_ALLOCATED' : 'OVERPAID_UNALLOCATED');
 
     const reconNotes = conflictCount > 0 
-      ? `Conflict detected: ${conflictCount} unit(s) were already marked PAID. Preserved ₦${totalUnallocated.toLocaleString()} as unallocated credit.`
+      ? `Conflict detected: ${conflictCount} unit(s) were already marked PAID or allocated. Preserved ₦${totalUnallocated.toLocaleString()} as unallocated credit.`
       : null;
 
     await this.updateSecurityLevyTransaction(tx.id, {
