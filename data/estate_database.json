@@ -38,10 +38,10 @@
     {
       "resident_number": "280",
       "full_name": "Resident Alice",
-      "email": "alice@example.com",
-      "phone_number": "08011111111",
+      "email": "alice_1791587273593@example.com",
+      "phone_number": "08074554416",
       "house_number": "Flat 1-A",
-      "id": "d80bfc44-a45c-4d41-927e-f503d19f674c",
+      "id": "b4ede664-9176-45d9-81c8-9e6eef531dac",
       "additional_phone": null,
       "address": "Finger of God Estate, Iyiaba, Asaba",
       "state": "Delta",
@@ -52,16 +52,16 @@
       "account_activated": false,
       "profile_completed": false,
       "account_status": "NOT ACTIVATED",
-      "created_at": "2026-10-09T22:47:25.598Z",
-      "updated_at": "2026-10-09T22:47:25.598Z"
+      "created_at": "2026-10-09T23:07:53.594Z",
+      "updated_at": "2026-10-09T23:07:53.594Z"
     },
     {
       "resident_number": "281",
       "full_name": "Resident Bob",
-      "email": "bob@example.com",
-      "phone_number": "08022222222",
+      "email": "bob_1791587273597@example.com",
+      "phone_number": "08043404045",
       "house_number": "Flat 2-B",
-      "id": "5e340a85-1a45-4ade-9074-0173e7eb7179",
+      "id": "48fe4e56-2b45-44f9-ab23-75226634243a",
       "additional_phone": null,
       "address": "Finger of God Estate, Iyiaba, Asaba",
       "state": "Delta",
@@ -72,8 +72,8 @@
       "account_activated": false,
       "profile_completed": false,
       "account_status": "NOT ACTIVATED",
-      "created_at": "2026-10-09T22:47:25.600Z",
-      "updated_at": "2026-10-09T22:47:25.600Z"
+      "created_at": "2026-10-09T23:07:53.597Z",
+      "updated_at": "2026-10-09T23:07:53.597Z"
     }
   ],
   "otp_challenges": [
@@ -100,7 +100,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-09T22:27:39.237Z"
+      "updated_at": "2026-10-09T22:49:46.325Z"
     }
   ],
   "admin_users": [
@@ -112,7 +112,7 @@
       "role": "admin",
       "status": "Active",
       "created_at": "2026-10-02T21:40:22.668Z",
-      "updated_at": "2026-10-09T22:27:39.237Z"
+      "updated_at": "2026-10-09T22:49:46.325Z"
     },
     {
       "id": "00000000-0000-0000-0000-000000000002",
@@ -767,6 +767,20 @@
       "status": "ACTIVE",
       "created_at": "2026-10-09T22:48:45.272Z",
       "updated_at": "2026-10-09T22:48:45.272Z"
+    },
+    {
+      "id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "house_number": "Plot-REGRESS-1791587273426",
+      "building_name": "Regression Court",
+      "total_flats_count": 5,
+      "landlord_name": null,
+      "landlord_phone": null,
+      "landlord_email": null,
+      "landlord_resident_id": null,
+      "notes": null,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:53.427Z",
+      "updated_at": "2026-10-09T23:07:53.427Z"
     }
   ],
   "flats": [
@@ -2263,6 +2277,96 @@
       "status": "ACTIVE",
       "created_at": "2026-10-09T22:48:45.290Z",
       "updated_at": "2026-10-09T22:48:45.290Z"
+    },
+    {
+      "id": "95847201-a6f7-44a9-9b22-8b1ff5efce81",
+      "building_id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "flat_number": "Flat 1-A",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T23:07:53.433Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:53.433Z",
+      "updated_at": "2026-10-09T23:07:53.433Z"
+    },
+    {
+      "id": "fe2bcb44-1c03-42a2-8c8d-c1c883cda298",
+      "building_id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "flat_number": "Flat 2-B",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T23:07:53.457Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:53.457Z",
+      "updated_at": "2026-10-09T23:07:53.457Z"
+    },
+    {
+      "id": "bc8ca304-0e3a-4d83-ae35-8757c2a6f7cc",
+      "building_id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "flat_number": "Flat 3-C",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T23:07:53.483Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:53.483Z",
+      "updated_at": "2026-10-09T23:07:53.483Z"
+    },
+    {
+      "id": "8d7d740f-bced-4215-844f-aa838184107b",
+      "building_id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "flat_number": "Flat 4-D",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T23:07:54.115Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:54.115Z",
+      "updated_at": "2026-10-09T23:07:54.115Z"
+    },
+    {
+      "id": "da1dba42-b341-4aad-9d71-b14a87aaa9bf",
+      "building_id": "9f3c767a-f136-45b2-b963-c07276a0b2ea",
+      "flat_number": "Flat 5-E",
+      "label": null,
+      "occupant_type": "VACANT",
+      "resident_id": null,
+      "occupant_name": null,
+      "occupant_phone": null,
+      "occupant_email": null,
+      "is_billing_active": true,
+      "billing_activated_at": "2026-10-09T23:07:54.118Z",
+      "billing_activated_by": null,
+      "monthly_levy_amount": 1500,
+      "status": "ACTIVE",
+      "created_at": "2026-10-09T23:07:54.118Z",
+      "updated_at": "2026-10-09T23:07:54.118Z"
     }
   ],
   "flat_security_levy_obligations": [
@@ -4575,9 +4679,461 @@
       "lock_expires_at": null,
       "created_at": "2026-10-09T22:48:45.437Z",
       "updated_at": "2026-10-09T22:48:45.467Z"
+    },
+    {
+      "id": "44351ef3-0d5b-4613-8dce-b12ec043ea43",
+      "flat_id": "95847201-a6f7-44a9-9b22-8b1ff5efce81",
+      "billing_month": "2026-11",
+      "amount_due": 1500,
+      "amount_paid": 0,
+      "balance_due": 1500,
+      "status": "UNPAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:53.436Z",
+      "updated_at": "2026-10-09T23:07:53.436Z"
+    },
+    {
+      "id": "8536d8ae-5c63-48f1-97f0-37a1f54cd7bb",
+      "flat_id": "fe2bcb44-1c03-42a2-8c8d-c1c883cda298",
+      "billing_month": "2026-11",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:53.460Z",
+      "updated_at": "2026-10-09T23:07:53.474Z"
+    },
+    {
+      "id": "006c1c40-41a9-4fac-a765-e360ffafe998",
+      "flat_id": "bc8ca304-0e3a-4d83-ae35-8757c2a6f7cc",
+      "billing_month": "2026-11",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:53.486Z",
+      "updated_at": "2026-10-09T23:07:53.497Z"
+    },
+    {
+      "id": "31b229ef-8cd8-4969-bb75-13b752572621",
+      "flat_id": "8d7d740f-bced-4215-844f-aa838184107b",
+      "billing_month": "2026-11",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:54.121Z",
+      "updated_at": "2026-10-09T23:07:54.134Z"
+    },
+    {
+      "id": "695f90bc-7712-495c-9c1c-675ecac3638e",
+      "flat_id": "da1dba42-b341-4aad-9d71-b14a87aaa9bf",
+      "billing_month": "2026-11",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:54.124Z",
+      "updated_at": "2026-10-09T23:07:54.139Z"
+    },
+    {
+      "id": "e88e388d-3e1b-4c29-9b1a-6f077732dcc8",
+      "flat_id": "8d7d740f-bced-4215-844f-aa838184107b",
+      "billing_month": "2026-12",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:54.156Z",
+      "updated_at": "2026-10-09T23:07:54.165Z"
+    },
+    {
+      "id": "0b90ec5c-720b-4590-844f-f02a548bddfe",
+      "flat_id": "da1dba42-b341-4aad-9d71-b14a87aaa9bf",
+      "billing_month": "2026-12",
+      "amount_due": 1500,
+      "amount_paid": 1500,
+      "balance_due": 0,
+      "status": "PAID",
+      "is_billed": true,
+      "due_date": null,
+      "locked_by_reference": null,
+      "lock_expires_at": null,
+      "created_at": "2026-10-09T23:07:54.170Z",
+      "updated_at": "2026-10-09T23:07:54.178Z"
     }
   ],
   "security_levy_transactions": [
+    {
+      "id": "1132d75f-f81c-4a3d-8e41-1f907587e2e5",
+      "transaction_type": "BULK_FLATS",
+      "building_id": null,
+      "payer_name": "Over-alloc test",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-12",
+      "total_units": 2,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1500,
+      "allocated_amount": 3000,
+      "unallocated_amount": -1500,
+      "target_flat_ids": [
+        "8d7d740f-bced-4215-844f-aa838184107b",
+        "da1dba42-b341-4aad-9d71-b14a87aaa9bf"
+      ],
+      "target_obligation_ids": [],
+      "paystack_reference": "FOG-SL-OVERALLOC-1791587274150",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "OVER_ALLOCATION_DISCREPANCY",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": "CRITICAL DISCREPANCY: Allocations (₦3000) exceeded verified amount (₦1500). Urgent administrative audit required.",
+      "created_at": "2026-10-09T23:07:54.150Z",
+      "updated_at": "2026-10-09T23:07:54.182Z"
+    },
+    {
+      "id": "be3457aa-8067-4c25-abe8-428aeeed011c",
+      "transaction_type": "BULK_FLATS",
+      "building_id": null,
+      "payer_name": "Landlord Bulk Conservation",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 2,
+      "rate_per_unit": 1500,
+      "expected_amount": 3000,
+      "verified_amount": 3000,
+      "allocated_amount": 3000,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "8d7d740f-bced-4215-844f-aa838184107b",
+        "da1dba42-b341-4aad-9d71-b14a87aaa9bf"
+      ],
+      "target_obligation_ids": [
+        "31b229ef-8cd8-4969-bb75-13b752572621",
+        "695f90bc-7712-495c-9c1c-675ecac3638e"
+      ],
+      "paystack_reference": "FOG-SL-BULK-1791587274126",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "ALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:54.126Z",
+      "updated_at": "2026-10-09T23:07:54.142Z"
+    },
+    {
+      "id": "69777d78-b699-41f6-8933-8ca24b5c787b",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "undefined",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 0,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "test-id"
+      ],
+      "target_obligation_ids": [],
+      "paystack_reference": null,
+      "payment_method": "PAYSTACK",
+      "payment_status": "PENDING",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:54.112Z",
+      "updated_at": "2026-10-09T23:07:54.112Z"
+    },
+    {
+      "id": "00b06f30-36b2-4959-b748-043b99fc530a",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Bob",
+      "payer_email": "bob_1791587273597@example.com",
+      "payer_phone": "08043404045",
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 0,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "fe2bcb44-1c03-42a2-8c8d-c1c883cda298"
+      ],
+      "target_obligation_ids": [
+        "8536d8ae-5c63-48f1-97f0-37a1f54cd7bb"
+      ],
+      "paystack_reference": "FOG-SL-BOB-1791587273603",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:53.603Z",
+      "updated_at": "2026-10-09T23:07:53.970Z"
+    },
+    {
+      "id": "6b4e985c-c11d-45b9-bc07-e9aa5795a633",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Concurrent",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1500,
+      "allocated_amount": 1500,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "bc8ca304-0e3a-4d83-ae35-8757c2a6f7cc"
+      ],
+      "target_obligation_ids": [
+        "006c1c40-41a9-4fac-a765-e360ffafe998"
+      ],
+      "paystack_reference": "FOG-SL-CONC-1791587273489",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "ALLOCATED",
+      "idempotency_key": null,
+      "verified_at": "2026-10-09T23:07:53.492Z",
+      "channel_payload": {
+        "reference": "FOG-SL-CONC-1791587273489",
+        "amount": 150000,
+        "currency": "NGN",
+        "status": "success",
+        "paid_at": "2026-10-09T23:07:53.492Z"
+      },
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:53.489Z",
+      "updated_at": "2026-10-09T23:07:53.500Z"
+    },
+    {
+      "id": "84fdf439-9063-4700-a8f6-f440035bab00",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Idempotent",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1500,
+      "allocated_amount": 1500,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "fe2bcb44-1c03-42a2-8c8d-c1c883cda298"
+      ],
+      "target_obligation_ids": [
+        "8536d8ae-5c63-48f1-97f0-37a1f54cd7bb"
+      ],
+      "paystack_reference": "FOG-SL-DUP-1791587273463",
+      "payment_method": "PAYSTACK",
+      "payment_status": "SUCCESSFUL",
+      "allocation_status": "ALLOCATED",
+      "idempotency_key": null,
+      "verified_at": "2026-10-09T23:07:53.466Z",
+      "channel_payload": {
+        "reference": "FOG-SL-DUP-1791587273463",
+        "amount": 150000,
+        "currency": "NGN",
+        "status": "success",
+        "paid_at": "2026-10-09T23:07:53.466Z"
+      },
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:53.463Z",
+      "updated_at": "2026-10-09T23:07:53.477Z"
+    },
+    {
+      "id": "2ad68e68-c045-4138-bc09-679595b57b2a",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Overpayer",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 2500,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "95847201-a6f7-44a9-9b22-8b1ff5efce81"
+      ],
+      "target_obligation_ids": [
+        "44351ef3-0d5b-4613-8dce-b12ec043ea43"
+      ],
+      "paystack_reference": "FOG-SL-OVERPAY-1791587273452",
+      "payment_method": "PAYSTACK",
+      "payment_status": "OVERPAID",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": "2026-10-09T23:07:53.454Z",
+      "channel_payload": {
+        "paystack_data": {
+          "reference": "FOG-SL-OVERPAY-1791587273452",
+          "amount": 250000,
+          "currency": "NGN",
+          "status": "success"
+        },
+        "mismatch_reason": "OVERPAYMENT"
+      },
+      "reconciliation_notes": "Webhook amount discrepancy: expected ₦1500, received ₦2500. Held for administrative reconciliation.",
+      "created_at": "2026-10-09T23:07:53.452Z",
+      "updated_at": "2026-10-09T23:07:53.454Z"
+    },
+    {
+      "id": "42de9d9f-310a-4968-856f-b6141990743c",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Discrepancy",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 1200,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "95847201-a6f7-44a9-9b22-8b1ff5efce81"
+      ],
+      "target_obligation_ids": [
+        "44351ef3-0d5b-4613-8dce-b12ec043ea43"
+      ],
+      "paystack_reference": "FOG-SL-WRONG-AMT-1791587273446",
+      "payment_method": "PAYSTACK",
+      "payment_status": "PARTIALLY_PAID",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": "2026-10-09T23:07:53.449Z",
+      "channel_payload": {
+        "paystack_data": {
+          "reference": "FOG-SL-WRONG-AMT-1791587273446",
+          "amount": 120000,
+          "currency": "NGN",
+          "status": "success"
+        },
+        "mismatch_reason": "UNDERPAYMENT"
+      },
+      "reconciliation_notes": "Webhook amount discrepancy: expected ₦1500, received ₦1200. Held for administrative reconciliation.",
+      "created_at": "2026-10-09T23:07:53.446Z",
+      "updated_at": "2026-10-09T23:07:53.449Z"
+    },
+    {
+      "id": "f898f9db-3223-4862-bb58-5aa9e0bf6f19",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident Failed Pay",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 0,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "95847201-a6f7-44a9-9b22-8b1ff5efce81"
+      ],
+      "target_obligation_ids": [
+        "44351ef3-0d5b-4613-8dce-b12ec043ea43"
+      ],
+      "paystack_reference": "FOG-SL-FAILED-1791587273443",
+      "payment_method": "PAYSTACK",
+      "payment_status": "PENDING",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:53.443Z",
+      "updated_at": "2026-10-09T23:07:53.443Z"
+    },
+    {
+      "id": "b7325bc7-baf9-4df2-b71f-0bc027bd6442",
+      "transaction_type": "INDIVIDUAL_FLAT",
+      "building_id": null,
+      "payer_name": "Resident USD",
+      "payer_email": "undefined",
+      "payer_phone": null,
+      "payer_type": "LANDLORD",
+      "billing_month": "2026-11",
+      "total_units": 1,
+      "rate_per_unit": 1500,
+      "expected_amount": 1500,
+      "verified_amount": 0,
+      "allocated_amount": 0,
+      "unallocated_amount": 0,
+      "target_flat_ids": [
+        "95847201-a6f7-44a9-9b22-8b1ff5efce81"
+      ],
+      "target_obligation_ids": [
+        "44351ef3-0d5b-4613-8dce-b12ec043ea43"
+      ],
+      "paystack_reference": "FOG-SL-NON-NGN-1791587273439",
+      "payment_method": "PAYSTACK",
+      "payment_status": "PENDING",
+      "allocation_status": "UNALLOCATED",
+      "idempotency_key": null,
+      "verified_at": null,
+      "channel_payload": null,
+      "reconciliation_notes": null,
+      "created_at": "2026-10-09T23:07:53.439Z",
+      "updated_at": "2026-10-09T23:07:53.439Z"
+    },
     {
       "id": "687adc37-52fa-443a-ac7b-2cd2911d9d25",
       "transaction_type": "INDIVIDUAL_FLAT",
@@ -7463,6 +8019,84 @@
   ],
   "flat_payment_allocations": [
     {
+      "id": "bcb943dd-cbb9-4ff7-8845-8f4d92474da7",
+      "transaction_id": "1132d75f-f81c-4a3d-8e41-1f907587e2e5",
+      "flat_id": "da1dba42-b341-4aad-9d71-b14a87aaa9bf",
+      "obligation_id": "0b90ec5c-720b-4590-844f-f02a548bddfe",
+      "allocated_amount": 1500,
+      "billing_month": "2026-12",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-OVERALLOC-1791587274150",
+      "receipt_number": "SLR-20261009-6168C438",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:54.173Z"
+    },
+    {
+      "id": "4c0ffb18-eb8e-463d-a160-d7f55457588c",
+      "transaction_id": "1132d75f-f81c-4a3d-8e41-1f907587e2e5",
+      "flat_id": "8d7d740f-bced-4215-844f-aa838184107b",
+      "obligation_id": "e88e388d-3e1b-4c29-9b1a-6f077732dcc8",
+      "allocated_amount": 1500,
+      "billing_month": "2026-12",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-OVERALLOC-1791587274150",
+      "receipt_number": "SLR-20261009-2A7391E9",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:54.161Z"
+    },
+    {
+      "id": "284a0c40-db0f-49e7-a659-be7da00af2d7",
+      "transaction_id": "be3457aa-8067-4c25-abe8-428aeeed011c",
+      "flat_id": "da1dba42-b341-4aad-9d71-b14a87aaa9bf",
+      "obligation_id": "695f90bc-7712-495c-9c1c-675ecac3638e",
+      "allocated_amount": 1500,
+      "billing_month": "2026-11",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-BULK-1791587274126",
+      "receipt_number": "SLR-20261009-074B2B46",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:54.137Z"
+    },
+    {
+      "id": "8e88ece4-1eae-4809-9769-7dd99855d297",
+      "transaction_id": "be3457aa-8067-4c25-abe8-428aeeed011c",
+      "flat_id": "8d7d740f-bced-4215-844f-aa838184107b",
+      "obligation_id": "31b229ef-8cd8-4969-bb75-13b752572621",
+      "allocated_amount": 1500,
+      "billing_month": "2026-11",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-BULK-1791587274126",
+      "receipt_number": "SLR-20261009-19DD0E34",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:54.131Z"
+    },
+    {
+      "id": "1b2b4934-504e-4dc5-bc4b-750dba6f5245",
+      "transaction_id": "6b4e985c-c11d-45b9-bc07-e9aa5795a633",
+      "flat_id": "bc8ca304-0e3a-4d83-ae35-8757c2a6f7cc",
+      "obligation_id": "006c1c40-41a9-4fac-a765-e360ffafe998",
+      "allocated_amount": 1500,
+      "billing_month": "2026-11",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-CONC-1791587273489",
+      "receipt_number": "SLR-20261009-D8DAE96B",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:53.494Z"
+    },
+    {
+      "id": "5b9c85da-c92d-42fd-8997-055b9c7da632",
+      "transaction_id": "84fdf439-9063-4700-a8f6-f440035bab00",
+      "flat_id": "fe2bcb44-1c03-42a2-8c8d-c1c883cda298",
+      "obligation_id": "8536d8ae-5c63-48f1-97f0-37a1f54cd7bb",
+      "allocated_amount": 1500,
+      "billing_month": "2026-11",
+      "rate_snapshot": 1500,
+      "paystack_reference": "FOG-SL-DUP-1791587273463",
+      "receipt_number": "SLR-20261009-91E73814",
+      "payment_method": "PAYSTACK",
+      "allocation_timestamp": "2026-10-09T23:07:53.472Z"
+    },
+    {
       "id": "19cab88c-a42d-4f52-bc4e-30b0a4e5e76b",
       "transaction_id": "4cd6f3ee-3b9e-4cac-bb34-d250ed8648f7",
       "flat_id": "0ebfe076-88d5-4d14-8e82-a6195859c4e2",
@@ -8219,6 +8853,67 @@
   ],
   "manual_payment_logs": [],
   "estate_audit_logs": [
+    {
+      "id": "fdea0cfc-1cdc-4ae8-8256-1f2d6273c876",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "CONSERVATION_TEST",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "be3457aa-8067-4c25-abe8-428aeeed011c",
+      "details": {
+        "allocated_count": 2,
+        "conflict_count": 0,
+        "total_allocated": 3000,
+        "total_unallocated": 0,
+        "paystack_reference": "FOG-SL-BULK-1791587274126",
+        "receipts": [
+          "SLR-20261009-19DD0E34",
+          "SLR-20261009-074B2B46"
+        ]
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T23:07:54.145Z"
+    },
+    {
+      "id": "f536ebe7-04b4-49e5-aeca-6589d4f92bfb",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "PAYSTACK_WEBHOOK",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "6b4e985c-c11d-45b9-bc07-e9aa5795a633",
+      "details": {
+        "allocated_count": 1,
+        "conflict_count": 0,
+        "total_allocated": 1500,
+        "total_unallocated": 0,
+        "paystack_reference": "FOG-SL-CONC-1791587273489",
+        "receipts": [
+          "SLR-20261009-D8DAE96B"
+        ]
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T23:07:53.502Z"
+    },
+    {
+      "id": "09bfa518-a2a4-43cf-81d7-ecaf7cfa173c",
+      "actor_type": "WEBHOOK",
+      "actor_identifier": "PAYSTACK_WEBHOOK",
+      "action": "ALLOCATE_SECURITY_LEVY",
+      "entity_type": "SECURITY_LEVY_TRANSACTION",
+      "entity_id": "84fdf439-9063-4700-a8f6-f440035bab00",
+      "details": {
+        "allocated_count": 1,
+        "conflict_count": 0,
+        "total_allocated": 1500,
+        "total_unallocated": 0,
+        "paystack_reference": "FOG-SL-DUP-1791587273463",
+        "receipts": [
+          "SLR-20261009-91E73814"
+        ]
+      },
+      "ip_address": null,
+      "created_at": "2026-10-09T23:07:53.480Z"
+    },
     {
       "id": "233568f1-3061-45cc-940d-88b1b0aa402d",
       "actor_type": "WEBHOOK",
@@ -9228,5 +9923,17 @@
       "created_at": "2026-10-09T16:03:08.915Z"
     }
   ],
-  "last_updated": "2026-10-09T22:48:45.523Z"
+  "last_updated": "2026-10-09T23:07:54.182Z",
+  "resident_sessions": [
+    {
+      "token": "TEST_SESSION_TOKEN_A_1791587273600",
+      "resident_number": "280",
+      "created_at": 1791587273600
+    },
+    {
+      "token": "TEST_SESSION_TOKEN_B_1791587273967",
+      "resident_number": "281",
+      "created_at": 1791587273967
+    }
+  ]
 }
