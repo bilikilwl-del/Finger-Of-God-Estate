@@ -100,6 +100,11 @@ export function runSecretScan(): { passed: boolean; findings: Finding[]; scanned
 
   console.log(`Scanning ${filesToScan.length} files for privileged secrets and service-role JWTs...`);
 
+  const allFindings: Finding[] = [];
+  for (const file of filesToScan) {
+    allFindings.push(...checkFile(file));
+  }
+
   const sourceFindings = allFindings.filter(f => !f.file.includes('dist/'));
   const assetFindings = allFindings.filter(f => f.file.includes('dist/'));
 

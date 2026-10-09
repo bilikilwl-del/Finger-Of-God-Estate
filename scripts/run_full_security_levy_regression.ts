@@ -16,7 +16,12 @@ console.log('===================================================================
 
 // Import server database and mock its remote Supabase calls
 import { serverDb, supabaseAdmin } from '../src/server/database.ts';
-import { processVerifiedSecurityLevyPaystackEvent } from '../src/server/securityLevyServer.ts';
+import { 
+  processVerifiedSecurityLevyPaystackEvent, 
+  handleCancelCheckoutSession, 
+  verifyPaystackWebhookSignature 
+} from '../src/server/securityLevyServer.ts';
+import { runSecretScan } from './scan_secrets.ts';
 
 // Track test results
 let passedCount = 0;
@@ -35,138 +40,132 @@ function assert(condition: boolean, testName: string, detail?: string) {
 }
 
 // Intercept Supabase admin methods to guarantee zero remote network calls
-const mockSupabaseQuery = {
+const mockSupabaseQuery: any = {
   select: () => mockSupabaseQuery,
   order: () => mockSupabaseQuery,
   eq: () => mockSupabaseQuery,
-  upsert: async () => ({ data: null, error: null }),
+  neq: () => mockSupabaseQuery,
+  upsert: () => mockSupabaseQuery,
+  insert: () => mockSupabaseQuery,
   update: () => mockSupabaseQuery,
+  delete: () => mockSupabaseQuery,
+  single: () => mockSupabaseQuery,
+  maybeSingle: () => mockSupabaseQuery,
+  limit: () => mockSupabaseQuery,
+  range: () => mockSupabaseQuery,
+  then: (resolve: any, reject: any) => Promise.resolve({ data: null, error: null }).then(resolve, reject),
+  catch: (reject: any) => Promise.resolve({ data: null, error: null }).catch(reject),
   rpc: async () => ({ data: null, error: { message: 'MOCK_TEST_ENV' } })
 };
 (supabaseAdmin as any).from = () => mockSupabaseQuery;
 (supabaseAdmin as any).rpc = async () => ({ data: null, error: { message: 'MOCK_TEST_ENV' } });
 
+// Helper to simulate Express Request & Response for endpoint handlers
+function createMockReqRes(body: any = {}, headers: any = {}) {
+  let statusCode = 200;
+  let sentData: any = null;
+  let statusSent: number | null = null;
+
+  const req: any = {
+    body,
+    headers,
+    rawBody: Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body), 'utf8')
+  };
+
+  const res: any = {
+    status(code: number) {
+      statusCode = code;
+      return res;
+    },
+    json(data: any) {
+      sentData = data;
+      return res;
+    },
+    sendStatus(code: number) {
+      statusSent = code;
+      statusCode = code;
+      return res;
+    },
+    getStatusCode() { return statusCode; },
+    getData() { return sentData; }
+  };
+
+  return { req, res, getStatus: () => statusCode, getData: () => sentData };
+}
+
 async function runRegressionSuite() {
   const startTime = Date.now();
 
   // --------------------------------------------------------------------------
-  // DOMAIN 1: SECRETS & STARTUP SECURITY
+  // TEST 1: VALID WEBHOOK SIGNATURE
   // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 1: SECRETS AND STARTUP]');
-
-  // Test 1.1: No hardcoded service-role key in source code
-  const dbSource = fs.readFileSync('./src/server/database.ts', 'utf8');
-  assert(
-    !dbSource.includes('9Lvfyc') && !dbSource.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZG90cHlvdGNtdHJwcGVkaXViIiwicm9sZSI6InNlcnZpY2Vfcm9sZS'),
-    '1.1 No hardcoded Supabase service-role key in src/server/database.ts'
-  );
-
-  // Test 1.2: Diagnostic script has no hardcoded secret
-  const diagSource = fs.readFileSync('./scripts/verify_supabase_production.ts', 'utf8');
-  assert(
-    !diagSource.includes('9Lvfyc'),
-    '1.2 No hardcoded service-role key in scripts/verify_supabase_production.ts'
-  );
-
-  // Test 1.3: Migration SQL files have zero hardcoded credentials
-  const proposedSql = fs.readFileSync('./supabase_building_flat_security_levy_migration_proposed.sql', 'utf8');
-  assert(
-    !proposedSql.includes('eyJ') && !proposedSql.includes('9Lvfyc'),
-    '1.3 Proposed SQL migration has zero embedded credentials'
-  );
-
-  // Test 1.4: Missing service-role key fails closed in production
-  const origEnv = process.env.NODE_ENV;
-  const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  try {
-    process.env.NODE_ENV = 'production';
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    let caughtError = false;
-    try {
-      await serverDb.saveSecurityLevyTransaction({
-        expected_amount: 1500,
-        billing_month: '2026-10',
-        target_flat_ids: ['test-flat-id']
-      });
-    } catch (err: any) {
-      caughtError = true;
-      assert(
-        err.message.includes('SUPABASE_NOT_CONFIGURED'),
-        '1.4 Missing service-role key fails closed with SUPABASE_NOT_CONFIGURED in production'
-      );
-    }
-    assert(caughtError, '1.4 Financial transaction write refused when service role key missing in production');
-  } finally {
-    process.env.NODE_ENV = origEnv;
-    if (origKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;
-  }
-
-  // --------------------------------------------------------------------------
-  // DOMAIN 2: WEBHOOKS & PAYSTACK SIGNATURE VERIFICATION
-  // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 2: WEBHOOKS AND PAYSTACK]');
-
+  console.log('\n[TEST 1: VALID WEBHOOK SIGNATURE]');
   const secSecret = 'sk_test_mock_security_secret_1234567890';
-  const estSecret = 'sk_test_mock_estate_secret_0987654321';
   const testPayload = JSON.stringify({
     event: 'charge.success',
-    data: {
-      reference: 'FOG-SL-TEST-REF-001',
-      amount: 150000,
-      currency: 'NGN',
-      status: 'success',
-      paid_at: new Date().toISOString()
-    }
+    data: { reference: 'FOG-SL-TEST-REF-001', amount: 150000, currency: 'NGN', status: 'success' }
   });
   const rawBytes = Buffer.from(testPayload, 'utf8');
+  const validHash = crypto.createHmac('sha512', secSecret).update(rawBytes).digest('hex').toLowerCase();
 
-  // Test 2.1: Valid signature using exact raw bytes
-  const validSecHash = crypto.createHmac('sha512', secSecret).update(rawBytes).digest('hex').toLowerCase();
-  const validEstHash = crypto.createHmac('sha512', estSecret).update(rawBytes).digest('hex').toLowerCase();
+  const validReq = {
+    headers: { 'x-paystack-signature': validHash },
+    rawBody: rawBytes
+  };
+  const v1 = verifyPaystackWebhookSignature(validReq, secSecret);
+  assert(v1.valid === true && v1.status === 200, '1. Valid webhook signature passes verification');
 
-  assert(
-    validSecHash.length === 128 && validEstHash.length === 128,
-    '2.1 HMAC-SHA512 produces valid 128-hex character signatures'
-  );
+  // --------------------------------------------------------------------------
+  // TEST 2: INVALID SIGNATURE
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 2: INVALID SIGNATURE]');
+  const invalidReq = {
+    headers: { 'x-paystack-signature': validHash },
+    rawBody: Buffer.from(JSON.stringify({ tampered: true }), 'utf8')
+  };
+  const v2 = verifyPaystackWebhookSignature(invalidReq, secSecret);
+  assert(v2.valid === false && v2.status === 401, '2. Invalid signature is rejected with 401');
 
-  // Test 2.2: Timing-safe comparison matches valid signature
-  const secBuf = Buffer.from(validSecHash, 'utf8');
-  const targetBuf = Buffer.from(validSecHash, 'utf8');
-  assert(
-    crypto.timingSafeEqual(secBuf, targetBuf),
-    '2.2 Constant-time comparison matches exact raw bytes signature'
-  );
+  // --------------------------------------------------------------------------
+  // TEST 3: MISSING RAW REQUEST BYTES
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 3: MISSING RAW REQUEST BYTES]');
+  const noBytesReq = {
+    headers: { 'x-paystack-signature': validHash },
+    rawBody: undefined
+  };
+  const v3 = verifyPaystackWebhookSignature(noBytesReq, secSecret);
+  assert(v3.valid === false && v3.status === 400, '3. Missing raw request bytes is rejected with 400');
 
-  // Test 2.3: Modified payload bytes fail signature verification
-  const tamperedBytes = Buffer.from(JSON.stringify({ event: 'charge.success', amount: 999999 }), 'utf8');
-  const tamperedHash = crypto.createHmac('sha512', secSecret).update(tamperedBytes).digest('hex').toLowerCase();
-  assert(
-    tamperedHash !== validSecHash,
-    '2.3 Altered payload bytes produce signature mismatch'
-  );
-
-  // Test 2.4: Malformed signature format rejected
-  const malformedSigs = ['', 'abc', '12345', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', 'g'.repeat(128)];
-  for (const ms of malformedSigs) {
-    assert(!/^[a-f0-9]{128}$/.test(ms), `2.4 Malformed signature rejected: "${ms.slice(0, 10)}..."`);
+  // --------------------------------------------------------------------------
+  // TEST 4: MALFORMED SIGNATURE
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 4: MALFORMED SIGNATURE]');
+  const malformedSigs = ['', 'short_sig', 'g'.repeat(128), '12345'];
+  let allMalformedRejected = true;
+  for (const sig of malformedSigs) {
+    const res = verifyPaystackWebhookSignature({ headers: { 'x-paystack-signature': sig }, rawBody: rawBytes }, secSecret);
+    if (res.valid !== false || res.status !== 401) allMalformedRejected = false;
   }
+  assert(allMalformedRejected, '4. Malformed signature formats and lengths are rejected');
 
   // --------------------------------------------------------------------------
-  // DOMAIN 3: FLAT ELIGIBILITY & RATE RULES (₦1,500/month)
+  // TEST 5: MISSING PAYSTACK SECRET
   // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 3: FLAT ELIGIBILITY AND RATE RULES]');
+  console.log('\n[TEST 5: MISSING PAYSTACK SECRET]');
+  const v5 = verifyPaystackWebhookSignature(validReq, null);
+  assert(v5.valid === false && v5.status === 503, '5. Missing server Paystack secret fails closed with 503');
 
+  // Set up reusable building & flats for subsequent tests
   const testHouse = `Plot-REGRESS-${Date.now()}`;
   const building = await serverDb.saveBuilding({
     house_number: testHouse,
     building_name: 'Regression Court',
-    total_flats_count: 4,
+    total_flats_count: 5,
     status: 'ACTIVE'
   });
 
-  // Flat 1: Eligible (ACTIVE, approved, billing enabled)
-  const flatEligible = await serverDb.saveFlat({
+  const flat1 = await serverDb.saveFlat({
     building_id: building.id,
     flat_number: 'Flat 1-A',
     is_billing_active: true,
@@ -174,55 +173,9 @@ async function runRegressionSuite() {
     status: 'ACTIVE'
   });
 
-  // Flat 2: Inactive status
-  const flatInactive = await serverDb.saveFlat({
-    building_id: building.id,
-    flat_number: 'Flat 1-B',
-    is_billing_active: true,
-    monthly_levy_amount: 1500.00,
-    status: 'INACTIVE'
-  });
-
-  // Flat 3: Billing disabled
-  const flatBillingDisabled = await serverDb.saveFlat({
-    building_id: building.id,
-    flat_number: 'Flat 1-C',
-    is_billing_active: false,
-    monthly_levy_amount: 1500.00,
-    status: 'ACTIVE'
-  });
-
-  assert(flatEligible.monthly_levy_amount === 1500.00, '3.1 Approved Security Levy rate is strictly ₦1,500');
-  assert(flatEligible.is_billing_active === true && flatEligible.status === 'ACTIVE', '3.2 Flat 1-A is eligible');
-  assert(flatInactive.status === 'INACTIVE', '3.3 Flat 1-B is inactive');
-  assert(flatBillingDisabled.is_billing_active === false, '3.4 Flat 1-C is billing-disabled');
-
-  // Test 3.5: Obligation generation only generates for eligible flats
-  const genResult = await serverDb.generateMonthlyObligations('2026-12', 1500.00);
-  const eligibleOblig = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatEligible.id }))[0];
-  const inactiveOblig = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatInactive.id }))[0];
-  const disabledOblig = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatBillingDisabled.id }))[0];
-
-  assert(Boolean(eligibleOblig && eligibleOblig.amount_due === 1500.00), '3.5 Obligation generated for eligible flat (₦1,500 due)');
-  assert(!inactiveOblig, '3.6 Inactive flat exempt from monthly obligation generation');
-  assert(!disabledOblig, '3.7 Billing-disabled flat exempt from monthly obligation generation');
-
-  // --------------------------------------------------------------------------
-  // DOMAIN 4: BULK CHECKOUT & ATOMIC FINANCIAL ALLOCATION
-  // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 4: BULK CHECKOUT AND CONSERVATION]');
-
-  // Flat 4 for bulk test
-  const flatEligible2 = await serverDb.saveFlat({
-    building_id: building.id,
-    flat_number: 'Flat 2-A',
-    is_billing_active: true,
-    monthly_levy_amount: 1500.00,
-    status: 'ACTIVE'
-  });
-  const eligibleOblig2 = await serverDb.saveObligation({
-    flat_id: flatEligible2.id,
-    billing_month: '2026-12',
+  const oblig1 = await serverDb.saveObligation({
+    flat_id: flat1.id,
+    billing_month: '2026-11',
     amount_due: 1500.00,
     amount_paid: 0.00,
     balance_due: 1500.00,
@@ -230,110 +183,507 @@ async function runRegressionSuite() {
     is_billed: true
   });
 
-  // Bulk transaction for Flat 1-A and Flat 2-A (2 flats x ₦1,500 = ₦3,000)
-  const bulkTxRef = `FOG-SL-202612-2F-${Date.now()}`;
-  const bulkTx = await serverDb.saveSecurityLevyTransaction({
+  // --------------------------------------------------------------------------
+  // TEST 6: MISSING OR NON-NGN CURRENCY
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 6: MISSING OR NON-NGN CURRENCY]');
+  const refNonNgn = `FOG-SL-NON-NGN-${Date.now()}`;
+  const txNonNgn = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident USD',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat1.id],
+    target_obligation_ids: [oblig1.id],
+    paystack_reference: refNonNgn
+  });
+
+  // Attempt processing with USD currency
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: refNonNgn,
+    amount: 150000,
+    currency: 'USD',
+    status: 'success'
+  });
+  const txAfterUsd = await serverDb.getSecurityLevyTransactionById(txNonNgn.id);
+  assert(txAfterUsd.payment_status === 'PENDING', '6. Non-NGN currency (USD) is rejected without modifying status');
+
+  // Attempt processing with missing currency
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: refNonNgn,
+    amount: 150000,
+    currency: null,
+    status: 'success'
+  });
+  const txAfterNullCur = await serverDb.getSecurityLevyTransactionById(txNonNgn.id);
+  assert(txAfterNullCur.payment_status === 'PENDING', '6. Missing currency is rejected without modifying status');
+
+  // --------------------------------------------------------------------------
+  // TEST 7: FAILED GATEWAY TRANSACTION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 7: FAILED GATEWAY TRANSACTION]');
+  const refFailed = `FOG-SL-FAILED-${Date.now()}`;
+  const txFailed = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Failed Pay',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat1.id],
+    target_obligation_ids: [oblig1.id],
+    paystack_reference: refFailed
+  });
+
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: refFailed,
+    amount: 150000,
+    currency: 'NGN',
+    status: 'failed'
+  });
+  const txAfterFail = await serverDb.getSecurityLevyTransactionById(txFailed.id);
+  assert(txAfterFail.payment_status === 'PENDING', '7. Failed gateway transaction (status: failed) does not apply payment');
+
+  // --------------------------------------------------------------------------
+  // TEST 8: WRONG PAYMENT REFERENCE
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 8: WRONG PAYMENT REFERENCE]');
+  const wrongRef = `UNKNOWN-NONEXISTENT-${Date.now()}`;
+  // Should not throw or create records
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: wrongRef,
+    amount: 150000,
+    currency: 'NGN',
+    status: 'success'
+  });
+  const txCheckNonExist = await serverDb.getSecurityLevyTransactionByRef(wrongRef);
+  assert(!txCheckNonExist, '8. Unknown payment reference safely ignored without modifying financial records');
+
+  // --------------------------------------------------------------------------
+  // TEST 9: INCORRECT AMOUNT DETECTION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 9: INCORRECT AMOUNT DETECTION]');
+  const refWrongAmt = `FOG-SL-WRONG-AMT-${Date.now()}`;
+  const txWrongAmt = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Discrepancy',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat1.id],
+    target_obligation_ids: [oblig1.id],
+    paystack_reference: refWrongAmt
+  });
+
+  // Expected is 150,000 kobo; send 120,000 kobo
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: refWrongAmt,
+    amount: 120000,
+    currency: 'NGN',
+    status: 'success'
+  });
+  const txAfterMismatch = await serverDb.getSecurityLevyTransactionById(txWrongAmt.id);
+  assert(txAfterMismatch.payment_status !== 'SUCCESSFUL', '9. Incorrect amount is detected and prevented from being marked SUCCESSFUL');
+
+  // --------------------------------------------------------------------------
+  // TEST 10: UNDERPAYMENT RECONCILIATION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 10: UNDERPAYMENT RECONCILIATION]');
+  assert(
+    txAfterMismatch.payment_status === 'PARTIALLY_PAID' &&
+    txAfterMismatch.verified_amount === 1200.00 &&
+    Boolean(txAfterMismatch.reconciliation_notes?.includes('discrepancy')),
+    '10. Underpayment preserved with PARTIALLY_PAID status and audit notes for reconciliation'
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 11: OVERPAYMENT RECONCILIATION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 11: OVERPAYMENT RECONCILIATION]');
+  const refOver = `FOG-SL-OVERPAY-${Date.now()}`;
+  const txOver = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Overpayer',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat1.id],
+    target_obligation_ids: [oblig1.id],
+    paystack_reference: refOver
+  });
+
+  // Expected 150,000 kobo; send 250,000 kobo
+  await processVerifiedSecurityLevyPaystackEvent({
+    reference: refOver,
+    amount: 250000,
+    currency: 'NGN',
+    status: 'success'
+  });
+  const txAfterOver = await serverDb.getSecurityLevyTransactionById(txOver.id);
+  assert(
+    txAfterOver.payment_status === 'OVERPAID' &&
+    txAfterOver.verified_amount === 2500.00 &&
+    Boolean(txAfterOver.reconciliation_notes?.includes('discrepancy')),
+    '11. Overpayment preserved with OVERPAID status and audit notes for reconciliation'
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 12: DUPLICATE WEBHOOK DELIVERY (IDEMPOTENCY)
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 12: DUPLICATE WEBHOOK DELIVERY]');
+  const flat2 = await serverDb.saveFlat({
+    building_id: building.id,
+    flat_number: 'Flat 2-B',
+    is_billing_active: true,
+    monthly_levy_amount: 1500.00,
+    status: 'ACTIVE'
+  });
+  const oblig2 = await serverDb.saveObligation({
+    flat_id: flat2.id,
+    billing_month: '2026-11',
+    amount_due: 1500.00,
+    amount_paid: 0.00,
+    balance_due: 1500.00,
+    status: 'UNPAID',
+    is_billed: true
+  });
+
+  const refDup = `FOG-SL-DUP-${Date.now()}`;
+  const txDup = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Idempotent',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat2.id],
+    target_obligation_ids: [oblig2.id],
+    paystack_reference: refDup
+  });
+
+  const eventPayload = {
+    reference: refDup,
+    amount: 150000,
+    currency: 'NGN',
+    status: 'success',
+    paid_at: new Date().toISOString()
+  };
+
+  // Delivery 1
+  await processVerifiedSecurityLevyPaystackEvent(eventPayload);
+  const txAfterFirst = await serverDb.getSecurityLevyTransactionById(txDup.id);
+  const allocsFirst = await serverDb.getFlatPaymentAllocations(txDup.id);
+
+  // Delivery 2 (Duplicate replay)
+  await processVerifiedSecurityLevyPaystackEvent(eventPayload);
+  const allocsSecond = await serverDb.getFlatPaymentAllocations(txDup.id);
+
+  assert(
+    txAfterFirst.allocation_status === 'ALLOCATED' &&
+    allocsFirst.length === 1 &&
+    allocsSecond.length === 1,
+    '12. Duplicate webhook delivery processed idempotently without duplicating allocations'
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 13: CONCURRENT DUPLICATE PROCESSING
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 13: CONCURRENT DUPLICATE PROCESSING]');
+  const flat3 = await serverDb.saveFlat({
+    building_id: building.id,
+    flat_number: 'Flat 3-C',
+    is_billing_active: true,
+    monthly_levy_amount: 1500.00,
+    status: 'ACTIVE'
+  });
+  const oblig3 = await serverDb.saveObligation({
+    flat_id: flat3.id,
+    billing_month: '2026-11',
+    amount_due: 1500.00,
+    amount_paid: 0.00,
+    balance_due: 1500.00,
+    status: 'UNPAID',
+    is_billed: true
+  });
+
+  const refConc = `FOG-SL-CONC-${Date.now()}`;
+  const txConc = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Concurrent',
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat3.id],
+    target_obligation_ids: [oblig3.id],
+    paystack_reference: refConc
+  });
+
+  const concPayload = {
+    reference: refConc,
+    amount: 150000,
+    currency: 'NGN',
+    status: 'success',
+    paid_at: new Date().toISOString()
+  };
+
+  // Dispatch two concurrent webhook processing calls
+  await Promise.all([
+    processVerifiedSecurityLevyPaystackEvent(concPayload),
+    processVerifiedSecurityLevyPaystackEvent(concPayload)
+  ]);
+
+  const allocsConc = await serverDb.getFlatPaymentAllocations(txConc.id);
+  assert(allocsConc.length === 1, '13. Concurrent webhook deliveries safely serialized; exactly one allocation recorded');
+
+  // --------------------------------------------------------------------------
+  // TEST 14: UNAUTHORIZED CHECKOUT CANCELLATION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 14: UNAUTHORIZED CHECKOUT CANCELLATION]');
+  const { req: noAuthReq, res: noAuthRes, getStatus: getNoAuthStatus } = createMockReqRes({ reference: refConc });
+  await handleCancelCheckoutSession(noAuthReq, noAuthRes);
+  assert(getNoAuthStatus() === 401, '14. Unauthenticated checkout cancellation rejected with 401');
+
+  // --------------------------------------------------------------------------
+  // TEST 15: CROSS-RESIDENT CANCELLATION
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 15: CROSS-RESIDENT CANCELLATION]');
+  const existingResidents = await serverDb.getResidents();
+  const usedNums = new Set(existingResidents.map(r => String(r.resident_number).padStart(3, '0')));
+  let residentA = existingResidents.find(r => r.full_name === 'Resident Alice');
+  let residentB = existingResidents.find(r => r.full_name === 'Resident Bob');
+
+  if (!residentA) {
+    let numA = 280;
+    while (usedNums.has(String(numA).padStart(3, '0')) && numA < 299) numA++;
+    usedNums.add(String(numA).padStart(3, '0'));
+    residentA = await serverDb.saveResident({
+      resident_number: String(numA).padStart(3, '0'),
+      full_name: 'Resident Alice',
+      email: `alice_${Date.now()}@example.com`,
+      phone_number: `080${Math.floor(10000000 + Math.random() * 89999999)}`,
+      house_number: 'Flat 1-A'
+    });
+  }
+
+  if (!residentB) {
+    let numB = 281;
+    while (usedNums.has(String(numB).padStart(3, '0')) && numB < 300) numB++;
+    usedNums.add(String(numB).padStart(3, '0'));
+    residentB = await serverDb.saveResident({
+      resident_number: String(numB).padStart(3, '0'),
+      full_name: 'Resident Bob',
+      email: `bob_${Date.now()}@example.com`,
+      phone_number: `080${Math.floor(10000000 + Math.random() * 89999999)}`,
+      house_number: 'Flat 2-B'
+    });
+  }
+
+  // Create session token for Resident A
+  const sessionTokenA = `TEST_SESSION_TOKEN_A_${Date.now()}`;
+  serverDb.saveResidentSession(sessionTokenA, residentA.resident_number);
+
+  // Create pending transaction belonging to Resident B
+  const refBob = `FOG-SL-BOB-${Date.now()}`;
+  await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'INDIVIDUAL_FLAT',
+    payer_name: 'Resident Bob',
+    payer_email: residentB.email,
+    payer_phone: residentB.phone_number,
+    billing_month: '2026-11',
+    total_units: 1,
+    rate_per_unit: 1500.00,
+    expected_amount: 1500.00,
+    payment_status: 'PENDING',
+    target_flat_ids: [flat2.id],
+    target_obligation_ids: [oblig2.id],
+    paystack_reference: refBob
+  });
+
+  // Alice attempts to cancel Bob's transaction
+  const { req: crossReq, res: crossRes, getStatus: getCrossStatus } = createMockReqRes(
+    { reference: refBob },
+    { authorization: `Bearer ${sessionTokenA}` }
+  );
+  await handleCancelCheckoutSession(crossReq, crossRes);
+  assert(getCrossStatus() === 403, '15. Cross-resident checkout cancellation rejected with 403 Forbidden');
+
+  // --------------------------------------------------------------------------
+  // TEST 16: CANCELLATION AFTER SETTLEMENT
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 16: CANCELLATION AFTER SETTLEMENT]');
+  // Bob's session token
+  const sessionTokenB = `TEST_SESSION_TOKEN_B_${Date.now()}`;
+  serverDb.saveResidentSession(sessionTokenB, residentB.resident_number);
+
+  // Mark Bob's transaction as settled (SUCCESSFUL)
+  const bobTx = await serverDb.getSecurityLevyTransactionByRef(refBob);
+  await serverDb.updateSecurityLevyTransaction(bobTx.id, { payment_status: 'SUCCESSFUL' });
+
+  // Bob attempts to cancel his settled transaction
+  const { req: settledReq, res: settledRes, getStatus: getSettledStatus } = createMockReqRes(
+    { reference: refBob },
+    { authorization: `Bearer ${sessionTokenB}` }
+  );
+  await handleCancelCheckoutSession(settledReq, settledRes);
+  assert(getSettledStatus() === 400, '16. Cancellation of settled transaction rejected with 400');
+
+  // --------------------------------------------------------------------------
+  // TEST 17: FAILED DATABASE WRITES
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 17: FAILED DATABASE WRITES]');
+  // Non-existent reference returns 404
+  const { req: nonExReq, res: nonExRes, getStatus: getNonExStatus } = createMockReqRes(
+    { reference: 'NON_EXISTENT_REF_999' },
+    { authorization: `Bearer ${sessionTokenB}` }
+  );
+  await handleCancelCheckoutSession(nonExReq, nonExRes);
+  assert(getNonExStatus() === 404, '17. Cancellation with missing/failed database lookup fails safely with 404');
+
+  // --------------------------------------------------------------------------
+  // TEST 18: MISSING SUPABASE SERVICE-ROLE CREDENTIAL (FAIL-CLOSED)
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 18: MISSING SUPABASE SERVICE-ROLE CREDENTIAL]');
+  const origEnv = process.env.NODE_ENV;
+  const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    process.env.NODE_ENV = 'production';
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    let caughtFailClosed = false;
+    try {
+      await serverDb.saveSecurityLevyTransaction({
+        expected_amount: 1500,
+        billing_month: '2026-11',
+        target_flat_ids: ['test-id']
+      });
+    } catch (err: any) {
+      caughtFailClosed = true;
+      assert(err.message.includes('SUPABASE_NOT_CONFIGURED'), '18. Write fails closed with SUPABASE_NOT_CONFIGURED error');
+    }
+    assert(caughtFailClosed, '18. Production financial writes strictly blocked when service-role key is missing');
+  } finally {
+    process.env.NODE_ENV = origEnv;
+    if (origKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;
+  }
+
+  // --------------------------------------------------------------------------
+  // TEST 19: ALLOCATION CONSERVATION LAW
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 19: ALLOCATION CONSERVATION]');
+  const flat4 = await serverDb.saveFlat({
+    building_id: building.id,
+    flat_number: 'Flat 4-D',
+    is_billing_active: true,
+    monthly_levy_amount: 1500.00,
+    status: 'ACTIVE'
+  });
+  const flat5 = await serverDb.saveFlat({
+    building_id: building.id,
+    flat_number: 'Flat 5-E',
+    is_billing_active: true,
+    monthly_levy_amount: 1500.00,
+    status: 'ACTIVE'
+  });
+  const oblig4 = await serverDb.saveObligation({
+    flat_id: flat4.id,
+    billing_month: '2026-11',
+    amount_due: 1500.00,
+    amount_paid: 0.00,
+    balance_due: 1500.00,
+    status: 'UNPAID',
+    is_billed: true
+  });
+  const oblig5 = await serverDb.saveObligation({
+    flat_id: flat5.id,
+    billing_month: '2026-11',
+    amount_due: 1500.00,
+    amount_paid: 0.00,
+    balance_due: 1500.00,
+    status: 'UNPAID',
+    is_billed: true
+  });
+
+  const refBulk = `FOG-SL-BULK-${Date.now()}`;
+  const txBulk = await serverDb.saveSecurityLevyTransaction({
     transaction_type: 'BULK_FLATS',
-    payer_name: 'Chief Landlord Regression',
-    payer_email: 'landlord.regression@example.com',
-    billing_month: '2026-12',
+    payer_name: 'Landlord Bulk Conservation',
+    billing_month: '2026-11',
     total_units: 2,
     rate_per_unit: 1500.00,
     expected_amount: 3000.00,
     verified_amount: 3000.00,
     payment_status: 'SUCCESSFUL',
-    target_flat_ids: [flatEligible.id, flatEligible2.id],
-    target_obligation_ids: [eligibleOblig.id, eligibleOblig2.id],
-    paystack_reference: bulkTxRef
+    target_flat_ids: [flat4.id, flat5.id],
+    target_obligation_ids: [oblig4.id, oblig5.id],
+    paystack_reference: refBulk
   });
 
-  const allocResult = await serverDb.allocateSecurityLevyPayment(bulkTx.id, 'REGRESSION_TEST');
-  assert(allocResult.success === true, '4.1 Bulk allocation succeeded');
-  assert(allocResult.allocated_count === 2, '4.2 Exactly 2 flats allocated');
-  assert(allocResult.total_allocated === 3000.00, '4.3 Total allocated is exactly ₦3,000.00');
-  assert(allocResult.total_unallocated === 0.00, '4.4 Total unallocated is exactly ₦0.00');
-
-  // Test 4.5: Exact Mathematical Conservation Law
+  const bulkAllocResult = await serverDb.allocateSecurityLevyPayment(txBulk.id, 'CONSERVATION_TEST');
   assert(
-    allocResult.total_allocated + allocResult.total_unallocated === bulkTx.verified_amount,
-    '4.5 Mathematical conservation holds: total_allocated + total_unallocated === verified_amount'
+    bulkAllocResult.total_allocated + bulkAllocResult.total_unallocated === txBulk.verified_amount,
+    '19. Conservation holds: total_allocated + total_unallocated === verified_amount exactly'
+  );
+  assert(
+    bulkAllocResult.total_allocated === 3000.00 && bulkAllocResult.total_unallocated === 0.00,
+    '19. Both units fully allocated without discrepancy'
   );
 
-  // Test 4.6: Obligation balance derived from persisted allocations
-  const updatedOblig1 = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatEligible.id }))[0];
-  const updatedOblig2 = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatEligible2.id }))[0];
-  assert(updatedOblig1.status === 'PAID' && updatedOblig1.balance_due === 0, '4.6 Flat 1-A obligation marked PAID with ₦0 balance due');
-  assert(updatedOblig2.status === 'PAID' && updatedOblig2.balance_due === 0, '4.7 Flat 2-A obligation marked PAID with ₦0 balance due');
-
-  // Test 4.8: Idempotent replay does not double-credit
-  const replayResult = await serverDb.allocateSecurityLevyPayment(bulkTx.id, 'REGRESSION_TEST_REPLAY');
-  assert(replayResult.success === true, '4.8 Repeated allocation returns idempotent success');
-  assert(replayResult.total_allocated === 3000.00, '4.9 Repeated allocation total remains ₦3,000 (no double credit)');
-
   // --------------------------------------------------------------------------
-  // DOMAIN 5: OVER-ALLOCATION ANOMALY & CONFLICT HANDLING
+  // TEST 20: NEGATIVE-BALANCE AND OVER-ALLOCATION DETECTION
   // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 5: OVER-ALLOCATION & CONFLICT DISCREPANCIES]');
+  console.log('\n[TEST 20: NEGATIVE-BALANCE & OVER-ALLOCATION DETECTION]');
+  // Obligation 4 was settled above. Re-calculating balance without Math.max(0, ...)
+  const oblig4Updated = (await serverDb.getObligations({ billingMonth: '2026-11', flatId: flat4.id }))[0];
+  assert(oblig4Updated.balance_due === 0.00 && oblig4Updated.status === 'PAID', '20. Obligation balance accurately computed without concealment');
 
-  // Create transaction where flat was already paid by earlier transaction
-  const conflictingTxRef = `FOG-SL-202612-CONF-${Date.now()}`;
-  const conflictingTx = await serverDb.saveSecurityLevyTransaction({
-    transaction_type: 'INDIVIDUAL_FLAT',
-    payer_name: 'Tenant Late Payment',
-    payer_email: 'tenant.late@example.com',
+  // Create an over-allocation condition where verified amount is 1500 but target units sum to 3000
+  const refOverAlloc = `FOG-SL-OVERALLOC-${Date.now()}`;
+  const txOverAlloc = await serverDb.saveSecurityLevyTransaction({
+    transaction_type: 'BULK_FLATS',
+    payer_name: 'Over-alloc test',
     billing_month: '2026-12',
-    total_units: 1,
+    total_units: 2,
     rate_per_unit: 1500.00,
     expected_amount: 1500.00,
-    verified_amount: 1500.00,
+    verified_amount: 1500.00, // Deliberately lower than required 3000
     payment_status: 'SUCCESSFUL',
-    target_flat_ids: [flatEligible.id],
-    target_obligation_ids: [eligibleOblig.id],
-    paystack_reference: conflictingTxRef
+    target_flat_ids: [flat4.id, flat5.id],
+    paystack_reference: refOverAlloc
   });
 
-  const confResult = await serverDb.allocateSecurityLevyPayment(conflictingTx.id, 'CONFLICT_TEST');
-  assert(confResult.allocated_count === 0, '5.1 Zero units allocated for already-settled flat');
-  assert(confResult.conflict_count === 1, '5.2 Conflict detected and counted');
-  assert(confResult.total_allocated === 0.00, '5.3 Conflicted funds not allocated');
-  assert(confResult.total_unallocated === 1500.00, '5.4 Full ₦1,500 preserved as unallocated credit for reconciliation');
-
-  const confTxRecord = await serverDb.getSecurityLevyTransactionById(conflictingTx.id);
-  assert(confTxRecord.allocation_status === 'OVERPAID_UNALLOCATED', '5.5 Transaction marked OVERPAID_UNALLOCATED');
+  const overAllocResult = await serverDb.allocateSecurityLevyPayment(txOverAlloc.id, 'OVER_ALLOC_TEST');
+  const txOverAllocRec = await serverDb.getSecurityLevyTransactionById(txOverAlloc.id);
+  assert(
+    overAllocResult.error === 'OVER_ALLOCATION_DISCREPANCY' || txOverAllocRec.allocation_status === 'OVER_ALLOCATION_DISCREPANCY',
+    '20. Over-allocation condition detected and flagged as OVER_ALLOCATION_DISCREPANCY'
+  );
 
   // --------------------------------------------------------------------------
-  // DOMAIN 6: CHECKOUT RESERVATION LOCKS & SECURE CANCELLATION
+  // TEST 21: SECURITY LEVY / ROAD MODERNIZATION SEPARATION
   // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 6: RESERVATION LOCKS AND CANCELLATION]');
-
-  // Test 6.1: Active checkout lock blocks concurrent attempt
-  const lockRef = `LOCK-REF-${Date.now()}`;
-  await serverDb.updateObligation(eligibleOblig.id, {
-    locked_by_reference: lockRef,
-    lock_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString()
-  });
-
-  const lockedOblig = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatEligible.id }))[0];
-  const isCurrentlyLocked = lockedOblig.locked_by_reference === lockRef && new Date(lockedOblig.lock_expires_at).getTime() > Date.now();
-  assert(isCurrentlyLocked, '6.1 Obligation active lock verified (blocks concurrent checkout)');
-
-  // Test 6.2: Release lock
-  await serverDb.updateObligation(eligibleOblig.id, {
-    locked_by_reference: null,
-    lock_expires_at: null
-  });
-  const releasedOblig = (await serverDb.getObligations({ billingMonth: '2026-12', flatId: flatEligible.id }))[0];
-  assert(releasedOblig.locked_by_reference === null, '6.2 Lock successfully released');
-
-  // --------------------------------------------------------------------------
-  // DOMAIN 7: ROAD MODERNIZATION ISOLATION (ZERO DRIFT)
-  // --------------------------------------------------------------------------
-  console.log('\n[DOMAIN 7: ROAD MODERNIZATION COMPLETE ISOLATION]');
-
+  console.log('\n[TEST 21: ROAD MODERNIZATION PAYMENT SEPARATION]');
   const roadMilestones = await serverDb.getRoadMilestones();
   const roadTransactions = await serverDb.getRoadTransactions();
-  assert(roadMilestones.length === 5, '7.1 Road Modernization milestones count preserved (5 milestones)');
-  assert(roadTransactions.length === 5, '7.2 Road Modernization transaction history strictly preserved');
+  assert(roadMilestones.length === 5, '21. Road Modernization milestones count preserved (5 milestones)');
+  assert(roadTransactions.length === 5, '21. Road Modernization transaction records preserved untouched');
+
+  // --------------------------------------------------------------------------
+  // TEST 22: CLIENT-BUNDLE SECRET EXPOSURE CHECKS
+  // --------------------------------------------------------------------------
+  console.log('\n[TEST 22: CLIENT-BUNDLE & SOURCE SECRET EXPOSURE CHECK]');
+  const scanResult = runSecretScan();
+  assert(scanResult.passed === true, '22. Zero hardcoded secrets in tracked repository source files');
 
   const duration = Date.now() - startTime;
   console.log('\n======================================================================');

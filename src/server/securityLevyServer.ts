@@ -670,153 +670,155 @@ securityLevyRouter.post('/verify-payment', async (req: Request, res: Response) =
     }
 
     const cleanRef = reference.trim();
-    const transaction = await serverDb.getSecurityLevyTransactionByRef(cleanRef);
-    if (!transaction) {
-      return res.status(404).json({ success: false, verified: false, message: 'Payment attempt record not found.' });
-    }
+    return await withReferenceLock(cleanRef, async () => {
+      const transaction = await serverDb.getSecurityLevyTransactionByRef(cleanRef);
+      if (!transaction) {
+        return res.status(404).json({ success: false, verified: false, message: 'Payment attempt record not found.' });
+      }
 
-    // If already verified and processed, return existing status immediately (idempotent)
-    if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
-      const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
-      const isFullyAllocated = transaction.allocation_status === 'ALLOCATED';
-      return res.json({
-        success: isFullyAllocated,
-        verified: true,
-        allocation_status: transaction.allocation_status,
-        message: isFullyAllocated
-          ? 'Payment verified and allocated successfully.'
-          : (transaction.allocation_status === 'PARTIALLY_ALLOCATED'
-              ? 'Payment verified with partial allocation. Some flats had conflicts.'
-              : 'Payment verified but unallocated due to conflicts. Funds held as credit.'),
-        transaction,
-        allocations
-      });
-    }
+      // If already verified and processed, return existing status immediately (idempotent)
+      if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
+        const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
+        const isFullyAllocated = transaction.allocation_status === 'ALLOCATED';
+        return res.json({
+          success: isFullyAllocated,
+          verified: true,
+          allocation_status: transaction.allocation_status,
+          message: isFullyAllocated
+            ? 'Payment verified and allocated successfully.'
+            : (transaction.allocation_status === 'PARTIALLY_ALLOCATED'
+                ? 'Payment verified with partial allocation. Some flats had conflicts.'
+                : 'Payment verified but unallocated due to conflicts. Funds held as credit.'),
+          transaction,
+          allocations
+        });
+      }
 
-    const secretKey = getSecurityPaystackSecret();
-    let verified = false;
-    let paystackChannel = 'card';
-    let paidAmountKobo = transaction.expected_amount * 100;
+      const secretKey = getSecurityPaystackSecret();
+      let verified = false;
+      let paystackChannel = 'card';
+      let paidAmountKobo = transaction.expected_amount * 100;
 
-    if (secretKey) {
-      const pRes = await fetch(`https://api.paystack.co/transaction/verify/${cleanRef}`, {
-        headers: {
-          'Authorization': `Bearer ${secretKey}`,
-          'Content-Type': 'application/json'
+      if (secretKey) {
+        const pRes = await fetch(`https://api.paystack.co/transaction/verify/${cleanRef}`, {
+          headers: {
+            'Authorization': `Bearer ${secretKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const pData = await pRes.json();
+
+        if (!pRes.ok || !pData.status) {
+          return res.status(400).json({
+            success: false,
+            verified: false,
+            message: 'Unable to confirm payment status with Paystack yet.'
+          });
         }
-      });
-      const pData = await pRes.json();
 
-      if (!pRes.ok || !pData.status) {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          message: 'Unable to confirm payment status with Paystack yet.'
-        });
+        const txData = pData.data;
+        if (txData.status !== 'success') {
+          return res.status(400).json({
+            success: false,
+            verified: false,
+            message: `Payment status is ${txData.status}. Transaction not completed.`
+          });
+        }
+
+        if (txData.currency !== 'NGN') {
+          return res.status(400).json({
+            success: false,
+            verified: false,
+            message: `Unexpected currency: ${txData.currency}. Expected NGN.`
+          });
+        }
+
+        const expectedKobo = transaction.expected_amount * 100;
+        if (Number(txData.amount) !== expectedKobo) {
+          console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${txData.amount}`);
+          const receivedNaira = Number(txData.amount) / 100;
+          
+          // Underpayment or Overpayment must not be marked fully settled
+          // Preserve mismatched genuine payments for reconciliation
+          await serverDb.updateSecurityLevyTransaction(transaction.id, {
+            payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
+            verified_amount: receivedNaira,
+            verified_at: new Date().toISOString(),
+            channel_payload: {
+              channel: txData.channel || 'card',
+              paystack_data: txData,
+              mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
+            },
+            reconciliation_notes: `Amount discrepancy detected: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+          });
+
+          return res.status(400).json({
+            success: false,
+            verified: false,
+            mismatch: true,
+            message: `Amount paid (₦${receivedNaira.toLocaleString()}) does not match expected amount (₦${transaction.expected_amount.toLocaleString()}). Payment recorded and preserved for administrative reconciliation.`
+          });
+        }
+
+        verified = true;
+        paystackChannel = txData.channel || 'card';
+        paidAmountKobo = txData.amount;
+      } else {
+        // In production, sandbox fallback is strictly disabled
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(503).json({
+            success: false,
+            verified: false,
+            message: 'Paystack secret key is not configured on the production server. Sandbox fallback disabled.'
+          });
+        }
+        // Sandbox fallback mode (development / test only)
+        verified = true;
       }
 
-      const txData = pData.data;
-      if (txData.status !== 'success') {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          message: `Payment status is ${txData.status}. Transaction not completed.`
-        });
-      }
+      if (verified) {
+        const now = new Date().toISOString();
+        const verifiedAmount = paidAmountKobo / 100;
 
-      if (txData.currency !== 'NGN') {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          message: `Unexpected currency: ${txData.currency}. Expected NGN.`
-        });
-      }
-
-      const expectedKobo = transaction.expected_amount * 100;
-      if (Number(txData.amount) !== expectedKobo) {
-        console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${txData.amount}`);
-        const receivedNaira = Number(txData.amount) / 100;
-        
-        // Underpayment or Overpayment must not be marked fully settled
-        // Preserve mismatched genuine payments for reconciliation
+        // Update Transaction to SUCCESSFUL
         await serverDb.updateSecurityLevyTransaction(transaction.id, {
-          payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
-          verified_amount: receivedNaira,
-          verified_at: new Date().toISOString(),
-          channel_payload: {
-            channel: txData.channel || 'card',
-            paystack_data: txData,
-            mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
-          },
-          reconciliation_notes: `Amount discrepancy detected: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+          payment_status: 'SUCCESSFUL',
+          verified_amount: verifiedAmount,
+          verified_at: now,
+          channel_payload: { channel: paystackChannel, verified_at: now }
         });
 
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          mismatch: true,
-          message: `Amount paid (₦${receivedNaira.toLocaleString()}) does not match expected amount (₦${transaction.expected_amount.toLocaleString()}). Payment recorded and preserved for administrative reconciliation.`
+        // Execute Atomic Allocation
+        const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_VERIFY');
+        const updatedTx = await serverDb.getSecurityLevyTransactionById(transaction.id);
+        const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
+
+        // CRITICAL: Payment success requires complete, conflict-free allocation
+        const isFullyAllocated = 
+          updatedTx.allocation_status === 'ALLOCATED' &&
+          allocResult.success &&
+          allocResult.conflict_count === 0 &&
+          Number(updatedTx.unallocated_amount || 0) === 0;
+
+        const message = isFullyAllocated
+          ? 'Payment verified and allocated to flat ledger successfully.'
+          : (updatedTx.allocation_status === 'PARTIALLY_ALLOCATED'
+              ? 'Payment verified with partial allocation. Some flats were already paid.'
+              : 'Payment verified but could not be allocated due to conflicts. Funds held as unallocated credit.');
+
+        return res.json({
+          success: isFullyAllocated,
+          verified: true,
+          allocation_status: updatedTx.allocation_status,
+          message,
+          transaction: updatedTx,
+          allocation_result: allocResult,
+          allocations
         });
       }
 
-      verified = true;
-      paystackChannel = txData.channel || 'card';
-      paidAmountKobo = txData.amount;
-    } else {
-      // In production, sandbox fallback is strictly disabled
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(503).json({
-          success: false,
-          verified: false,
-          message: 'Paystack secret key is not configured on the production server. Sandbox fallback disabled.'
-        });
-      }
-      // Sandbox fallback mode (development / test only)
-      verified = true;
-    }
-
-    if (verified) {
-      const now = new Date().toISOString();
-      const verifiedAmount = paidAmountKobo / 100;
-
-      // Update Transaction to SUCCESSFUL
-      await serverDb.updateSecurityLevyTransaction(transaction.id, {
-        payment_status: 'SUCCESSFUL',
-        verified_amount: verifiedAmount,
-        verified_at: now,
-        channel_payload: { channel: paystackChannel, verified_at: now }
-      });
-
-      // Execute Atomic Allocation
-      const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_VERIFY');
-      const updatedTx = await serverDb.getSecurityLevyTransactionById(transaction.id);
-      const allocations = await serverDb.getFlatPaymentAllocations(transaction.id);
-
-      // CRITICAL: Payment success requires complete, conflict-free allocation
-      const isFullyAllocated = 
-        updatedTx.allocation_status === 'ALLOCATED' &&
-        allocResult.success &&
-        allocResult.conflict_count === 0 &&
-        Number(updatedTx.unallocated_amount || 0) === 0;
-
-      const message = isFullyAllocated
-        ? 'Payment verified and allocated to flat ledger successfully.'
-        : (updatedTx.allocation_status === 'PARTIALLY_ALLOCATED'
-            ? 'Payment verified with partial allocation. Some flats were already paid.'
-            : 'Payment verified but could not be allocated due to conflicts. Funds held as unallocated credit.');
-
-      return res.json({
-        success: isFullyAllocated,
-        verified: true,
-        allocation_status: updatedTx.allocation_status,
-        message,
-        transaction: updatedTx,
-        allocation_result: allocResult,
-        allocations
-      });
-    }
-
-    return res.status(400).json({ success: false, verified: false, message: 'Verification could not be confirmed.' });
+      return res.status(400).json({ success: false, verified: false, message: 'Verification could not be confirmed.' });
+    });
   } catch (error: any) {
     console.error('Error verifying security levy payment:', error);
     return res.status(500).json({ success: false, verified: false, message: 'Server verification error.' });
@@ -1073,8 +1075,26 @@ securityLevyRouter.get('/audit-logs', requireSecurityAdmin, async (req: Request,
   }
 });
 
-// POST /api/security-levy/cancel-checkout
-securityLevyRouter.post('/cancel-checkout', async (req: Request, res: Response) => {
+// In-memory reference mutex to prevent concurrent processing/allocation of the same transaction reference
+const activeProcessingReferences = new Set<string>();
+
+export async function withReferenceLock<T>(reference: string, fn: () => Promise<T>): Promise<T> {
+  const cleanRef = reference.trim();
+  let waitCount = 0;
+  while (activeProcessingReferences.has(cleanRef) && waitCount < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    waitCount++;
+  }
+  activeProcessingReferences.add(cleanRef);
+  try {
+    return await fn();
+  } finally {
+    activeProcessingReferences.delete(cleanRef);
+  }
+}
+
+// POST /api/security-levy/cancel-checkout handler
+export async function handleCancelCheckoutSession(req: Request, res: Response) {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
@@ -1159,117 +1179,191 @@ securityLevyRouter.post('/cancel-checkout', async (req: Request, res: Response) 
       return res.status(403).json({ success: false, message: 'Forbidden: Unauthorized access.' });
     }
 
-    // 3. Status checks: never cancel settled payments
-    if (tx.payment_status === 'CANCELLED') {
-      return res.json({ success: true, message: 'Checkout session is already cancelled.' });
-    }
+    // 3. Atomically re-check transaction state within reference lock to prevent race conditions
+    return await withReferenceLock(cleanRef, async () => {
+      const latestTx = await serverDb.getSecurityLevyTransactionById(tx.id);
+      if (!latestTx) {
+        return res.status(404).json({ success: false, message: 'Transaction not found.' });
+      }
 
-    if (tx.payment_status !== 'PENDING') {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot cancel transaction with status ${tx.payment_status}. Only pending checkout sessions can be cancelled.`
-      });
-    }
+      // If already cancelled, return idempotent success
+      if (latestTx.payment_status === 'CANCELLED') {
+        return res.json({ success: true, message: 'Checkout session is already cancelled.' });
+      }
 
-    // 4. Concurrency & atomic lock release: release ONLY locks for this reference and target obligations
-    const targetObligations = Array.isArray(tx.target_obligation_ids) && tx.target_obligation_ids.length > 0
-      ? tx.target_obligation_ids
-      : (await serverDb.getObligations({ billingMonth: tx.billing_month })).filter((o: any) => tx.target_flat_ids?.includes(o.flat_id)).map((o: any) => o.id);
-
-    for (const obId of targetObligations) {
-      const ob = (await serverDb.getObligations()).find((o: any) => o.id === obId);
-      if (ob && ob.locked_by_reference === tx.paystack_reference) {
-        await serverDb.updateObligation(ob.id, {
-          locked_by_reference: null,
-          lock_expires_at: null
+      // Refuse cancellation if already settled or not in PENDING status
+      if (latestTx.payment_status !== 'PENDING') {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot cancel transaction with status ${latestTx.payment_status}. Only pending checkout sessions can be cancelled.`
         });
       }
-    }
 
-    const updated = await serverDb.updateSecurityLevyTransaction(tx.id, {
-      payment_status: 'CANCELLED',
-      reconciliation_notes: `Checkout cancelled by ${actorDescription} at ${new Date().toISOString()}.`
-    });
+      // 4. Concurrency & atomic lock release: release ONLY locks for this reference and target obligations
+      const targetObligations = Array.isArray(latestTx.target_obligation_ids) && latestTx.target_obligation_ids.length > 0
+        ? latestTx.target_obligation_ids
+        : (await serverDb.getObligations({ billingMonth: latestTx.billing_month })).filter((o: any) => latestTx.target_flat_ids?.includes(o.flat_id)).map((o: any) => o.id);
 
-    if (!updated) {
-      return res.status(500).json({ success: false, message: 'Failed to update transaction status in database.' });
-    }
+      for (const obId of targetObligations) {
+        const ob = (await serverDb.getObligations()).find((o: any) => o.id === obId);
+        // Only release locks on non-paid obligations locked by this exact reference
+        if (ob && ob.status !== 'PAID' && ob.locked_by_reference === latestTx.paystack_reference) {
+          await serverDb.updateObligation(ob.id, {
+            locked_by_reference: null,
+            lock_expires_at: null
+          });
+        }
+      }
 
-    return res.json({
-      success: true,
-      message: 'Checkout session cancelled and flat reservations released successfully.',
-      transaction_id: tx.id
+      const updated = await serverDb.updateSecurityLevyTransaction(latestTx.id, {
+        payment_status: 'CANCELLED',
+        reconciliation_notes: `Checkout cancelled by ${actorDescription} at ${new Date().toISOString()}.`
+      });
+
+      if (!updated) {
+        return res.status(500).json({ success: false, message: 'Failed to update transaction status in database.' });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Checkout session cancelled and flat reservations released successfully.',
+        transaction_id: latestTx.id
+      });
     });
   } catch (error: any) {
     console.error('Error cancelling checkout:', error);
     return res.status(500).json({ success: false, message: 'Server error cancelling checkout.' });
   }
+}
+securityLevyRouter.post('/cancel-checkout', handleCancelCheckoutSession);
+
+// Pure helper function for verifying Paystack HMAC-SHA512 webhook signature
+export function verifyPaystackWebhookSignature(req: any, secretKey: string | null): { valid: boolean; status: number; error?: string } {
+  const signature = req.headers?.['x-paystack-signature'];
+  if (!signature) {
+    return { valid: false, status: 401, error: 'Unauthorized webhook request.' };
+  }
+
+  if (!secretKey) {
+    return { valid: false, status: 503, error: 'Paystack is not configured on the server.' };
+  }
+
+  const rawBody = req.rawBody;
+  if (!rawBody || !Buffer.isBuffer(rawBody)) {
+    return { valid: false, status: 400, error: 'Missing raw request bytes for webhook verification.' };
+  }
+
+  const rawSig = typeof signature === 'string' ? signature.trim().toLowerCase() : '';
+  if (!/^[a-f0-9]{128}$/.test(rawSig)) {
+    return { valid: false, status: 401, error: 'Invalid signature format.' };
+  }
+
+  const hash = crypto.createHmac('sha512', secretKey).update(rawBody).digest('hex').toLowerCase();
+  const hashBuf = Buffer.from(hash, 'utf8');
+  const sigBuf = Buffer.from(rawSig, 'utf8');
+
+  if (hashBuf.length !== sigBuf.length || !crypto.timingSafeEqual(hashBuf, sigBuf)) {
+    return { valid: false, status: 401, error: 'Invalid signature.' };
+  }
+
+  return { valid: true, status: 200 };
+}
+
+// -------------------------------------------------------------
+// 8. DEDICATED SECURITY LEVY WEBHOOK ENDPOINT
+// -------------------------------------------------------------
+securityLevyRouter.post('/webhook', async (req: Request, res: Response) => {
+  try {
+    const secretKey = getSecurityPaystackSecret();
+    const verification = verifyPaystackWebhookSignature(req, secretKey);
+
+    if (!verification.valid) {
+      console.warn(`[Security Levy Webhook] ${verification.error}`);
+      return res.status(verification.status).json({ error: verification.error });
+    }
+
+    const event = req.body;
+    if (event?.event === 'charge.success') {
+      const data = event.data;
+      if (data?.reference) {
+        await processVerifiedSecurityLevyPaystackEvent(data);
+      }
+    }
+
+    return res.sendStatus(200);
+  } catch (error: any) {
+    console.error('[Security Levy Webhook Error]:', error);
+    return res.status(500).json({ error: 'Webhook processing error. Retryable.' });
+  }
 });
 
 // -------------------------------------------------------------
-// 8. WEBHOOK DELEGATE FOR SERVER.TS
+// 9. WEBHOOK DELEGATE FOR SERVER.TS & SECURITY LEVY WEBHOOK
 // -------------------------------------------------------------
 export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promise<void> {
   const reference = data?.reference;
-  if (!reference) return;
+  if (!reference || typeof reference !== 'string') return;
+  const cleanRef = reference.trim();
 
-  const transaction = await serverDb.getSecurityLevyTransactionByRef(reference);
-  if (!transaction) {
-    console.log(`[Security Levy Webhook] No matching transaction found for ref ${reference}`);
-    return;
-  }
+  await withReferenceLock(cleanRef, async () => {
+    const transaction = await serverDb.getSecurityLevyTransactionByRef(cleanRef);
+    if (!transaction) {
+      console.log(`[Security Levy Webhook] No matching transaction found for ref ${cleanRef}`);
+      return;
+    }
 
-  // Idempotency: If already allocated or processed, return immediately
-  if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
-    console.log(`[Security Levy Webhook] Transaction ${reference} already processed (status: ${transaction.allocation_status}).`);
-    return;
-  }
+    // Idempotency: If already allocated or processed, return immediately
+    if (transaction.payment_status === 'SUCCESSFUL' && ['ALLOCATED', 'PARTIALLY_ALLOCATED', 'OVERPAID_UNALLOCATED'].includes(transaction.allocation_status)) {
+      console.log(`[Security Levy Webhook] Transaction ${cleanRef} already processed (status: ${transaction.allocation_status}).`);
+      return;
+    }
 
-  // Status validation: Gateway status must be strictly 'success'
-  if (!data.status || data.status !== 'success') {
-    console.warn(`[Security Levy Webhook Warning] Non-success gateway status (${data.status}) received for ref ${reference}`);
-    return;
-  }
+    // Status validation: Gateway status must be strictly 'success'
+    if (!data.status || data.status !== 'success') {
+      console.warn(`[Security Levy Webhook Warning] Non-success gateway status (${data.status}) received for ref ${cleanRef}`);
+      return;
+    }
 
-  // Currency validation: Currency must be explicitly present and NGN
-  if (!data.currency || data.currency !== 'NGN') {
-    console.warn(`[Security Levy Webhook Warning] Missing or non-NGN currency (${data.currency}) received for ref ${reference}`);
-    return;
-  }
+    // Currency validation: Currency must be explicitly present and NGN
+    if (!data.currency || data.currency !== 'NGN') {
+      console.warn(`[Security Levy Webhook Warning] Missing or non-NGN currency (${data.currency}) received for ref ${cleanRef}`);
+      return;
+    }
 
-  // Validate amount
-  const paidKobo = Number(data.amount);
-  const expectedKobo = transaction.expected_amount * 100;
-  if (paidKobo !== expectedKobo) {
-    console.warn(`[Security Levy Webhook Warning] Amount mismatch on ${reference}. Expected ${expectedKobo}, got ${paidKobo}`);
-    const receivedNaira = paidKobo / 100;
-    
-    // Both underpayments and overpayments must not be marked fully settled
-    // Preserve mismatched genuine payments for administrative reconciliation
+    // Validate amount
+    const paidKobo = Number(data.amount);
+    const expectedKobo = transaction.expected_amount * 100;
+    if (paidKobo !== expectedKobo) {
+      console.warn(`[Security Levy Webhook Warning] Amount mismatch on ${cleanRef}. Expected ${expectedKobo}, got ${paidKobo}`);
+      const receivedNaira = paidKobo / 100;
+      
+      // Both underpayments and overpayments must not be marked fully settled
+      // Preserve mismatched genuine payments for administrative reconciliation
+      await serverDb.updateSecurityLevyTransaction(transaction.id, {
+        payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
+        verified_amount: receivedNaira,
+        verified_at: data.paid_at || new Date().toISOString(),
+        channel_payload: {
+          paystack_data: data,
+          mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
+        },
+        reconciliation_notes: `Webhook amount discrepancy: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
     await serverDb.updateSecurityLevyTransaction(transaction.id, {
-      payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
-      verified_amount: receivedNaira,
-      verified_at: data.paid_at || new Date().toISOString(),
-      channel_payload: {
-        paystack_data: data,
-        mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
-      },
-      reconciliation_notes: `Webhook amount discrepancy: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+      payment_status: 'SUCCESSFUL',
+      verified_amount: paidKobo / 100,
+      verified_at: data.paid_at || now,
+      channel_payload: data
     });
-    return;
-  }
 
-  const now = new Date().toISOString();
-  await serverDb.updateSecurityLevyTransaction(transaction.id, {
-    payment_status: 'SUCCESSFUL',
-    verified_amount: paidKobo / 100,
-    verified_at: data.paid_at || now,
-    channel_payload: data
+    const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
+    console.log(`[Security Levy Webhook] Processed and allocated transaction ${cleanRef}:`, allocResult);
+    if (!allocResult.success && allocResult.error?.includes('SUPABASE_')) {
+      throw new Error(`Authoritative allocation failed: ${allocResult.error}`);
+    }
   });
-
-  const allocResult = await serverDb.allocateSecurityLevyPayment(transaction.id, 'PAYSTACK_WEBHOOK');
-  console.log(`[Security Levy Webhook] Processed and allocated transaction ${reference}:`, allocResult);
-  if (!allocResult.success && allocResult.error?.includes('SUPABASE_')) {
-    throw new Error(`Authoritative allocation failed: ${allocResult.error}`);
-  }
 }
