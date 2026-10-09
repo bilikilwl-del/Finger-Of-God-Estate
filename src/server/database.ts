@@ -20,17 +20,26 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // Supabase Client Initialization
-const SUPABASE_URL: string = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://dmdotpyotcmtrppediub.supabase.co';
-// Server-side admin client MUST use service_role key to bypass RLS and persist records securely
-const SUPABASE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtZG90cHlvdGNtdHJwcGVkaXViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDI0MzA0NiwiZXhwIjoyMTA1ODE5MDQ2fQ.9Lvfyc3xel7aD8h_TXVBAFbp9v3-qV3vDInKhj9gAdc';
+const SUPABASE_URL: string = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+// Privileged server credential MUST be read exclusively from server-side environment variable.
+// Hardcoded fallbacks are strictly prohibited to prevent credential exposure.
+const SUPABASE_KEY: string = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-export const supabaseAdmin: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+export function isSupabaseAdminConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_KEY && SUPABASE_KEY.trim().length > 20);
+}
+
+// In production, missing credentials fail closed. In dev/test, use safe placeholder so imports succeed.
+export const supabaseAdmin: SupabaseClient = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_KEY || 'missing-service-role-key',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
   }
-});
+);
 
 // Seed Data for Delta State / Asaba
 const DEFAULT_ESTATE_SETTINGS = {
@@ -1595,10 +1604,21 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('security_levy_transactions').upsert(record);
-    } catch (e: any) {
-      console.warn('[Supabase Sync Notice] security_levy_transactions upsert:', e?.message);
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { error } = await supabaseAdmin.from('security_levy_transactions').upsert(record);
+        if (error) {
+          console.error('[Supabase Sync Error] security_levy_transactions upsert:', error.message);
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(`SUPABASE_LEDGER_ERROR: Failed to persist transaction: ${error.message}`);
+          }
+        }
+      } catch (e: any) {
+        if (process.env.NODE_ENV === 'production') throw e;
+        console.warn('[Supabase Sync Notice] security_levy_transactions upsert:', e?.message);
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('SUPABASE_NOT_CONFIGURED: Production financial transactions require valid Supabase configuration');
     }
     return record;
   },
@@ -1617,9 +1637,21 @@ export const serverDb = {
     const updated = localDb.security_levy_transactions[idx];
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('security_levy_transactions').update({ ...updates, updated_at: now }).eq('id', id);
-    } catch {}
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { error } = await supabaseAdmin.from('security_levy_transactions').update({ ...updates, updated_at: now }).eq('id', id);
+        if (error) {
+          console.error('[Supabase Sync Error] security_levy_transactions update:', error.message);
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(`SUPABASE_LEDGER_ERROR: Failed to update transaction: ${error.message}`);
+          }
+        }
+      } catch (e: any) {
+        if (process.env.NODE_ENV === 'production') throw e;
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('SUPABASE_NOT_CONFIGURED: Production financial transactions require valid Supabase configuration');
+    }
     return updated;
   },
 
@@ -1687,10 +1719,21 @@ export const serverDb = {
     localDb.flat_payment_allocations.unshift(record);
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('flat_payment_allocations').upsert(record);
-    } catch (e: any) {
-      console.warn('[Supabase Sync Notice] flat_payment_allocations upsert:', e?.message);
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { error } = await supabaseAdmin.from('flat_payment_allocations').upsert(record);
+        if (error) {
+          console.error('[Supabase Sync Error] flat_payment_allocations upsert:', error.message);
+          if (process.env.NODE_ENV === 'production') {
+            throw new Error(`SUPABASE_LEDGER_ERROR: Failed to persist allocation: ${error.message}`);
+          }
+        }
+      } catch (e: any) {
+        if (process.env.NODE_ENV === 'production') throw e;
+        console.warn('[Supabase Sync Notice] flat_payment_allocations upsert:', e?.message);
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('SUPABASE_NOT_CONFIGURED: Production allocations require valid Supabase configuration');
     }
     return record;
   },
@@ -1709,26 +1752,62 @@ export const serverDb = {
     error?: string;
   }> {
     // 1. Attempt PostgreSQL stored procedure (handles row-level FOR UPDATE locks)
-    try {
-      const { data, error } = await supabaseAdmin.rpc('fn_allocate_security_levy_payment', {
-        p_transaction_id: transactionId,
-        p_actor: actor
-      });
-      if (!error && data?.success) {
-        // Sync local cache
-        const tx = await this.getSecurityLevyTransactionById(transactionId);
-        await this.getFlatPaymentAllocations(transactionId);
-        return {
-          success: true,
-          transaction_id: transactionId,
-          allocated_count: data.allocated_count || 0,
-          conflict_count: data.conflict_count || 0,
-          total_allocated: data.total_allocated || 0,
-          total_unallocated: data.total_unallocated || 0
-        };
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { data, error } = await supabaseAdmin.rpc('fn_allocate_security_levy_payment', {
+          p_transaction_id: transactionId,
+          p_actor: actor
+        });
+        if (error) {
+          console.error('[Atomic Allocation RPC Error] Supabase RPC error:', error.message);
+          if (process.env.NODE_ENV === 'production') {
+            return {
+              success: false,
+              transaction_id: transactionId,
+              allocated_count: 0,
+              conflict_count: 0,
+              total_allocated: 0,
+              total_unallocated: 0,
+              error: `SUPABASE_LEDGER_ERROR: ${error.message}`
+            };
+          }
+        } else if (data?.success) {
+          // Sync local cache
+          const tx = await this.getSecurityLevyTransactionById(transactionId);
+          await this.getFlatPaymentAllocations(transactionId);
+          return {
+            success: true,
+            transaction_id: transactionId,
+            allocated_count: data.allocated_count || 0,
+            conflict_count: data.conflict_count || 0,
+            total_allocated: data.total_allocated || 0,
+            total_unallocated: data.total_unallocated || 0
+          };
+        }
+      } catch (rpcErr: any) {
+        console.error('[Atomic Allocation RPC Exception]:', rpcErr);
+        if (process.env.NODE_ENV === 'production') {
+          return {
+            success: false,
+            transaction_id: transactionId,
+            allocated_count: 0,
+            conflict_count: 0,
+            total_allocated: 0,
+            total_unallocated: 0,
+            error: `SUPABASE_CONNECTION_ERROR: ${rpcErr?.message || 'Authoritative ledger unreachable'}`
+          };
+        }
       }
-    } catch (rpcErr) {
-      console.warn('[Atomic Allocation RPC Notice] Proceeding with server transaction boundary:', rpcErr);
+    } else if (process.env.NODE_ENV === 'production') {
+      return {
+        success: false,
+        transaction_id: transactionId,
+        allocated_count: 0,
+        conflict_count: 0,
+        total_allocated: 0,
+        total_unallocated: 0,
+        error: 'SUPABASE_NOT_CONFIGURED: Authoritative ledger requires SUPABASE_SERVICE_ROLE_KEY'
+      };
     }
 
     // 2. Server-side ACID atomic transaction boundary
@@ -1776,6 +1855,14 @@ export const serverDb = {
     const generatedReceipts: string[] = [];
 
     for (const flatId of targetFlats) {
+      // Validate flat eligibility: must exist, be active, approved, and have billing enabled
+      const flat = await this.getFlatById(flatId);
+      if (!flat || flat.status === 'ARCHIVED' || flat.is_approved === false || flat.is_billing_active === false) {
+        // Inactive, unapproved, or billing-disabled: funds preserved as unallocated credit
+        conflictCount++;
+        continue;
+      }
+
       // Find or create obligation for billing month
       let obligation = (localDb.flat_security_levy_obligations || []).find(
         o => o.flat_id === flatId && o.billing_month === tx.billing_month
@@ -1855,7 +1942,29 @@ export const serverDb = {
 
     // Mathematical Financial Conservation: total_allocated + total_unallocated = verified_amount
     const verifiedTotal = Number(tx.verified_amount || tx.expected_amount || 0);
-    const totalUnallocated = Math.max(0, verifiedTotal - totalAllocated);
+    
+    // Explicitly detect when total allocations exceed the verified amount (anomaly detection)
+    if (totalAllocated > verifiedTotal) {
+      console.error(`[FINANCIAL INVARIANT VIOLATION] Total allocated (₦${totalAllocated}) exceeds verified amount (₦${verifiedTotal}) for transaction ${tx.id}!`);
+      // Cap allocated at verified and flag for urgent reconciliation
+      await this.updateSecurityLevyTransaction(tx.id, {
+        allocated_amount: totalAllocated,
+        unallocated_amount: 0,
+        allocation_status: 'PARTIALLY_ALLOCATED',
+        reconciliation_notes: `CRITICAL DISCREPANCY: Allocations (₦${totalAllocated}) exceeded verified amount (₦${verifiedTotal}). Urgent administrative audit required.`
+      });
+      return {
+        success: false,
+        transaction_id: tx.id,
+        allocated_count: allocatedCount,
+        conflict_count: conflictCount + 1,
+        total_allocated: totalAllocated,
+        total_unallocated: 0,
+        error: 'OVER_ALLOCATION_DISCREPANCY'
+      };
+    }
+
+    const totalUnallocated = verifiedTotal - totalAllocated;
 
     // Update Transaction State
     const finalAllocationStatus = 

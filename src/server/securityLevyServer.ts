@@ -730,10 +730,27 @@ securityLevyRouter.post('/verify-payment', async (req: Request, res: Response) =
       const expectedKobo = transaction.expected_amount * 100;
       if (Number(txData.amount) !== expectedKobo) {
         console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${txData.amount}`);
+        const receivedNaira = Number(txData.amount) / 100;
+        
+        // Underpayment or Overpayment must not be marked fully settled
+        // Preserve mismatched genuine payments for reconciliation
+        await serverDb.updateSecurityLevyTransaction(transaction.id, {
+          payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
+          verified_amount: receivedNaira,
+          verified_at: new Date().toISOString(),
+          channel_payload: {
+            channel: txData.channel || 'card',
+            paystack_data: txData,
+            mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
+          },
+          reconciliation_notes: `Amount discrepancy detected: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+        });
+
         return res.status(400).json({
           success: false,
           verified: false,
-          message: `Amount paid (₦${(txData.amount / 100).toLocaleString()}) does not match expected amount (₦${transaction.expected_amount.toLocaleString()}).`
+          mismatch: true,
+          message: `Amount paid (₦${receivedNaira.toLocaleString()}) does not match expected amount (₦${transaction.expected_amount.toLocaleString()}). Payment recorded and preserved for administrative reconciliation.`
         });
       }
 
@@ -741,7 +758,15 @@ securityLevyRouter.post('/verify-payment', async (req: Request, res: Response) =
       paystackChannel = txData.channel || 'card';
       paidAmountKobo = txData.amount;
     } else {
-      // Sandbox fallback mode
+      // In production, sandbox fallback is strictly disabled
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({
+          success: false,
+          verified: false,
+          message: 'Paystack secret key is not configured on the production server. Sandbox fallback disabled.'
+        });
+      }
+      // Sandbox fallback mode (development / test only)
       verified = true;
     }
 
@@ -1113,15 +1138,21 @@ export async function processVerifiedSecurityLevyPaystackEvent(data: any): Promi
   const expectedKobo = transaction.expected_amount * 100;
   if (paidKobo !== expectedKobo) {
     console.warn(`[Security Levy Webhook Warning] Amount mismatch on ${reference}. Expected ${expectedKobo}, got ${paidKobo}`);
-    // If underpaid, record as partial payment note and do not allocate as fully successful
-    if (paidKobo < expectedKobo) {
-      await serverDb.updateSecurityLevyTransaction(transaction.id, {
-        payment_status: 'PARTIALLY_PAID',
-        verified_amount: paidKobo / 100,
-        reconciliation_notes: `Underpayment detected: expected ₦${transaction.expected_amount}, received ₦${paidKobo / 100}. Manual reconciliation required.`
-      });
-      return;
-    }
+    const receivedNaira = paidKobo / 100;
+    
+    // Both underpayments and overpayments must not be marked fully settled
+    // Preserve mismatched genuine payments for administrative reconciliation
+    await serverDb.updateSecurityLevyTransaction(transaction.id, {
+      payment_status: receivedNaira < transaction.expected_amount ? 'PARTIALLY_PAID' : 'OVERPAID',
+      verified_amount: receivedNaira,
+      verified_at: data.paid_at || new Date().toISOString(),
+      channel_payload: {
+        paystack_data: data,
+        mismatch_reason: receivedNaira < transaction.expected_amount ? 'UNDERPAYMENT' : 'OVERPAYMENT'
+      },
+      reconciliation_notes: `Webhook amount discrepancy: expected ₦${transaction.expected_amount}, received ₦${receivedNaira}. Held for administrative reconciliation.`
+    });
+    return;
   }
 
   const now = new Date().toISOString();

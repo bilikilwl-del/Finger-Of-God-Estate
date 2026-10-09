@@ -1,7 +1,28 @@
-import { serverDb } from '../src/server/database.ts';
+// PRODUCTION SAFETY GUARD
+if (process.env.NODE_ENV === 'production' && !process.env.RUN_PRE_DEPLOYMENT_ISOLATED) {
+  console.error('[SAFETY BLOCKER] Refusing to run pre-deployment verification in production without isolation!');
+  process.exit(1);
+}
+
+process.env.NODE_ENV = 'test';
+process.env.SECURITY_LEVY_TEST_MODE = 'true';
+
+import { serverDb, supabaseAdmin } from '../src/server/database.ts';
 import { processVerifiedSecurityLevyPaystackEvent } from '../src/server/securityLevyServer.ts';
 import crypto from 'crypto';
 import fs from 'fs';
+
+// Mock Supabase admin methods to ensure zero network writes occur against production
+const mockSupabaseQuery = {
+  select: () => mockSupabaseQuery,
+  order: () => mockSupabaseQuery,
+  eq: () => mockSupabaseQuery,
+  upsert: async () => ({ data: null, error: null }),
+  update: () => mockSupabaseQuery,
+  rpc: async () => ({ data: null, error: { message: 'MOCK_TEST_ENV' } })
+};
+(supabaseAdmin as any).from = () => mockSupabaseQuery;
+(supabaseAdmin as any).rpc = async () => ({ data: null, error: { message: 'MOCK_TEST_ENV' } });
 
 async function runPreDeploymentVerification() {
   console.log('======================================================================');

@@ -212,6 +212,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     v_tx public.security_levy_transactions%ROWTYPE;
+    v_flat public.flats%ROWTYPE;
     v_obligation public.flat_security_levy_obligations%ROWTYPE;
     v_existing_alloc public.flat_payment_allocations%ROWTYPE;
     v_flat_id_text TEXT;
@@ -261,6 +262,20 @@ BEGIN
         v_flat_id := v_flat_id_text::UUID;
         v_is_valid_allocation := FALSE;
 
+        -- Check flat existence, active status, approval, and billing eligibility
+        SELECT * INTO v_flat
+        FROM public.flats
+        WHERE id = v_flat_id;
+
+        -- If flat does not exist, or is inactive, unapproved, or has billing disabled
+        IF NOT FOUND OR v_flat.status != 'ACTIVE' OR COALESCE(v_flat.is_approved, TRUE) = FALSE OR COALESCE(v_flat.is_billing_active, TRUE) = FALSE THEN
+            -- Inactive, unapproved or billing-disabled flat cannot have new allocations created.
+            -- Preserve verified funds safely for administrative reconciliation without redirecting or losing them.
+            v_conflict_count := v_conflict_count + 1;
+            v_total_unallocated := v_total_unallocated + v_tx.rate_per_unit;
+            CONTINUE;
+        END IF;
+
         -- Lock obligation row for update (or create if billing is active)
         SELECT * INTO v_obligation
         FROM public.flat_security_levy_obligations
@@ -268,7 +283,7 @@ BEGIN
         FOR UPDATE;
 
         IF NOT FOUND THEN
-            -- Create the monthly obligation if not present
+            -- Create the monthly obligation for active eligible flat
             INSERT INTO public.flat_security_levy_obligations (
                 flat_id, billing_month, amount_due, amount_paid, balance_due, status
             ) VALUES (
@@ -363,7 +378,27 @@ BEGIN
     END LOOP;
 
     -- 6. Financial conservation: ensure all verified funds are accounted for
-    v_total_unallocated := GREATEST(0.00, COALESCE(v_tx.verified_amount, 0.00) - v_total_allocated);
+    IF v_total_allocated > COALESCE(v_tx.verified_amount, 0.00) THEN
+        -- Over-allocation anomaly detected: record discrepancy for urgent reconciliation
+        UPDATE public.security_levy_transactions
+        SET allocated_amount = v_total_allocated,
+            unallocated_amount = 0.00,
+            allocation_status = 'PARTIALLY_ALLOCATED',
+            reconciliation_notes = 'CRITICAL DISCREPANCY: Allocations (₦' || v_total_allocated || ') exceeded verified amount (₦' || COALESCE(v_tx.verified_amount, 0.00) || '). Urgent administrative audit required.',
+            updated_at = NOW()
+        WHERE id = v_tx.id;
+
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'OVER_ALLOCATION_DISCREPANCY',
+            'allocated_count', v_allocated_count,
+            'conflict_count', v_conflict_count + 1,
+            'total_allocated', v_total_allocated,
+            'total_unallocated', 0.00
+        );
+    END IF;
+
+    v_total_unallocated := COALESCE(v_tx.verified_amount, 0.00) - v_total_allocated;
 
     UPDATE public.security_levy_transactions
     SET allocated_amount = v_total_allocated,
