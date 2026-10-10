@@ -173,7 +173,7 @@ export default function App() {
     estate_address: 'Phase 1, Iyiaba, Asaba, Delta State, Nigeria',
     estate_state: 'Delta',
     estate_lga: 'Oshimili South',
-    monthly_security_levy: 5000,
+    monthly_security_levy: 1500,
     payment_due_day: 1,
     currency: 'NGN',
     contact_phone: '08023456789',

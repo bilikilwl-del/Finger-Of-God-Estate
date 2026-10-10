@@ -154,7 +154,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
     }, 4000);
   };
 
-  const levyAmountFormatted = `₦${(estateSettings.monthly_security_levy || 5000).toLocaleString()}`;
+  const levyAmountFormatted = `₦${(estateSettings.monthly_security_levy || 1500).toLocaleString()}`;
 
   // Key Estate Service Cards (Clean, informative, 6 core cards)
   const estateServices = [

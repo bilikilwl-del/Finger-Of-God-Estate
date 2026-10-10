@@ -30,7 +30,7 @@ import { dbService } from '../../lib/supabase';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
 import { SEOHead } from '../common/SEOHead';
-import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
+import { FlatSecurityPaymentModal } from '../payments/FlatSecurityPaymentModal';
 
 interface PublicEstateLevyViewProps {
   estateSettings: EstateSettings;
@@ -45,7 +45,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   onNavigate,
   onOpenResidentLogin
 }) => {
-  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isFlatPayModalOpen, setIsFlatPayModalOpen] = useState(false);
   const [searchResidentNumber, setSearchResidentNumber] = useState(currentResident?.resident_number || '');
   const [searchedResident, setSearchedResident] = useState<Resident | null>(currentResident || null);
   const [residentPayments, setResidentPayments] = useState<MonthlyPayment[]>([]);
@@ -62,7 +62,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
     }
   }, [currentResident]);
 
-  const levyAmount = estateSettings.monthly_security_levy || 5000;
+  const levyAmount = estateSettings.monthly_security_levy || 1500;
   const formattedLevy = `₦${levyAmount.toLocaleString()}`;
 
   const handleLookupResident = async (e: React.FormEvent) => {
@@ -104,14 +104,14 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
 
   const handleQuickPayResident = (res: Resident) => {
     setSearchedResident(res);
-    setIsPayModalOpen(true);
+    setIsFlatPayModalOpen(true);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
       <SEOHead
         title="Monthly Security Levy & Online Dues Payment — Finger of God Estate"
-        description="Official online payment portal for Finger of God Estate monthly security levy (₦5,000/month). Pay via Paystack and retrieve instant stamped receipts."
+        description="Official online payment portal for Finger of God Estate monthly security levy (₦1,500/month). Pay via Paystack and retrieve instant stamped receipts."
         keywords={['Estate Security Levy', 'Paystack Online Payment', 'Finger of God Estate', 'Dues Receipt', 'Asaba Delta State']}
         canonicalPath="/#estate-levy"
         ogType="website"
@@ -151,7 +151,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsPayModalOpen(true)}
+              onClick={() => setIsFlatPayModalOpen(true)}
               className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs hover:shadow-sm transition-all flex items-center gap-2 cursor-pointer"
             >
               <CreditCard className="w-4 h-4" />
@@ -385,14 +385,12 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         onOpenResidentLogin={onOpenResidentLogin}
       />
 
-      <PaystackPaymentModal
-        isOpen={isPayModalOpen}
-        onClose={() => setIsPayModalOpen(false)}
-        estateSettings={estateSettings}
-        preselectedResident={searchedResident || currentResident}
-        targetMonth={selectedMonth}
-        targetYear={selectedYear}
-      />
+      {isFlatPayModalOpen && (
+        <FlatSecurityPaymentModal
+          isOpen={isFlatPayModalOpen}
+          onClose={() => setIsFlatPayModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

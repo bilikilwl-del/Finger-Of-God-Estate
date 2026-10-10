@@ -1036,8 +1036,8 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         });
       }
 
-      // 4. AMOUNT VERIFICATION: ₦5,000 = 500,000 kobo
-      const expectedKobo = 500000;
+      // 4. AMOUNT VERIFICATION: Authoritative amount from transaction (default ₦1,500 = 150,000 kobo)
+      const expectedKobo = (transaction.amount_due || 1500) * 100;
       if (Number(pData.amount) !== expectedKobo) {
         console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${pData.amount}`);
         transaction.status = 'FAILED';
@@ -1046,7 +1046,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
           success: false,
           verified: false,
           discrepancy: true,
-          message: 'Amount paid does not match the official ₦5,000 security levy.'
+          message: 'Amount paid does not match the official security levy (₦1,500/flat).'
         });
       }
 
@@ -1247,8 +1247,9 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
           return res.sendStatus(200);
         }
 
-        // Validate Amount: 500,000 kobo (5,000 NGN)
-        if (Number(data.amount) === 500000 && data.currency === 'NGN') {
+        // Validate Amount against transaction expected amount (default 150,000 kobo / ₦1,500)
+        const expectedKobo = (transaction.amount_due || 1500) * 100;
+        if (Number(data.amount) === expectedKobo && data.currency === 'NGN') {
           const now = new Date().toISOString();
           const amountNaira = data.amount / 100;
 

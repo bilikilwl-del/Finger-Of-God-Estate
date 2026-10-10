@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from '../lib/phoneUtils.js';
+import { normalizeBuildingTag, validateBuildingTag } from '../lib/buildingUtils.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +51,7 @@ const DEFAULT_ESTATE_SETTINGS = {
   estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
-  monthly_security_levy: 5000,
+  monthly_security_levy: 1500,
   payment_due_day: 1,
   currency: 'NGN',
   contact_phone: '08023456789',
@@ -1243,28 +1244,58 @@ export const serverDb = {
   // ==========================================
   async getBuildings(): Promise<any[]> {
     if (!localDb.buildings) localDb.buildings = [];
-    try {
-      const { data, error } = await supabaseAdmin.from('buildings').select('*').order('house_number', { ascending: true });
-      if (!error && Array.isArray(data)) {
-        localDb.buildings = data;
-        saveDbToFile(localDb);
-        return data;
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { data, error } = await supabaseAdmin.from('buildings').select('*').order('house_number', { ascending: true });
+        if (!error && Array.isArray(data)) {
+          localDb.buildings = data;
+          saveDbToFile(localDb);
+          return data;
+        }
+        if (error) {
+          console.warn('[Supabase Warning] getBuildings query error:', error.message);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase Warning] getBuildings exception:', err?.message);
       }
-    } catch {}
+    }
     return localDb.buildings;
   },
 
   async getBuildingById(id: string): Promise<any | null> {
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { data, error } = await supabaseAdmin.from('buildings').select('*').eq('id', id).maybeSingle();
+        if (!error && data) return data;
+      } catch {}
+    }
     const list = await this.getBuildings();
     return list.find(b => b.id === id) || null;
   },
 
   async saveBuilding(building: any): Promise<any> {
     if (!localDb.buildings) localDb.buildings = [];
+    const valRes = validateBuildingTag(building.house_number);
+    if (!valRes.isValid) {
+      throw new Error(valRes.error || 'Valid building tag / house number is required.');
+    }
+    const cleanHouseNumber = valRes.normalized;
+
+    // Check duplicate building tag (case-insensitive)
+    const existingList = await this.getBuildings();
+    const duplicate = existingList.find(b => 
+      b.id !== building.id && 
+      String(b.house_number).toLowerCase().trim() === cleanHouseNumber.toLowerCase() && 
+      b.status !== 'ARCHIVED'
+    );
+    if (duplicate) {
+      throw new Error(`Building with tag "${cleanHouseNumber}" already exists in the estate registry.`);
+    }
+
     const now = new Date().toISOString();
-    const record = {
+    let record = {
       id: building.id || crypto.randomUUID(),
-      house_number: String(building.house_number).trim(),
+      house_number: cleanHouseNumber,
       building_name: building.building_name?.trim() || null,
       total_flats_count: Math.max(1, Number(building.total_flats_count) || 1),
       landlord_name: building.landlord_name?.trim() || null,
@@ -1277,6 +1308,17 @@ export const serverDb = {
       updated_at: now
     };
 
+    if (isSupabaseAdminConfigured()) {
+      const { data, error } = await supabaseAdmin.from('buildings').upsert(record).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase Error] buildings upsert failed:', error.message);
+        throw new Error(`Database error saving building: ${error.message}`);
+      }
+      if (data) {
+        record = { ...record, ...data };
+      }
+    }
+
     const idx = localDb.buildings.findIndex(b => b.id === record.id || b.house_number === record.house_number);
     if (idx >= 0) {
       localDb.buildings[idx] = { ...localDb.buildings[idx], ...record };
@@ -1285,28 +1327,50 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('buildings').upsert(record);
-    } catch (e: any) {
-      console.warn('[Supabase Sync Notice] buildings upsert:', e?.message);
-    }
     return record;
   },
 
   async updateBuilding(id: string, updates: any): Promise<any | null> {
     if (!localDb.buildings) localDb.buildings = [];
-    const idx = localDb.buildings.findIndex(b => b.id === id);
-    if (idx < 0) return null;
+    const existing = await this.getBuildingById(id);
+    if (!existing) return null;
 
     const now = new Date().toISOString();
-    localDb.buildings[idx] = { ...localDb.buildings[idx], ...updates, updated_at: now };
-    const updated = localDb.buildings[idx];
+    const cleanUpdates = { ...updates, updated_at: now };
+
+    if (cleanUpdates.house_number !== undefined) {
+      const valRes = validateBuildingTag(cleanUpdates.house_number);
+      if (!valRes.isValid) {
+        throw new Error(valRes.error || 'Valid building tag is required.');
+      }
+      cleanUpdates.house_number = valRes.normalized;
+
+      const existingList = await this.getBuildings();
+      const duplicate = existingList.find(b => 
+        b.id !== id && 
+        String(b.house_number).toLowerCase().trim() === cleanUpdates.house_number.toLowerCase() && 
+        b.status !== 'ARCHIVED'
+      );
+      if (duplicate) {
+        throw new Error(`Building with tag "${cleanUpdates.house_number}" already exists in the estate registry.`);
+      }
+    }
+
+    if (isSupabaseAdminConfigured()) {
+      const { data, error } = await supabaseAdmin.from('buildings').update(cleanUpdates).eq('id', id).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase Error] buildings update failed:', error.message);
+        throw new Error(`Database error updating building: ${error.message}`);
+      }
+    }
+
+    const idx = localDb.buildings.findIndex(b => b.id === id);
+    if (idx >= 0) {
+      localDb.buildings[idx] = { ...localDb.buildings[idx], ...cleanUpdates };
+    }
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('buildings').update({ ...updates, updated_at: now }).eq('id', id);
-    } catch {}
-    return updated;
+    return { ...existing, ...cleanUpdates };
   },
 
   // ==========================================
@@ -1314,23 +1378,29 @@ export const serverDb = {
   // ==========================================
   async getFlats(buildingId?: string): Promise<any[]> {
     if (!localDb.flats) localDb.flats = [];
-    try {
-      let query = supabaseAdmin.from('flats').select('*').order('flat_number', { ascending: true });
-      if (buildingId) {
-        query = query.eq('building_id', buildingId);
-      }
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
+    if (isSupabaseAdminConfigured()) {
+      try {
+        let query = supabaseAdmin.from('flats').select('*').order('flat_number', { ascending: true });
         if (buildingId) {
-          // Merge building flats into local cache
-          localDb.flats = localDb.flats.filter(f => f.building_id !== buildingId).concat(data);
-        } else {
-          localDb.flats = data;
+          query = query.eq('building_id', buildingId);
         }
-        saveDbToFile(localDb);
-        return data;
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          if (buildingId) {
+            localDb.flats = localDb.flats.filter(f => f.building_id !== buildingId).concat(data);
+          } else {
+            localDb.flats = data;
+          }
+          saveDbToFile(localDb);
+          return data;
+        }
+        if (error) {
+          console.warn('[Supabase Warning] getFlats query error:', error.message);
+        }
+      } catch (err: any) {
+        console.warn('[Supabase Warning] getFlats exception:', err?.message);
       }
-    } catch {}
+    }
     if (buildingId) {
       return localDb.flats.filter(f => f.building_id === buildingId);
     }
@@ -1338,17 +1408,47 @@ export const serverDb = {
   },
 
   async getFlatById(id: string): Promise<any | null> {
+    if (isSupabaseAdminConfigured()) {
+      try {
+        const { data, error } = await supabaseAdmin.from('flats').select('*').eq('id', id).maybeSingle();
+        if (!error && data) return data;
+      } catch {}
+    }
     const list = await this.getFlats();
     return list.find(f => f.id === id) || null;
   },
 
   async saveFlat(flat: any): Promise<any> {
     if (!localDb.flats) localDb.flats = [];
+    if (!flat.building_id) {
+      throw new Error('Building association (building_id) is required to register a flat.');
+    }
+    const parentBuilding = await this.getBuildingById(flat.building_id);
+    if (!parentBuilding) {
+      throw new Error(`Referenced building does not exist (ID: ${flat.building_id}).`);
+    }
+
+    if (!flat.flat_number || typeof flat.flat_number !== 'string' || !flat.flat_number.trim()) {
+      throw new Error('Flat identifier (e.g. Flat A, Flat 1, Upstairs, Main Unit) is required.');
+    }
+    const cleanFlatNum = flat.flat_number.trim();
+
+    // Check uniqueness within the building
+    const bFlats = await this.getFlats(flat.building_id);
+    const duplicate = bFlats.find(f => 
+      f.id !== flat.id && 
+      String(f.flat_number).toLowerCase().trim() === cleanFlatNum.toLowerCase() && 
+      f.status !== 'ARCHIVED'
+    );
+    if (duplicate) {
+      throw new Error(`Flat "${cleanFlatNum}" already exists in building ${parentBuilding.house_number}.`);
+    }
+
     const now = new Date().toISOString();
-    const record = {
+    let record = {
       id: flat.id || crypto.randomUUID(),
       building_id: flat.building_id,
-      flat_number: String(flat.flat_number).trim(),
+      flat_number: cleanFlatNum,
       label: flat.label?.trim() || null,
       occupant_type: flat.occupant_type || 'VACANT',
       resident_id: flat.resident_id || null,
@@ -1364,6 +1464,17 @@ export const serverDb = {
       updated_at: now
     };
 
+    if (isSupabaseAdminConfigured()) {
+      const { data, error } = await supabaseAdmin.from('flats').upsert(record).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase Error] flats upsert failed:', error.message);
+        throw new Error(`Database error saving flat: ${error.message}`);
+      }
+      if (data) {
+        record = { ...record, ...data };
+      }
+    }
+
     const idx = localDb.flats.findIndex(f => f.id === record.id || (f.building_id === record.building_id && f.flat_number === record.flat_number));
     if (idx >= 0) {
       localDb.flats[idx] = { ...localDb.flats[idx], ...record };
@@ -1372,31 +1483,55 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('flats').upsert(record);
-    } catch (e: any) {
-      console.warn('[Supabase Sync Notice] flats upsert:', e?.message);
-    }
     return record;
   },
 
   async updateFlat(id: string, updates: any): Promise<any | null> {
     if (!localDb.flats) localDb.flats = [];
-    const idx = localDb.flats.findIndex(f => f.id === id);
-    if (idx < 0) return null;
+    const existing = await this.getFlatById(id);
+    if (!existing) return null;
 
     const now = new Date().toISOString();
-    if (updates.is_billing_active === true && !localDb.flats[idx].is_billing_active) {
-      updates.billing_activated_at = now;
+    const cleanUpdates = { ...updates, updated_at: now };
+
+    if (cleanUpdates.flat_number !== undefined) {
+      const cleanFlatNum = String(cleanUpdates.flat_number).trim();
+      if (!cleanFlatNum) {
+        throw new Error('Flat identifier cannot be empty.');
+      }
+      cleanUpdates.flat_number = cleanFlatNum;
+
+      // Check duplicate within the same building
+      const bFlats = await this.getFlats(existing.building_id);
+      const duplicate = bFlats.find(f => 
+        f.id !== id && 
+        String(f.flat_number).toLowerCase().trim() === cleanFlatNum.toLowerCase() && 
+        f.status !== 'ARCHIVED'
+      );
+      if (duplicate) {
+        throw new Error(`Flat "${cleanFlatNum}" already exists in this building.`);
+      }
     }
-    localDb.flats[idx] = { ...localDb.flats[idx], ...updates, updated_at: now };
-    const updated = localDb.flats[idx];
+
+    if (cleanUpdates.is_billing_active === true && !existing.is_billing_active) {
+      cleanUpdates.billing_activated_at = now;
+    }
+
+    if (isSupabaseAdminConfigured()) {
+      const { data, error } = await supabaseAdmin.from('flats').update(cleanUpdates).eq('id', id).select().maybeSingle();
+      if (error) {
+        console.error('[Supabase Error] flats update failed:', error.message);
+        throw new Error(`Database error updating flat: ${error.message}`);
+      }
+    }
+
+    const idx = localDb.flats.findIndex(f => f.id === id);
+    if (idx >= 0) {
+      localDb.flats[idx] = { ...localDb.flats[idx], ...cleanUpdates };
+    }
     saveDbToFile(localDb);
 
-    try {
-      await supabaseAdmin.from('flats').update({ ...updates, updated_at: now }).eq('id', id);
-    } catch {}
-    return updated;
+    return { ...existing, ...cleanUpdates };
   },
 
   // ==========================================

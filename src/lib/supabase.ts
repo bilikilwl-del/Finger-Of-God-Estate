@@ -89,7 +89,7 @@ const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
-  monthly_security_levy: 5000,
+  monthly_security_levy: 1500,
   payment_due_day: 1,
   currency: 'NGN',
   contact_phone: '08023456789',

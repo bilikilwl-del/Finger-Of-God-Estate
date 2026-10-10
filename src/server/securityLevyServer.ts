@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser } from './database.ts';
 import { arePhoneNumbersEqual } from '../lib/phoneUtils.js';
+import { validateBuildingTag, normalizeBuildingTag, maskHouseholdName } from '../lib/buildingUtils.ts';
 
 export const securityLevyRouter = express.Router();
 
@@ -51,17 +52,40 @@ async function requireSecurityAdmin(req: Request, res: Response, next: express.N
 // GET /api/security-levy/buildings
 securityLevyRouter.get('/buildings', async (req: Request, res: Response) => {
   try {
+    let isAdmin = false;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const authResult = await verifyAdminToken(token);
+      if (authResult.valid && authResult.user) {
+        isAdmin = true;
+      }
+    }
+
     const buildings = await serverDb.getBuildings();
     const flats = await serverDb.getFlats();
 
-    // Enrich buildings with computed flat counts
+    // Enrich buildings with computed flat counts and privacy masking
     const enriched = buildings.map(b => {
       const bFlats = flats.filter(f => f.building_id === b.id && f.status !== 'ARCHIVED');
       const activeBillingFlats = bFlats.filter(f => f.is_billing_active);
       return {
-        ...b,
+        id: b.id,
+        house_number: b.house_number,
+        building_name: b.building_name,
+        total_flats_count: b.total_flats_count,
+        landlord_name: b.landlord_name,
+        status: b.status,
+        created_at: b.created_at,
+        updated_at: b.updated_at,
         flats_count: bFlats.length,
-        active_billing_flats_count: activeBillingFlats.length
+        active_billing_flats_count: activeBillingFlats.length,
+        ...(isAdmin ? {
+          landlord_phone: b.landlord_phone,
+          landlord_email: b.landlord_email,
+          landlord_resident_id: b.landlord_resident_id,
+          notes: b.notes
+        } : {})
       };
     });
 
@@ -80,15 +104,16 @@ securityLevyRouter.get('/buildings', async (req: Request, res: Response) => {
 securityLevyRouter.post('/buildings', requireSecurityAdmin, async (req: Request, res: Response) => {
   try {
     const adminUser = (req as any).adminUser as VerifiedAdminUser;
-    const { house_number, building_name, total_flats_count, landlord_name, landlord_phone, landlord_email, landlord_resident_id, notes } = req.body;
+    const { house_number, building_name, total_flats_count, landlord_name, landlord_phone, landlord_email, landlord_resident_id, notes, status } = req.body;
 
-    if (!house_number || typeof house_number !== 'string' || !house_number.trim()) {
-      return res.status(400).json({ success: false, message: 'Valid house number / plot identifier is required.' });
+    const tagVal = validateBuildingTag(house_number);
+    if (!tagVal.isValid) {
+      return res.status(400).json({ success: false, message: tagVal.error || 'Valid building tag / house number is required.' });
     }
+    const cleanHouseNumber = tagVal.normalized;
 
-    const cleanHouseNumber = house_number.trim();
     const existing = await serverDb.getBuildings();
-    if (existing.some(b => b.house_number.toLowerCase() === cleanHouseNumber.toLowerCase() && b.status !== 'ARCHIVED')) {
+    if (existing.some(b => String(b.house_number).toLowerCase().trim() === cleanHouseNumber.toLowerCase() && b.status !== 'ARCHIVED')) {
       return res.status(409).json({ success: false, message: `Building with house number "${cleanHouseNumber}" already exists.` });
     }
 
@@ -101,7 +126,7 @@ securityLevyRouter.post('/buildings', requireSecurityAdmin, async (req: Request,
       landlord_email: landlord_email || null,
       landlord_resident_id: landlord_resident_id || null,
       notes: notes || null,
-      status: 'ACTIVE'
+      status: status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
     });
 
     await serverDb.logEstateAudit({
@@ -120,7 +145,7 @@ securityLevyRouter.post('/buildings', requireSecurityAdmin, async (req: Request,
     });
   } catch (error: any) {
     console.error('Error registering building:', error);
-    return res.status(500).json({ success: false, message: 'Failed to create building.' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to create building.' });
   }
 });
 
@@ -137,6 +162,27 @@ securityLevyRouter.put('/buildings/:id', requireSecurityAdmin, async (req: Reque
     const updates = { ...req.body };
     delete updates.id;
     delete updates.created_at;
+
+    if (updates.house_number !== undefined) {
+      const tagVal = validateBuildingTag(updates.house_number);
+      if (!tagVal.isValid) {
+        return res.status(400).json({ success: false, message: tagVal.error });
+      }
+      const cleanHouseNumber = tagVal.normalized;
+
+      const existingList = await serverDb.getBuildings();
+      if (existingList.some(b => b.id !== id && String(b.house_number).toLowerCase().trim() === cleanHouseNumber.toLowerCase() && b.status !== 'ARCHIVED')) {
+        return res.status(409).json({ 
+          success: false, 
+          message: `Building tag "${cleanHouseNumber}" is already in use by another building.` 
+        });
+      }
+      updates.house_number = cleanHouseNumber;
+    }
+
+    if (updates.status && !['ACTIVE', 'INACTIVE', 'ARCHIVED'].includes(updates.status)) {
+      return res.status(400).json({ success: false, message: 'Invalid building status. Must be ACTIVE, INACTIVE, or ARCHIVED.' });
+    }
 
     const updated = await serverDb.updateBuilding(id, updates);
 
@@ -156,7 +202,7 @@ securityLevyRouter.put('/buildings/:id', requireSecurityAdmin, async (req: Reque
     });
   } catch (error: any) {
     console.error('Error updating building:', error);
-    return res.status(500).json({ success: false, message: 'Failed to update building.' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to update building.' });
   }
 });
 
@@ -201,16 +247,48 @@ securityLevyRouter.delete('/buildings/:id', requireSecurityAdmin, async (req: Re
 securityLevyRouter.get('/buildings/:buildingId/flats', async (req: Request, res: Response) => {
   try {
     const { buildingId } = req.params;
+
+    // Check if requester has verified admin authorization
+    let isAdmin = false;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const authResult = await verifyAdminToken(token);
+      if (authResult.valid && authResult.user) {
+        isAdmin = true;
+      }
+    }
+
     const currentMonth = new Date().toISOString().slice(0, 7);
     const flats = await serverDb.getFlats(buildingId);
     const obligations = await serverDb.getObligations({ billingMonth: currentMonth });
 
-    // Enrich flats with current month's payment status
+    // Enrich flats with payment status and apply privacy masking for non-administrators
     const enriched = flats.map(f => {
       const ob = obligations.find(o => o.flat_id === f.id);
+      const currentMonthStatus = ob ? ob.status : (f.is_billing_active ? 'UNPAID' : 'EXEMPT');
+
+      if (isAdmin) {
+        // Authorized administrators receive complete unmasked records
+        return {
+          ...f,
+          display_name: f.occupant_name || 'Vacant / Unassigned',
+          current_month_status: currentMonthStatus
+        };
+      }
+
+      // Public visitors receive privacy-conscious masked display names and zero contact numbers
       return {
-        ...f,
-        current_month_status: ob ? ob.status : (f.is_billing_active ? 'UNPAID' : 'EXEMPT')
+        id: f.id,
+        building_id: f.building_id,
+        flat_number: f.flat_number,
+        label: f.label,
+        occupant_type: f.occupant_type,
+        display_name: maskHouseholdName(f.occupant_name),
+        is_billing_active: f.is_billing_active,
+        monthly_levy_amount: f.monthly_levy_amount,
+        status: f.status,
+        current_month_status: currentMonthStatus
       };
     });
 
@@ -244,7 +322,8 @@ securityLevyRouter.post('/buildings/:buildingId/flats', requireSecurityAdmin, as
       occupant_phone,
       occupant_email,
       is_billing_active,
-      monthly_levy_amount
+      monthly_levy_amount,
+      status
     } = req.body;
 
     if (!flat_number || typeof flat_number !== 'string' || !flat_number.trim()) {
@@ -260,16 +339,16 @@ securityLevyRouter.post('/buildings/:buildingId/flats', requireSecurityAdmin, as
     const flat = await serverDb.saveFlat({
       building_id: buildingId,
       flat_number: cleanFlatNum,
-      label: label || null,
+      label: label?.trim() || null,
       occupant_type: occupant_type || 'VACANT',
       resident_id: resident_id || null,
-      occupant_name: occupant_name || null,
-      occupant_phone: occupant_phone || null,
-      occupant_email: occupant_email || null,
+      occupant_name: occupant_name?.trim() || null,
+      occupant_phone: occupant_phone?.trim() || null,
+      occupant_email: occupant_email?.trim() || null,
       is_billing_active: Boolean(is_billing_active),
       billing_activated_by: is_billing_active ? adminUser.email : null,
       monthly_levy_amount: 1500.00, // Approved rate
-      status: 'ACTIVE'
+      status: status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE'
     });
 
     await serverDb.logEstateAudit({
@@ -288,7 +367,7 @@ securityLevyRouter.post('/buildings/:buildingId/flats', requireSecurityAdmin, as
     });
   } catch (error: any) {
     console.error('Error creating flat:', error);
-    return res.status(500).json({ success: false, message: 'Failed to create flat.' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to create flat.' });
   }
 });
 
@@ -306,6 +385,19 @@ securityLevyRouter.put('/flats/:id', requireSecurityAdmin, async (req: Request, 
     delete updates.id;
     delete updates.building_id;
     delete updates.created_at;
+
+    // Check duplicate flat number within the same building if renaming
+    if (updates.flat_number !== undefined) {
+      const cleanFlatNum = String(updates.flat_number).trim();
+      if (!cleanFlatNum) {
+        return res.status(400).json({ success: false, message: 'Flat identifier cannot be empty.' });
+      }
+      const existingFlats = await serverDb.getFlats(existing.building_id);
+      if (existingFlats.some(f => f.id !== id && f.flat_number.toLowerCase() === cleanFlatNum.toLowerCase() && f.status !== 'ARCHIVED')) {
+        return res.status(409).json({ success: false, message: `Flat "${cleanFlatNum}" already exists in this building.` });
+      }
+      updates.flat_number = cleanFlatNum;
+    }
 
     if (updates.is_billing_active === true && !existing.is_billing_active) {
       updates.billing_activated_by = adminUser.email;
@@ -329,7 +421,7 @@ securityLevyRouter.put('/flats/:id', requireSecurityAdmin, async (req: Request, 
     });
   } catch (error: any) {
     console.error('Error updating flat:', error);
-    return res.status(500).json({ success: false, message: 'Failed to update flat.' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to update flat.' });
   }
 });
 

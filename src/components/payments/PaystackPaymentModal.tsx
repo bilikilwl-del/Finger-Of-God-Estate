@@ -77,7 +77,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   const [loading, setLoading] = useState(false);
 
   const periodLabel = `${new Date(targetYear, targetMonth - 1).toLocaleString('default', { month: 'long' })} ${targetYear}`;
-  const levyAmount = estateSettings?.monthly_security_levy || 5000;
+  const levyAmount = estateSettings?.monthly_security_levy || 1500;
 
   // Initialize Paystack configuration on open
   useEffect(() => {
@@ -228,7 +228,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         const handler = (window as any).PaystackPop.setup({
           key: paystackConfig.publicKey,
           email: selectedResident.email || `resident.${selectedResident.resident_number}@fingerofgodestate.ng`,
-          amount: 500000, // ₦5,000 in kobo
+          amount: (levyAmount || 1500) * 100, // ₦1,500 in kobo
           currency: 'NGN',
           ref: ref,
           metadata: {
@@ -454,7 +454,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                     <div className="p-3 bg-white/80 rounded-xl border border-emerald-200/60 text-xs space-y-1">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Amount Paid:</span>
-                        <span className="font-bold text-slate-900">{formatNaira(existingPayment.amount_paid || 5000)}</span>
+                        <span className="font-bold text-slate-900">{formatNaira(existingPayment.amount_paid || 1500)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Payment Date:</span>
