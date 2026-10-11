@@ -143,7 +143,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const activeResidents = residents.filter(r => r.status === 'Active').length;
   const inactiveResidents = residents.filter(r => r.status === 'Inactive').length;
 
-  const totalExpected = financialSummary?.total_expected ?? (activeResidents * 5000);
+  const totalExpected = financialSummary?.total_expected ?? (activeResidents * (estateSettings?.monthly_security_levy || 1500));
   const totalCollected = financialSummary?.total_collected ?? 0;
   const totalOutstanding = financialSummary?.total_outstanding ?? totalExpected;
   const paidCount = financialSummary?.paid_residents_count ?? 0;
@@ -362,7 +362,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
           <div className="text-2xl font-bold font-mono text-slate-900 mt-2">₦{totalExpected.toLocaleString()}</div>
           <div className="text-[11px] text-slate-500 mt-1">
-            {activeResidents} active × ₦5,000
+            {activeResidents} active × ₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}
           </div>
         </div>
 

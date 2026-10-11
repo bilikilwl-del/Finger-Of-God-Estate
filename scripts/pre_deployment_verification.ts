@@ -13,12 +13,16 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 // Mock Supabase admin methods to ensure zero network writes occur against production
-const mockSupabaseQuery = {
+const mockSupabaseQuery: any = {
   select: () => mockSupabaseQuery,
   order: () => mockSupabaseQuery,
   eq: () => mockSupabaseQuery,
-  upsert: async () => ({ data: null, error: null }),
+  maybeSingle: async () => ({ data: null, error: null }),
+  single: async () => ({ data: null, error: null }),
+  upsert: () => mockSupabaseQuery,
   update: () => mockSupabaseQuery,
+  insert: () => mockSupabaseQuery,
+  then: (resolve: any) => Promise.resolve({ data: null, error: null }).then(resolve),
   rpc: async () => ({ data: null, error: { message: 'MOCK_TEST_ENV' } })
 };
 (supabaseAdmin as any).from = () => mockSupabaseQuery;

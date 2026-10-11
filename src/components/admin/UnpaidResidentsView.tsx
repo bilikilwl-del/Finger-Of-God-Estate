@@ -64,7 +64,7 @@ export const UnpaidResidentsView: React.FC<UnpaidResidentsViewProps> = ({
     return r.reminder_status === reminderFilter;
   });
 
-  const totalOutstanding = filteredResidents.length * 5000;
+  const totalOutstanding = filteredResidents.length * (estateSettings?.monthly_security_levy || 1500);
 
   return (
     <div className="space-y-6">

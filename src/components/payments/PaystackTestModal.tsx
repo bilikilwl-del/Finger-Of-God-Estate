@@ -17,7 +17,7 @@ interface PaystackTestModalProps {
   isOpen: boolean;
   onClose: () => void;
   reference: string;
-  amount: number; // in Naira (5000)
+  amount: number; // in Naira (1500)
   customerEmail: string;
   residentName: string;
   residentNumber: string;
@@ -191,7 +191,7 @@ export const PaystackTestModal: React.FC<PaystackTestModalProps> = ({
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-2">
               <span className="text-xs font-bold text-slate-800 block">Paystack Test Bank Transfer</span>
               <p className="text-xs text-slate-600">
-                Transfer ₦5,000 to Paystack Test Account: <span className="font-mono font-bold">0123456789 (Wema Bank)</span>
+                Transfer {formatNaira(amount)} to Paystack Test Account: <span className="font-mono font-bold">0123456789 (Wema Bank)</span>
               </p>
             </div>
           )}
@@ -200,7 +200,7 @@ export const PaystackTestModal: React.FC<PaystackTestModalProps> = ({
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-2">
               <span className="text-xs font-bold text-slate-800 block">Paystack USSD Simulator</span>
               <p className="text-xs font-mono font-bold text-slate-900 bg-white p-2 rounded-lg border border-slate-200">
-                *737*000*5000#
+                *737*000*{Math.round(amount)}#
               </p>
             </div>
           )}

@@ -202,7 +202,89 @@ INITIAL_SERVER_RESIDENTS.forEach(r => residentsStore.set(r.resident_number, r));
  * 3. Inactive/Suspended account -> 403 Forbidden
  * 4. Target resident number mismatch (cross-access) -> 403 Forbidden
  * 5. Returns authenticated resident record upon success
+/**
+ * Safely resolves resident from an authorization token without rejecting the HTTP request.
+ * Returns null if token is missing, invalid, or expired.
  */
+export async function resolveResidentFromToken(token?: string | null): Promise<ServerResidentRecord | null> {
+  if (!token || typeof token !== 'string') return null;
+  const cleanToken = token.trim();
+  if (!cleanToken) return null;
+
+  let authResidentNumber: string | null = null;
+  let authUserId: string | null = null;
+  let resident: ServerResidentRecord | null = null;
+
+  // 1. Check persistent/local session store
+  const localSession = residentSessionsStore.get(cleanToken) || serverDb.getResidentSession(cleanToken);
+  if (localSession) {
+    const MAX_SESSION_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+    if (Date.now() - localSession.created_at <= MAX_SESSION_AGE) {
+      authResidentNumber = localSession.resident_number;
+      residentSessionsStore.set(cleanToken, localSession);
+    } else {
+      residentSessionsStore.delete(cleanToken);
+      serverDb.deleteResidentSession(cleanToken);
+    }
+  } else if (cleanToken.startsWith('eyJ')) {
+    // 2. Validate with Supabase Auth JWT
+    try {
+      const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(cleanToken);
+      if (!userErr && user) {
+        authUserId = user.id;
+
+        // 1. Direct authoritative lookup in production Supabase residents table by auth_user_id
+        let resolvedRecord = await serverDb.getResidentByAuthId(user.id);
+
+        // 2. Match by authenticated user email if auth_user_id is not yet linked
+        if (!resolvedRecord && user.email) {
+          const { data: emailRes } = await supabaseAdmin
+            .from('residents')
+            .select('*')
+            .eq('email', user.email.toLowerCase())
+            .maybeSingle();
+
+          if (emailRes) {
+            resolvedRecord = {
+              ...emailRes,
+              resident_number: String(emailRes.resident_number).trim().padStart(3, '0')
+            };
+          }
+        }
+
+        // 3. Fallback: Check user metadata resident number
+        if (!resolvedRecord && user.user_metadata?.resident_number) {
+          const metaNum = normalizeResidentNumber(user.user_metadata.resident_number);
+          resolvedRecord = await serverDb.getResidentByNumber(metaNum);
+        }
+
+        if (resolvedRecord) {
+          authResidentNumber = normalizeResidentNumber(resolvedRecord.resident_number);
+          resident = resolvedRecord as ServerResidentRecord;
+          residentsStore.set(authResidentNumber, resident);
+        }
+      }
+    } catch {}
+  }
+
+  if (authResidentNumber) {
+    const cleanAuthNum = normalizeResidentNumber(authResidentNumber);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanAuthNum);
+      if (!resident) {
+        resident = residentsStore.get(cleanAuthNum) || null;
+      } else {
+        residentsStore.set(cleanAuthNum, resident);
+      }
+    }
+    if (resident && authUserId && !resident.auth_user_id) {
+      resident.auth_user_id = authUserId;
+    }
+    return resident;
+  }
+  return null;
+}
+
 export async function requireAuthenticatedResident(
   req: Request,
   res: Response,
@@ -520,7 +602,7 @@ const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
     publish_at: '2026-09-20T09:00:00.000Z',
     expires_at: null,
     author_name: 'Finance Committee',
-    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦1,500, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
     created_at: '2026-09-20T09:00:00.000Z',
     updated_at: '2026-09-20T09:00:00.000Z'
   },
@@ -644,17 +726,19 @@ function isPaystackConfigured(category: 'security' | 'estate' = 'security'): boo
 // -------------------------------------------------------------
 // 1. PAYSTACK CONFIGURATION ENDPOINTS (SAFE FOR CLIENT)
 // -------------------------------------------------------------
-app.get('/api/paystack/config', (req: Request, res: Response) => {
+app.get('/api/paystack/config', async (req: Request, res: Response) => {
   const paymentType = (req.query.type as string) || (req.query.category as string) || 'security_levy';
   try {
     const config = resolvePaystackAccount(paymentType);
+    const settings = await serverDb.getSettings();
+    const levy = settings.monthly_security_levy || 1500;
     res.json({
       publicKey: config.publicKey,
       accountCategory: config.accountCategory,
       isConfigured: config.isConfigured,
       mode: config.isLive ? 'live' : 'test',
       currency: 'NGN',
-      levyAmount: 5000,
+      levyAmount: levy,
       estateName: 'Finger of God Estate Security Management',
       firstPaymentMonth: 'October 2026'
     });
@@ -694,8 +778,33 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
     const periodYear = parseInt(String(req.query.periodYear || 2026), 10);
 
     // Authoritative Server-side Authentication & Resolution
-    const resident = await requireAuthenticatedResident(req, res, residentNum);
-    if (!resident) return;
+    let resident: ServerResidentRecord | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      resident = await resolveResidentFromToken(token);
+    }
+
+    // Gracefully fallback to resident number lookup if token is missing, expired, or for public lookup
+    if (!resident && residentNum) {
+      resident = await serverDb.getResidentByNumber(residentNum);
+      if (!resident) {
+        resident = residentsStore.get(residentNum) || null;
+      }
+    }
+
+    if (!resident) {
+      if (residentNum) {
+        return res.status(404).json({
+          success: false,
+          message: 'We could not find your estate resident account. Please contact the estate administrator.'
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message: 'Resident number parameter is required.'
+      });
+    }
 
     const formattedResidentNumber = resident.resident_number;
     const paymentKey = `${formattedResidentNumber}_${periodMonth}_${periodYear}`;
@@ -725,7 +834,7 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
         status: payment.status
       } : null,
       receipt: receipt || null,
-      levyAmount: settings.monthly_security_levy || 5000
+      levyAmount: settings.monthly_security_levy || 1500
     });
   } catch (err: any) {
     console.error('[Resident Payment Status Error]', err);
@@ -750,11 +859,50 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     }
 
     // 1. Authoritative Server-side Authentication & Resolution
-    const resident = await requireAuthenticatedResident(req, res, residentNumber);
-    if (!resident) return; // Error response already sent (401 or 403)
+    let resident: ServerResidentRecord | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      const authRes = await resolveResidentFromToken(token);
+      if (authRes) {
+        if (!residentNumber || normalizeResidentNumber(residentNumber) === authRes.resident_number) {
+          resident = authRes;
+        }
+      }
+    }
+
+    // Fallback: If not authenticated via active session token or token was expired/stale, resolve by residentNumber
+    if (!resident) {
+      if (!residentNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'Resident number is required to initialize payment.'
+        });
+      }
+
+      const cleanNum = normalizeResidentNumber(String(residentNumber));
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (!resident) {
+        resident = residentsStore.get(cleanNum) || null;
+      }
+
+      if (!resident) {
+        return res.status(404).json({
+          success: false,
+          message: 'We could not find your estate resident account. Please contact the estate administrator.'
+        });
+      }
+
+      if (resident.status !== 'Active') {
+        return res.status(403).json({
+          success: false,
+          message: 'This resident account is currently inactive. Please contact estate administration.'
+        });
+      }
+    }
 
     const formattedResidentNumber = resident.resident_number;
-    const authUserId = resident.auth_user_id || 'auth-linked';
+    const authUserId = resident.auth_user_id || 'public-payer';
 
     // SERVER ONLY Diagnostic Logging (Req 14)
     console.log(`[Payment Init] Authenticated user ID: ${authUserId}, Resolved resident ID: ${resident.id}, Resolved resident number: ${formattedResidentNumber}, Account: ${accountConfig.accountCategory.toUpperCase()}, Lookup result: FOUND (Active)`);
@@ -780,8 +928,8 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
 
     // 3. Authoritative Security Levy Amount Determination (Req 11)
     const settings = await serverDb.getSettings();
-    const LEVY_AMOUNT_NAIRA = settings.monthly_security_levy || 5000;
-    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // in kobo
+    const LEVY_AMOUNT_NAIRA = settings.monthly_security_levy || 1500;
+    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // in kobo (150,000 kobo for ₦1,500)
 
     // 4. Secure Unique Reference Generation (Category prefix: SECURITY-)
     const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -979,7 +1127,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
     let paystackTxId = `sim_${Date.now()}`;
     let paystackChannel = 'card';
     let gatewayResponse = 'Approved';
-    let paidAmountKobo = 500000;
+    let paidAmountKobo = 150000;
 
     // REAL SERVER-SIDE PAYSTACK VERIFICATION
     if (isConfigured) {
@@ -2952,7 +3100,10 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
     const resident = await requireAuthenticatedResident(req, res, cleanNum);
     if (!resident) return; // Response has already been sent
 
-    // Official billing schedule starting October 2026 (₦5,000 / month)
+    // Official billing schedule starting October 2026
+    const settings = await serverDb.getSettings();
+    const currentLevy = settings.monthly_security_levy || 1500;
+
     const billingSchedule = [
       { month: 10, year: 2026, label: 'October 2026', due_date: '2026-10-01' },
       { month: 11, year: 2026, label: 'November 2026', due_date: '2026-11-01' },
@@ -2978,7 +3129,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
           period_month: cycle.month,
           period_year: cycle.year,
           period_label: cycle.label,
-          amount_due: 5000,
+          amount_due: currentLevy,
           amount_paid: 0,
           status: 'UNPAID',
           due_date: cycle.due_date,
@@ -2991,7 +3142,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
       }
 
       if (p.status === 'PAID') {
-        totalPaid += (p.amount_paid || 5000);
+        totalPaid += (p.amount_paid || currentLevy);
         monthsPaid++;
       }
 
@@ -3015,7 +3166,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
     // Outstanding Levies: Legitimate billing months that are UNPAID
     const outstandingLevies = residentPayments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
     const monthsOutstanding = outstandingLevies.length;
-    const totalOutstanding = monthsOutstanding * 5000;
+    const totalOutstanding = monthsOutstanding * currentLevy;
 
     return res.json({
       success: true,
@@ -3043,7 +3194,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
         totalOutstanding,
         monthsPaid,
         monthsOutstanding,
-        levyAmount: 5000
+        levyAmount: currentLevy
       },
       currentMonthPayment,
       outstandingLevies,
@@ -3266,7 +3417,7 @@ app.get('/api/payments/all', (_req: Request, res: Response) => {
 // =============================================================
 
 // 1. MONTHLY FINANCIAL SUMMARY (STRICT VERIFIED DATA ONLY)
-app.get('/api/admin/financial-summary', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/financial-summary', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -3276,15 +3427,17 @@ app.get('/api/admin/financial-summary', requireAdminAuth, (req: Request, res: Re
     ];
     const period_label = `${MONTH_NAMES[month - 1] || 'October'} ${year}`;
 
+    const settings = await serverDb.getSettings();
+    const monthly_levy = settings.monthly_security_levy || 1500;
+
     const residents = Array.from(residentsStore.values());
     const total_residents = residents.length;
     const activeResidents = residents.filter(r => r.status === 'Active');
     const inactiveResidents = residents.filter(r => r.status === 'Inactive');
     const total_active_residents = activeResidents.length;
     const total_inactive_residents = inactiveResidents.length;
-    const monthly_levy = 5000;
 
-    // RULE: Expected = Eligible Active Residents × Monthly Levy (₦5,000)
+    // RULE: Expected = Eligible Active Residents × Monthly Levy
     // Inactive residents are explicitly excluded from expected levy
     const total_expected = total_active_residents * monthly_levy;
 
@@ -3297,7 +3450,7 @@ app.get('/api/admin/financial-summary', requireAdminAuth, (req: Request, res: Re
       const payment = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
       if (payment && payment.status === 'PAID') {
         paid_residents_count++;
-        total_collected += (payment.amount_paid || 5000);
+        total_collected += (payment.amount_paid || monthly_levy);
       }
     }
 
@@ -3337,7 +3490,7 @@ app.get('/api/admin/financial-summary', requireAdminAuth, (req: Request, res: Re
 });
 
 // 2. HISTORICAL COLLECTION RECORD
-app.get('/api/admin/collection-history', requireAdminAuth, (_req: Request, res: Response) => {
+app.get('/api/admin/collection-history', requireAdminAuth, async (_req: Request, res: Response) => {
   try {
     const billingCycles = [
       { month: 10, year: 2026, label: 'October 2026' },
@@ -3346,10 +3499,12 @@ app.get('/api/admin/collection-history', requireAdminAuth, (_req: Request, res: 
       { month: 1, year: 2027, label: 'January 2027' }
     ];
 
+    const settings = await serverDb.getSettings();
+    const monthlyLevy = settings.monthly_security_levy || 1500;
+
     const residents = Array.from(residentsStore.values());
     const activeResidents = residents.filter(r => r.status === 'Active');
     const eligibleCount = activeResidents.length;
-    const monthlyLevy = 5000;
     const expectedPerMonth = eligibleCount * monthlyLevy;
 
     const history = billingCycles.map(c => {
@@ -3361,7 +3516,7 @@ app.get('/api/admin/collection-history', requireAdminAuth, (_req: Request, res: 
         const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${c.month}-${c.year}`);
         if (p && p.status === 'PAID') {
           paidCount++;
-          collectedAmount += (p.amount_paid || 5000);
+          collectedAmount += (p.amount_paid || monthlyLevy);
         }
       }
 
@@ -3443,11 +3598,14 @@ app.get('/api/admin/paid-residents', requireAdminAuth, (req: Request, res: Respo
 });
 
 // 4. UNPAID RESIDENTS PAGE / ENDPOINT
-app.get('/api/admin/unpaid-residents', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/unpaid-residents', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
     const search = String(req.query.q || '').trim().toLowerCase();
+
+    const settings = await serverDb.getSettings();
+    const amountDue = settings.monthly_security_levy || 1500;
 
     const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
     const smsLogs = Array.from(smsLogsStore.values()).filter(s => s.payment_month === month && s.payment_year === year);
@@ -3470,7 +3628,7 @@ app.get('/api/admin/unpaid-residents', requireAdminAuth, (req: Request, res: Res
           resident_name: resident.full_name,
           house_number: resident.house_number,
           phone_number: resident.phone_number,
-          amount_due: 5000,
+          amount_due: amountDue,
           payment_status: p ? p.status : 'UNPAID',
           reminder_status,
           last_reminder_date: lastLog ? (lastLog.sent_at || lastLog.created_at) : null
@@ -3496,11 +3654,14 @@ app.get('/api/admin/unpaid-residents', requireAdminAuth, (req: Request, res: Res
 });
 
 // 5. OUTSTANDING PAYMENTS PAGE / ENDPOINT
-app.get('/api/admin/outstanding-payments', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/outstanding-payments', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
     const search = String(req.query.q || '').trim().toLowerCase();
+
+    const settings = await serverDb.getSettings();
+    const amountDue = settings.monthly_security_levy || 1500;
 
     const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
     const MONTH_NAMES = [
@@ -3513,8 +3674,7 @@ app.get('/api/admin/outstanding-payments', requireAdminAuth, (req: Request, res:
     for (const resident of activeResidents) {
       const key = `${resident.resident_number}_${month}_${year}`;
       const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
-      const amountDue = 5000;
-      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || 5000) : 0;
+      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || amountDue) : 0;
       const outstandingAmount = Math.max(0, amountDue - amountPaid);
       const status = (p && p.status === 'PAID') ? 'PAID' : (p ? p.status : 'UNPAID');
 
@@ -3631,7 +3791,7 @@ app.get('/api/admin/global-payment-search', requireAdminAuth, (req: Request, res
 });
 
 // 7. FINANCIAL REPORTS ENDPOINT (WITH CSV EXPORT SUPPORT)
-app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/reports/:reportType', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const { reportType } = req.params;
     const month = parseInt(String(req.query.month || '10'), 10);
@@ -3639,6 +3799,9 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
     const startDate = req.query.startDate ? String(req.query.startDate) : null;
     const endDate = req.query.endDate ? String(req.query.endDate) : null;
     const format = String(req.query.format || 'json').toLowerCase();
+
+    const settings = await serverDb.getSettings();
+    const currentLevy = settings.monthly_security_levy || 1500;
 
     const residents = Array.from(residentsStore.values());
     const activeResidents = residents.filter(r => r.status === 'Active');
@@ -3660,7 +3823,7 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
     switch (reportType) {
       case 'monthly_collection': {
         const eligible = activeResidents.length;
-        const expected = eligible * 5000;
+        const expected = eligible * currentLevy;
         let paid = 0;
         let collected = 0;
 
@@ -3669,7 +3832,7 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
           const p = paymentsStore.get(key) || paymentsStore.get(`${res.resident_number}-${month}-${year}`);
           if (p && p.status === 'PAID') {
             paid++;
-            collected += (p.amount_paid || 5000);
+            collected += (p.amount_paid || currentLevy);
           }
         }
         const unpaid = Math.max(0, eligible - paid);
@@ -3717,7 +3880,7 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
               house_number: res.house_number,
               phone_number: res.phone_number,
               period_label,
-              amount_due: 5000,
+              amount_due: currentLevy,
               status: p ? p.status : 'UNPAID'
             });
             csvRows.push([
@@ -3726,7 +3889,7 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
               res.house_number,
               res.phone_number,
               period_label,
-              '5000',
+              String(currentLevy),
               p ? p.status : 'UNPAID'
             ]);
           }
@@ -3750,8 +3913,8 @@ app.get('/api/admin/reports/:reportType', requireAdminAuth, (req: Request, res: 
             resident_name: res.full_name,
             house_number: res.house_number,
             period_label,
-            amount_due: 5000,
-            amount_paid: isPaid ? (p.amount_paid || 5000) : 0,
+            amount_due: currentLevy,
+            amount_paid: isPaid ? (p.amount_paid || currentLevy) : 0,
             status: isPaid ? 'PAID' : (p ? p.status : 'UNPAID'),
             payment_date: isPaid ? (p.paid_at || p.created_at) : '—',
             payment_reference: isPaid ? (p.paystack_reference || 'FOGES-PAID') : '—',
@@ -4024,11 +4187,11 @@ function getLagosTime(): {
 }
 
 // Helper: Templates
-function buildReminder1Text(residentName: string, residentNumber: string, periodLabel: string = 'October 2026', amount: number = 5000): string {
+function buildReminder1Text(residentName: string, residentNumber: string, periodLabel: string = 'October 2026', amount: number = 1500): string {
   return `Dear ${residentName.trim()}, your Finger of God Estate security levy of ₦${amount.toLocaleString()} for ${periodLabel} is due. Please make payment through the Finger of God Estate Security Management website. Resident No: ${residentNumber}.`;
 }
 
-function buildReminder2Text(residentName: string, residentNumber: string, periodLabel: string = 'October 2026', amount: number = 5000): string {
+function buildReminder2Text(residentName: string, residentNumber: string, periodLabel: string = 'October 2026', amount: number = 1500): string {
   return `Dear ${residentName.trim()}, this is a second reminder that your Finger of God Estate security levy of ₦${amount.toLocaleString()} for ${periodLabel} remains unpaid. Please make payment through the estate payment portal. Resident No: ${residentNumber}.`;
 }
 
@@ -4311,9 +4474,11 @@ async function runAutomatedSmsJob(targetMonth?: number, targetYear?: number): Pr
       }
 
       // 4. BUILD MESSAGE TEMPLATE
+      const settings = await serverDb.getSettings();
+      const currentLevy = settings.monthly_security_levy || 1500;
       const messageBody = reminderToDispatch === 'REMINDER_1'
-        ? buildReminder1Text(res.full_name, res.resident_number, periodLabel, 5000)
-        : buildReminder2Text(res.full_name, res.resident_number, periodLabel, 5000);
+        ? buildReminder1Text(res.full_name, res.resident_number, periodLabel, currentLevy)
+        : buildReminder2Text(res.full_name, res.resident_number, periodLabel, currentLevy);
 
       // 5. DISPATCH VIA PROVIDER
       const dispatchResult = await dispatchSms(res.phone_number, messageBody, reminderToDispatch);
@@ -4774,7 +4939,7 @@ app.get('/api/admin/sms/test-history', requireAdminAuth, (_req: Request, res: Re
 });
 
 // 4. Generate Outstanding Security Levy SMS Drafts (Review & Approval Only - NEVER Auto-sends)
-app.get('/api/admin/sms/outstanding-drafts', requireAdminAuth, (req: Request, res: Response) => {
+app.get('/api/admin/sms/outstanding-drafts', requireAdminAuth, async (req: Request, res: Response) => {
   try {
     const month = parseInt(String(req.query.month || '10'), 10);
     const year = parseInt(String(req.query.year || '2026'), 10);
@@ -4787,16 +4952,17 @@ app.get('/api/admin/sms/outstanding-drafts', requireAdminAuth, (req: Request, re
     const activeResidents = Array.from(residentsStore.values()).filter(r => r.status === 'Active');
     const smsLogs = Array.from(smsLogsStore.values()).filter(s => s.payment_month === month && s.payment_year === year);
 
-    const drafts = [];
-    const amountDue = 5000; // Monthly Security Levy standard
+    const settings = await serverDb.getSettings();
+    const amountDue = settings.monthly_security_levy || 1500; // Monthly Security Levy standard
 
+    const drafts: any[] = [];
     for (const resident of activeResidents) {
       const key = `${resident.resident_number}_${month}_${year}`;
       const p = paymentsStore.get(key) || paymentsStore.get(`${resident.resident_number}-${month}-${year}`);
       
       // Crucial: Only confirmed 'PAID' payments reduce the balance!
       // Pending, Failed, Cancelled, Abandoned do NOT count as paid.
-      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || 5000) : 0;
+      const amountPaid = (p && p.status === 'PAID') ? (p.amount_paid || amountDue) : 0;
       const outstandingAmount = Math.max(0, amountDue - amountPaid);
 
       // Strictly security levy only (NO road modernization contributions)

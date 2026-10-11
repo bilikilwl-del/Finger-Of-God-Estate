@@ -365,7 +365,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
               <p className="font-bold text-slate-900">Can I pay in advance for multiple months or a full year?</p>
               <p className="leading-relaxed">
-                Yes! Residents can pay for single months, quarterly (₦15,000), bi-annually (₦30,000), or annually (₦60,000) directly through the portal.
+                Yes! Residents can pay for single months (₦1,500), quarterly (₦4,500), bi-annually (₦9,000), or annually (₦18,000) directly through the portal.
               </p>
             </div>
 

@@ -100,7 +100,7 @@ export const RunRemindersModal: React.FC<RunRemindersModalProps> = ({
             </div>
             <ul className="list-disc pl-5 space-y-1 text-slate-600">
               <li>
-                <strong className="text-slate-800">Payment Due:</strong> 1st of the month (₦5,000 security levy).
+                <strong className="text-slate-800">Payment Due:</strong> 1st of the month (₦1,500 security levy).
               </li>
               <li>
                 <strong className="text-slate-800">Reminder 1:</strong> 5 days after payment due date (6th of month).

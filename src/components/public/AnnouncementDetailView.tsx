@@ -255,7 +255,7 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
                   Estate Security Levy Payment
                 </div>
                 <div className="text-base font-bold">
-                  Clear your ₦{(estateSettings.monthly_security_levy || 5000).toLocaleString()} security levy online
+                  Clear your ₦{(estateSettings.monthly_security_levy || 1500).toLocaleString()} security levy online
                 </div>
                 <div className="text-xs text-slate-300">
                   Pay securely with automated receipting via Paystack.

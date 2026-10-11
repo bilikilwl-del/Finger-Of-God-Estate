@@ -155,12 +155,12 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         return;
       }
 
-      // 5. Resident truly not found or unauthenticated
-      setErrorMessage(
-        statusRes.message ||
-        pubLookup.message ||
-        'We could not find your estate resident account. Please contact the estate administrator.'
-      );
+      // 5. Resident truly not found
+      const rawMsg = statusRes.message || pubLookup.message || '';
+      const displayMsg = (rawMsg && !rawMsg.toLowerCase().includes('session') && !rawMsg.toLowerCase().includes('unauthorized') && !rawMsg.toLowerCase().includes('expired'))
+        ? rawMsg
+        : 'We could not find your estate resident account. Please check the resident number or contact the estate administrator.';
+      setErrorMessage(displayMsg);
       setSelectedResident(null);
       setStep('input_resident');
     } catch (err: any) {
@@ -199,14 +199,6 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
 
     setStep('initializing');
     setErrorMessage(null);
-
-    // 1. Authoritative check: verify valid access token exists BEFORE calling backend
-    const currentToken = await getResidentAccessToken();
-    if (!currentToken) {
-      setErrorMessage('Your session has expired. Please sign in again to continue with payment.');
-      setStep('verify_resident');
-      return;
-    }
 
     try {
       const initResult = await initializePayment({
@@ -253,16 +245,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
       }
     } catch (err: any) {
       const msg = err.message || '';
-      if (
-        msg.toLowerCase().includes('unauthorized') || 
-        msg.toLowerCase().includes('expired') || 
-        msg.toLowerCase().includes('token') || 
-        msg.toLowerCase().includes('sign in')
-      ) {
-        setErrorMessage('Your session has expired. Please sign in again to continue with payment.');
-      } else {
-        setErrorMessage(msg || 'Payment initialization failed.');
-      }
+      setErrorMessage(msg || 'Payment initialization failed.');
       setStep('verify_resident');
     }
   };
@@ -548,7 +531,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                 <div className="space-y-1">
                   <h4 className="text-sm font-bold text-slate-900">Verifying Payment Server-Side</h4>
                   <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                    Contacting Paystack directly with server key to verify amount (₦5,000), currency, and transaction status...
+                    Contacting Paystack directly with server key to verify amount ({formatNaira(levyAmount)}), currency, and transaction status...
                   </p>
                 </div>
               </div>

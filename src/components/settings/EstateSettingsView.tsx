@@ -280,7 +280,7 @@ export const EstateSettingsView: React.FC<EstateSettingsViewProps> = ({
                   className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-300 text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">Default rate: ₦5,000 / month</p>
+              <p className="text-[11px] text-slate-500 mt-1">Default rate: ₦1,500 / month</p>
             </div>
 
             <div>

@@ -59,7 +59,7 @@ export async function getPaystackConfig(type: 'security_levy' | 'road_contributi
       isConfigured: false,
       mode: 'test',
       currency: 'NGN',
-      levyAmount: 5000,
+      levyAmount: 1500,
       accountCategory: type === 'road_contribution' ? 'estate' : 'security'
     };
   }
@@ -144,15 +144,21 @@ export async function getResidentPaymentStatus(params: {
 }> {
   const headers = await getResidentAuthHeaders();
   const cleanNum = params.residentNumber.trim().padStart(3, '0');
-  const res = await fetch(`/api/paystack/resident-status?residentNumber=${cleanNum}&periodMonth=${params.periodMonth || 10}&periodYear=${params.periodYear || 2026}`, {
+  let res = await fetch(`/api/paystack/resident-status?residentNumber=${cleanNum}&periodMonth=${params.periodMonth || 10}&periodYear=${params.periodYear || 2026}`, {
     headers
   });
+  // If request failed with 401/403 because token was stale or expired, clear stale token and retry without authorization
+  if ((res.status === 401 || res.status === 403) && headers['Authorization']) {
+    residentSessionService.setResidentToken(null);
+    res = await fetch(`/api/paystack/resident-status?residentNumber=${cleanNum}&periodMonth=${params.periodMonth || 10}&periodYear=${params.periodYear || 2026}`);
+  }
   return await res.json();
 }
 
 /**
  * Initialize payment on the server.
- * The server securely looks up resident and determines amount due (₦5,000 = 500,000 kobo).
+ * The server securely looks up resident and determines amount due (₦1,500 = 150,000 kobo).
+ * Public payments do not require authentication or resident access tokens.
  */
 export async function initializePayment(params: {
   residentNumber: string;
@@ -162,16 +168,16 @@ export async function initializePayment(params: {
   paymentType?: 'security_levy' | 'estate_levy';
 }): Promise<InitializePaymentResponse> {
   const token = await getResidentAccessToken();
-  if (!token) {
-    throw new Error('Your session has expired. Please sign in again to continue with payment.');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch('/api/paystack/initialize', {
+  let res = await fetch('/api/paystack/initialize', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
+    headers,
     body: JSON.stringify({
       residentNumber: params.residentNumber,
       periodMonth: params.periodMonth || 10,
@@ -181,10 +187,42 @@ export async function initializePayment(params: {
     })
   });
 
+  // If request failed with 401/403 because token was expired/stale in localStorage, clear stale token and retry without Authorization header
+  if ((res.status === 401 || res.status === 403) && token) {
+    residentSessionService.setResidentToken(null);
+    res = await fetch('/api/paystack/initialize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        residentNumber: params.residentNumber,
+        periodMonth: params.periodMonth || 10,
+        periodYear: params.periodYear || 2026,
+        email: params.email,
+        paymentType: params.paymentType || 'security_levy'
+      })
+    });
+  }
+
   const data = await res.json();
   if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error(data.message || 'Your session has expired. Please sign in again to continue with payment.');
+    // If error indicates an expired session, retry cleanly without authorization
+    if (token && data.message && (data.message.toLowerCase().includes('session') || data.message.toLowerCase().includes('unauthorized') || data.message.toLowerCase().includes('expired'))) {
+      residentSessionService.setResidentToken(null);
+      const retryRes = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: params.residentNumber,
+          periodMonth: params.periodMonth || 10,
+          periodYear: params.periodYear || 2026,
+          email: params.email,
+          paymentType: params.paymentType || 'security_levy'
+        })
+      });
+      const retryData = await retryRes.json();
+      if (retryRes.ok && retryData.success) {
+        return retryData;
+      }
     }
     throw new Error(data.message || 'Payment initialization failed.');
   }

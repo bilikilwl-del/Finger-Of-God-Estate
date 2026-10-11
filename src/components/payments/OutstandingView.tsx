@@ -37,7 +37,7 @@ export const OutstandingView: React.FC<OutstandingViewProps> = ({
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [payingResident, setPayingResident] = useState<Resident | null>(null);
 
-  const LEVY_AMOUNT = estateSettings?.monthly_security_levy || 5000;
+  const LEVY_AMOUNT = estateSettings?.monthly_security_levy || 1500;
   const periodLabel = `${new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} ${selectedYear}`;
 
   const loadDefaulters = async () => {
@@ -98,7 +98,7 @@ export const OutstandingView: React.FC<OutstandingViewProps> = ({
             Outstanding Security Levies
           </h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            Identify residents who have not settled the monthly security levy of ₦5,000.
+            Identify residents who have not settled the monthly security levy of {formatNaira(LEVY_AMOUNT)}.
           </p>
         </div>
 
@@ -136,7 +136,7 @@ export const OutstandingView: React.FC<OutstandingViewProps> = ({
           <div className="text-2xl font-black text-rose-600 font-display">
             {formatNaira(totalOutstandingAmount)}
           </div>
-          <p className="text-[11px] text-slate-500">₦5,000 per unpaid resident</p>
+          <p className="text-[11px] text-slate-500">{formatNaira(LEVY_AMOUNT)} per unpaid resident</p>
         </div>
 
         <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-1">

@@ -263,7 +263,7 @@ class EmailService {
           <p style="margin: 0; font-size: 13px;"><strong>Assigned Residence:</strong> ${data.houseNumber}</p>
         </div>
         <p style="font-size: 13px; color: #475569; line-height: 1.6;">
-          You can use your Resident Number and registered phone number to activate your portal account, pay the monthly ₦5,000 security levy, download verified receipts, and request visitor gate passes.
+          You can use your Resident Number and registered phone number to activate your portal account, pay the monthly ₦1,500 security levy, download verified receipts, and request visitor gate passes.
         </p>
         <div style="text-align: center; margin: 24px 0;">
           <a href="${data.portalUrl}" style="background: #047857; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; font-size: 13px; display: inline-block;">

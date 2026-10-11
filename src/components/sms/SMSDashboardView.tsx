@@ -171,7 +171,7 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
                 SMS Reminders & Automated Notifications
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Automated monthly estate security levy reminders (₦5,000 / month · Africa/Lagos Timezone)
+                Automated monthly estate security levy reminders (₦1,500 / month · Africa/Lagos Timezone)
               </p>
             </div>
           </div>
@@ -273,7 +273,7 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <h3 className="font-semibold text-xs uppercase tracking-wider text-slate-300">
-              Automated Monthly Levy Reminder Rules (₦5,000 / month)
+              Automated Monthly Levy Reminder Rules (₦1,500 / month)
             </h3>
           </div>
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md">
@@ -287,7 +287,7 @@ export const SMSDashboardView: React.FC<SMSDashboardViewProps> = ({
             <div className="text-[11px] text-slate-400 font-semibold uppercase">Step 1 · Due Date</div>
             <div className="text-slate-100 font-bold text-sm">1st of Month</div>
             <p className="text-slate-400 text-[11px] leading-relaxed">
-              ₦5,000 security levy becomes due for all active residents.
+              ₦1,500 security levy becomes due for all active residents.
             </p>
           </div>
 

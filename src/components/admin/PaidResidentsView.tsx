@@ -163,7 +163,7 @@ export const PaidResidentsView: React.FC<PaidResidentsViewProps> = ({
           </div>
           <div className="bg-blue-50/50 border border-blue-100/80 rounded-xl p-3.5">
             <span className="text-xs font-medium text-blue-800">Standard Levy Per Resident</span>
-            <div className="text-2xl font-bold font-mono text-blue-700 mt-1">₦5,000</div>
+            <div className="text-2xl font-bold font-mono text-blue-700 mt-1">₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}</div>
           </div>
         </div>
       </div>

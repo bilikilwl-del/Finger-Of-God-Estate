@@ -878,7 +878,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         Amount Due
                       </span>
                       <span className="text-xl sm:text-2xl font-black font-display">
-                        ₦5,000
+                        ₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}
                       </span>
                     </div>
 
@@ -944,7 +944,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                       className="w-full md:w-auto px-8 py-4 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer ring-4 ring-emerald-600/30"
                     >
                       <CreditCard className="w-5 h-5" />
-                      <span>PAY ₦5,000</span>
+                      <span>PAY ₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}</span>
                     </button>
                   )}
                 </div>
@@ -992,7 +992,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">
-                          Security levy fee: <span className="font-bold text-slate-800">₦5,000</span> • Due 1st of month
+                          Security levy fee: <span className="font-bold text-slate-800">₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}</span> • Due 1st of month
                         </p>
                       </div>
 
@@ -1166,7 +1166,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                             {item.period_label}
                           </td>
                           <td className="py-4 px-4 font-semibold text-slate-700">
-                            {formatNaira(item.amount_due || 5000)}
+                            {formatNaira(item.amount_due || (estateSettings?.monthly_security_levy || 1500))}
                           </td>
                           <td className="py-4 px-4 font-bold text-slate-900">
                             {formatNaira(item.amount_paid || 0)}

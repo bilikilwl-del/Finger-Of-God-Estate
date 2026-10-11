@@ -368,7 +368,7 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
                     </span>
                   </div>
                   <p className="text-xs font-bold text-amber-950">
-                    Security Levy of {formatNaira(estateSettings.monthly_security_levy || 5000)} is due for {estateSettings.first_payment_month}
+                    Security Levy of {formatNaira(estateSettings.monthly_security_levy || 1500)} is due for {estateSettings.first_payment_month}
                   </p>
                   <p className="text-[11px] text-amber-800">
                     Estate security levy covers 24/7 gate security, patrol guards, and perimeter maintenance.

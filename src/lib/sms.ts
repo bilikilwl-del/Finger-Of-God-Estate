@@ -113,7 +113,7 @@ export function buildReminder1Message(
   residentName: string,
   residentNumber: string,
   periodLabel: string = 'October 2026',
-  levyAmount: number = 5000
+  levyAmount: number = 1500
 ): string {
   const formattedLevy = `₦${levyAmount.toLocaleString()}`;
   return `Dear ${residentName.trim()}, your Finger of God Estate security levy of ${formattedLevy} for ${periodLabel} is due. Please make payment through the Finger of God Estate Security Management website. Resident No: ${residentNumber}.`;
@@ -127,7 +127,7 @@ export function buildReminder2Message(
   residentName: string,
   residentNumber: string,
   periodLabel: string = 'October 2026',
-  levyAmount: number = 5000
+  levyAmount: number = 1500
 ): string {
   const formattedLevy = `₦${levyAmount.toLocaleString()}`;
   return `Dear ${residentName.trim()}, this is a second reminder that your Finger of God Estate security levy of ${formattedLevy} for ${periodLabel} remains unpaid. Please make payment through the estate payment portal. Resident No: ${residentNumber}.`;

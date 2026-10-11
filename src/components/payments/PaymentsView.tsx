@@ -193,7 +193,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               Stage 4 Active
             </span>
             <span className="text-xs font-semibold text-slate-500">
-              Paystack Levy Management (₦5,000 / month)
+              Paystack Levy Management (₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()} / month)
             </span>
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight font-display">
@@ -282,7 +282,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               Levy Cycle begins October 2026
             </p>
             <span className="text-[10px] text-emerald-700 block">
-              ₦5,000 flat monthly security levy per resident
+              ₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()} flat monthly security levy per resident
             </span>
           </div>
           <div className="p-2 rounded-xl bg-emerald-200/60 text-emerald-900">

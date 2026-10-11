@@ -971,7 +971,7 @@ const INITIAL_SMS_LOGS_SEED: SMSLog[] = [
     payment_year: 2026,
     period_label: 'October 2026',
     reminder_type: 'REMINDER_1',
-    message: 'Dear Dr. Chioma Nwachukwu, your Finger of God Estate security levy of ₦5,000 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 002.',
+    message: 'Dear Dr. Chioma Nwachukwu, your Finger of God Estate security levy of ₦1,500 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 002.',
     provider: 'termii',
     provider_message_id: 'msg-tm-9834102',
     delivery_status: 'SENT',
@@ -988,7 +988,7 @@ const INITIAL_SMS_LOGS_SEED: SMSLog[] = [
     payment_year: 2026,
     period_label: 'October 2026',
     reminder_type: 'REMINDER_1',
-    message: 'Dear Alhaji Usman Danladi, your Finger of God Estate security levy of ₦5,000 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 003.',
+    message: 'Dear Alhaji Usman Danladi, your Finger of God Estate security levy of ₦1,500 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 003.',
     provider: 'termii',
     provider_message_id: 'msg-tm-9834103',
     delivery_status: 'SENT',
@@ -1120,8 +1120,8 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     attachment_url: 'https://example.com/docs/levy-guidelines.pdf',
     read_by_residents: ['001', '002'],
     view_count: 218,
-    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
-    content: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦5,000, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦1,500, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    content: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack.\n\nThe monthly security levy is ₦1,500, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
     created_at: '2026-09-20T09:00:00.000Z',
     updated_at: '2026-09-20T09:00:00.000Z'
   },
@@ -1233,7 +1233,7 @@ const INITIAL_NOTIFICATIONS_SEED: ResidentNotification[] = [
     id: 'notif-002',
     resident_number: 'ALL',
     title: 'October 2026 Security Levy Billing Activated',
-    message: 'Your monthly security levy of ₦5,000 for October 2026 is ready for payment. Instant verified digital receipt issued upon completion.',
+    message: 'Your monthly security levy of ₦1,500 for October 2026 is ready for payment. Instant verified digital receipt issued upon completion.',
     category: 'Finance',
     priority: 'Important',
     is_read: false,
@@ -2567,7 +2567,7 @@ export const dbService = {
     const activeResidents = (await this.getResidents()).filter(r => r.status === 'Active');
     const totalResidentsCount = activeResidents.length;
 
-    const LEVY_AMOUNT = 5000;
+    const LEVY_AMOUNT = 1500;
     const totalExpected = totalResidentsCount * LEVY_AMOUNT;
 
     const paidPayments = payments.filter(p => p.status === 'PAID');
@@ -3648,7 +3648,7 @@ export const dbService = {
 
     const outstandingLevies = payments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
     const monthsOutstanding = outstandingLevies.length;
-    const totalOutstanding = monthsOutstanding * 5000;
+    const totalOutstanding = monthsOutstanding * 1500;
 
     return {
       resident,
@@ -3659,7 +3659,7 @@ export const dbService = {
         totalOutstanding,
         monthsPaid,
         monthsOutstanding,
-        levyAmount: 5000
+        levyAmount: 1500
       },
       currentMonthPayment: octPayment,
       outstandingLevies,
@@ -3690,12 +3690,12 @@ export const dbService = {
     const residents = await this.getResidents();
     const activeResidents = residents.filter(r => r.status === 'Active');
     const inactiveResidents = residents.filter(r => r.status === 'Inactive');
-    const monthlyLevy = 5000;
+    const monthlyLevy = 1500;
     const totalExpected = activeResidents.length * monthlyLevy;
 
     const payments = await this.getMonthlyPayments();
     const paidForMonth = payments.filter(p => p.period_month === month && p.period_year === year && p.status === 'PAID');
-    const totalCollected = paidForMonth.reduce((acc, curr) => acc + (curr.amount_paid || 5000), 0);
+    const totalCollected = paidForMonth.reduce((acc, curr) => acc + (curr.amount_paid || 1500), 0);
     const paidCount = paidForMonth.length;
     const unpaidCount = Math.max(0, activeResidents.length - paidCount);
     const totalOutstanding = Math.max(0, totalExpected - totalCollected);
@@ -3747,11 +3747,11 @@ export const dbService = {
     const residents = await this.getResidents();
     const active = residents.filter(r => r.status === 'Active');
     const eligibleCount = active.length;
-    const expectedPerMonth = eligibleCount * 5000;
+    const expectedPerMonth = eligibleCount * 1500;
 
     return billingCycles.map(c => {
       const paid = c.month === 10 ? 1 : 0;
-      const collected = paid * 5000;
+      const collected = paid * 1500;
       return {
         period_month: c.month,
         period_year: c.year,
@@ -3824,7 +3824,7 @@ export const dbService = {
         resident_name: r.full_name,
         house_number: r.house_number,
         phone_number: r.phone_number,
-        amount_due: 5000,
+        amount_due: 1500,
         payment_status: 'UNPAID',
         reminder_status: r.resident_number === '002' ? 'REMINDER_1' : 'NONE',
         last_reminder_date: r.resident_number === '002' ? '2026-10-06T09:00:00Z' : null
@@ -3849,9 +3849,9 @@ export const dbService = {
       resident_name: u.resident_name,
       house_number: u.house_number,
       period_label: `${monthName} ${year}`,
-      amount_due: 5000,
+      amount_due: 1500,
       amount_paid: 0,
-      outstanding_amount: 5000,
+      outstanding_amount: 1500,
       status: 'UNPAID'
     }));
   },

@@ -34,7 +34,7 @@ export interface EstateSettings {
   estate_address: string;
   estate_state: string;
   estate_lga: string;
-  monthly_security_levy: number; // Default 5000.00
+  monthly_security_levy: number; // Default 1500.00
   payment_due_day: number; // Default 1
   currency: string; // Default 'NGN' (₦)
   contact_phone: string;
@@ -86,8 +86,8 @@ export interface MonthlyPayment {
   period_month: number; // 1 - 12
   period_year: number; // >= 2026
   period_label: string; // e.g. "October 2026"
-  amount_due: number; // 5000.00
-  amount_paid: number; // 5000.00 when PAID, 0 when UNPAID
+  amount_due: number; // 1500.00
+  amount_paid: number; // 1500.00 when PAID, 0 when UNPAID
   status: PaymentStatus;
   due_date: string;
   paid_at?: string | null;
