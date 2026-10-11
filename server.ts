@@ -5,9 +5,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import cron from 'node-cron';
-import { roadProjectRouter, processVerifiedRoadPaystackEvent } from './src/server/roadProjectServer.ts';
+import { roadProjectRouter, processVerifiedRoadPaystackEvent, closeRoadSseClients } from './src/server/roadProjectServer.ts';
 import { electionRouter } from './src/server/electionServer.ts';
 import { securityLevyRouter, processVerifiedSecurityLevyPaystackEvent } from './src/server/securityLevyServer.ts';
+import { estateLevyRouter, processVerifiedEstateLevyPaystackEvent } from './src/server/estateLevyServer.ts';
 import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDesignatedAdminAccount } from './src/server/database.ts';
 import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual, formatNigerianPhoneForSMS } from './src/lib/phoneUtils.ts';
 import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
@@ -1117,7 +1118,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
 
     // Resolve appropriate account credentials based on reference prefix or payment type
     let accountConfig = resolvePaystackAccount('security_levy');
-    if (cleanRef.startsWith('FOG-RD-') || cleanRef.startsWith('ESTATE-') || req.body.paymentType === 'road_contribution' || req.body.paymentType === 'estate_levy') {
+    if (cleanRef.startsWith('FOG-RD-') || cleanRef.startsWith('EST-LEVY-') || cleanRef.startsWith('ESTATE-') || req.body.paymentType === 'road_contribution' || req.body.paymentType === 'estate_levy') {
       accountConfig = resolvePaystackAccount('estate_levy');
     }
     const secretKey = accountConfig.secretKey;
@@ -1372,12 +1373,29 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
         }
       }
 
-      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from security levies)
+      // Check if this payment belongs to the Monthly Estate Levy (₦1,000 per building)
+      const isEstateLevyPayment =
+        String(reference).startsWith('EST-LEVY-') ||
+        data.metadata?.payment_type === 'monthly_estate_levy' ||
+        data.metadata?.billing_category === 'estate_levy';
+
+      if (isEstateLevyPayment) {
+        console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Building Monthly Estate Levy ledger...`);
+        try {
+          await processVerifiedEstateLevyPaystackEvent(data);
+          return res.sendStatus(200);
+        } catch (err: any) {
+          console.error(`[Paystack Webhook] Estate Levy processing failed for ${reference}:`, err?.message || err);
+          return res.status(500).json({ error: 'Authoritative estate levy ledger processing failed. Retryable.' });
+        }
+      }
+
+      // Check if this payment belongs to the Road Modernization Project (Strictly isolated from estate & security levies)
       const isRoadPayment = 
         String(reference).startsWith('FOG-RD-') ||
         data.metadata?.project_type === 'road_modernization' ||
         data.metadata?.project === 'road_project' ||
-        (matchedAccount === 'estate' && !String(reference).startsWith('FOG-SL-') && !String(reference).startsWith('FOG-SEC-') && data.metadata?.payment_type !== 'flat_security_levy');
+        (matchedAccount === 'estate' && !String(reference).startsWith('FOG-SL-') && !String(reference).startsWith('FOG-SEC-') && !String(reference).startsWith('EST-LEVY-') && data.metadata?.payment_type !== 'flat_security_levy' && data.metadata?.payment_type !== 'monthly_estate_levy');
 
       if (isRoadPayment) {
         console.log(`[Paystack Webhook] Routing verified transaction ${reference} to Road Modernization Project ledger...`);
@@ -6114,6 +6132,11 @@ app.use('/api/election', electionRouter);
 app.use('/api/security-levy', securityLevyRouter);
 
 // -------------------------------------------------------------
+// 6.8. BUILDING-LEVEL MONTHLY ESTATE LEVY API (₦1,000 PER BUILDING)
+// -------------------------------------------------------------
+app.use('/api/estate-levy', estateLevyRouter);
+
+// -------------------------------------------------------------
 // 7. HEALTH CHECK
 // -------------------------------------------------------------
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -6169,12 +6192,54 @@ async function setupApp() {
     });
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
+  const server = app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[FOGES] Server running on http://0.0.0.0:${PORT}`);
   });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[FOGES] Port ${PORT} is already in use by another process. Exiting immediately.`);
+      process.exit(1);
+    }
+    console.error('[FOGES] Server error:', err);
+    process.exit(1);
+  });
+
+  let isShuttingDown = false;
+  const gracefulShutdown = (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`[FOGES] Received ${signal}. Initiating graceful shutdown...`);
+
+    // Stop accepting new incoming HTTP connections
+    server.close((err) => {
+      if (err) {
+        console.error('[FOGES] Error while closing HTTP server:', err);
+        process.exit(1);
+      }
+      console.log('[FOGES] HTTP server closed gracefully.');
+      process.exit(0);
+    });
+
+    // Cleanly close open SSE streams
+    try {
+      closeRoadSseClients();
+    } catch {}
+
+    // Safety timeout: force exit if graceful close hangs past 10 seconds
+    const forceExitTimer = setTimeout(() => {
+      console.warn('[FOGES] Forced shutdown after timeout.');
+      process.exit(0);
+    }, 10000);
+    if (forceExitTimer.unref) forceExitTimer.unref();
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 setupApp().catch((err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+

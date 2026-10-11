@@ -113,8 +113,6 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
   // Feedback message
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const adminToken = localStorage.getItem('fog_admin_token') || 'local_session';
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -124,10 +122,10 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
       const obList = await securityLevyService.getObligations({ billingMonth: selectedMonth });
       setObligations(obList);
 
-      const txList = await securityLevyService.getTransactions(adminToken);
+      const txList = await securityLevyService.getTransactions();
       setTransactions(txList);
 
-      const aLogs = await securityLevyService.getAuditLogs(adminToken);
+      const aLogs = await securityLevyService.getAuditLogs();
       setAuditLogs(aLogs);
     } catch (err) {
       console.error('Error loading building management data:', err);
@@ -169,7 +167,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
 
     try {
       if (selectedBuilding) {
-        const res = await securityLevyService.updateBuilding(selectedBuilding.id, buildingForm, adminToken);
+        const res = await securityLevyService.updateBuilding(selectedBuilding.id, buildingForm);
         if (res.success) {
           setFeedback({ text: 'Building updated successfully.', type: 'success' });
           setIsEditBuildingOpen(false);
@@ -178,7 +176,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
           setFeedback({ text: res.message || 'Failed to update building.', type: 'error' });
         }
       } else {
-        const res = await securityLevyService.createBuilding(buildingForm, adminToken);
+        const res = await securityLevyService.createBuilding(buildingForm);
         if (res.success) {
           setFeedback({ text: `Building ${buildingForm.house_number} created successfully.`, type: 'success' });
           setIsAddBuildingOpen(false);
@@ -206,7 +204,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
       return;
     }
     try {
-      const res = await securityLevyService.archiveBuilding(building.id, adminToken);
+      const res = await securityLevyService.archiveBuilding(building.id);
       if (res.success) {
         setFeedback({ text: `Building ${building.house_number} archived.`, type: 'success' });
         loadData();
@@ -227,7 +225,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
 
     try {
       if (selectedFlat) {
-        const res = await securityLevyService.updateFlat(selectedFlat.id, flatForm, adminToken);
+        const res = await securityLevyService.updateFlat(selectedFlat.id, flatForm);
         if (res.success) {
           setFeedback({ text: 'Flat updated successfully.', type: 'success' });
           setIsEditFlatOpen(false);
@@ -237,7 +235,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
           setFeedback({ text: res.message || 'Failed to update flat.', type: 'error' });
         }
       } else if (targetBuildingIdForFlat) {
-        const res = await securityLevyService.createFlat(targetBuildingIdForFlat, flatForm, adminToken);
+        const res = await securityLevyService.createFlat(targetBuildingIdForFlat, flatForm);
         if (res.success) {
           setFeedback({ text: `Flat ${flatForm.flat_number} registered successfully.`, type: 'success' });
           setIsAddFlatOpen(false);
@@ -265,7 +263,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
   const handleToggleFlatBilling = async (flat: Flat) => {
     try {
       const newActive = !flat.is_billing_active;
-      const res = await securityLevyService.updateFlat(flat.id, { is_billing_active: newActive }, adminToken);
+      const res = await securityLevyService.updateFlat(flat.id, { is_billing_active: newActive });
       if (res.success) {
         setFeedback({
           text: `Flat ${flat.flat_number} billing set to ${newActive ? 'ACTIVE (₦1,500/mo)' : 'INACTIVE'}`,
@@ -284,7 +282,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
       return;
     }
     try {
-      const res = await securityLevyService.generateObligations(selectedMonth, adminToken);
+      const res = await securityLevyService.generateObligations(selectedMonth);
       if (res.success) {
         setFeedback({
           text: `Generated ${res.data?.generated_count || 0} obligations for ${selectedMonth} (${res.data?.skipped_count || 0} already existed).`,
@@ -323,7 +321,7 @@ export const BuildingFlatManagementView: React.FC<BuildingFlatManagementViewProp
         payment_method: manualPaymentMethod,
         bank_reference: manualBankRef.trim() || undefined,
         notes: manualNotes.trim()
-      }, adminToken);
+      });
 
       if (res.success) {
         setFeedback({

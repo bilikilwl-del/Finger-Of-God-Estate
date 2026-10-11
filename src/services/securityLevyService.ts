@@ -8,6 +8,14 @@ import {
   EstateAuditLog
 } from '../types/database';
 
+import { getFreshAdminToken } from '../lib/supabase';
+
+async function resolveAdminToken(token?: string): Promise<string> {
+  if (token && token !== 'local_session') return token;
+  const fresh = await getFreshAdminToken();
+  return fresh || token || '';
+}
+
 export const securityLevyService = {
   // BUILDINGS
   async getBuildings(): Promise<Building[]> {
@@ -16,35 +24,38 @@ export const securityLevyService = {
     return data.success && Array.isArray(data.data) ? data.data : [];
   },
 
-  async createBuilding(buildingData: Partial<Building>, adminToken: string): Promise<{ success: boolean; data?: Building; message?: string }> {
+  async createBuilding(buildingData: Partial<Building>, adminToken?: string): Promise<{ success: boolean; data?: Building; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch('/api/security-levy/buildings', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(buildingData)
     });
     return res.json();
   },
 
-  async updateBuilding(id: string, updates: Partial<Building>, adminToken: string): Promise<{ success: boolean; data?: Building; message?: string }> {
+  async updateBuilding(id: string, updates: Partial<Building>, adminToken?: string): Promise<{ success: boolean; data?: Building; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch(`/api/security-levy/buildings/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(updates)
     });
     return res.json();
   },
 
-  async archiveBuilding(id: string, adminToken: string): Promise<{ success: boolean; message?: string }> {
+  async archiveBuilding(id: string, adminToken?: string): Promise<{ success: boolean; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch(`/api/security-levy/buildings/${id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       }
     });
     return res.json();
@@ -57,35 +68,38 @@ export const securityLevyService = {
     return data.success && Array.isArray(data.data) ? data.data : [];
   },
 
-  async createFlat(buildingId: string, flatData: Partial<Flat>, adminToken: string): Promise<{ success: boolean; data?: Flat; message?: string }> {
+  async createFlat(buildingId: string, flatData: Partial<Flat>, adminToken?: string): Promise<{ success: boolean; data?: Flat; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch(`/api/security-levy/buildings/${buildingId}/flats`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(flatData)
     });
     return res.json();
   },
 
-  async updateFlat(id: string, updates: Partial<Flat>, adminToken: string): Promise<{ success: boolean; data?: Flat; message?: string }> {
+  async updateFlat(id: string, updates: Partial<Flat>, adminToken?: string): Promise<{ success: boolean; data?: Flat; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch(`/api/security-levy/flats/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(updates)
     });
     return res.json();
   },
 
-  async archiveFlat(id: string, adminToken: string): Promise<{ success: boolean; message?: string }> {
+  async archiveFlat(id: string, adminToken?: string): Promise<{ success: boolean; message?: string }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch(`/api/security-levy/flats/${id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       }
     });
     return res.json();
@@ -103,12 +117,13 @@ export const securityLevyService = {
     return data.success && Array.isArray(data.data) ? data.data : [];
   },
 
-  async generateObligations(billingMonth: string, adminToken: string): Promise<{ success: boolean; message?: string; data?: any }> {
+  async generateObligations(billingMonth: string, adminToken?: string): Promise<{ success: boolean; message?: string; data?: any }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch('/api/security-levy/obligations/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({ billing_month: billingMonth })
     });
@@ -173,17 +188,18 @@ export const securityLevyService = {
     payment_method: 'MANUAL_BANK_TRANSFER' | 'MANUAL_CASH' | 'MANUAL_POS';
     bank_reference?: string;
     notes: string;
-  }, adminToken: string): Promise<{
+  }, adminToken?: string): Promise<{
     success: boolean;
     message?: string;
     transaction?: SecurityLevyTransaction;
     allocations?: FlatPaymentAllocation[];
   }> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch('/api/security-levy/manual-payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(params)
     });
@@ -191,9 +207,10 @@ export const securityLevyService = {
   },
 
   // TRANSACTIONS & ALLOCATIONS
-  async getTransactions(adminToken: string): Promise<SecurityLevyTransaction[]> {
+  async getTransactions(adminToken?: string): Promise<SecurityLevyTransaction[]> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch('/api/security-levy/transactions', {
-      headers: { 'Authorization': `Bearer ${adminToken}` }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
     return data.success && Array.isArray(data.data) ? data.data : [];
@@ -213,9 +230,10 @@ export const securityLevyService = {
     return res.json();
   },
 
-  async getAuditLogs(adminToken: string): Promise<EstateAuditLog[]> {
+  async getAuditLogs(adminToken?: string): Promise<EstateAuditLog[]> {
+    const token = await resolveAdminToken(adminToken);
     const res = await fetch('/api/security-levy/audit-logs', {
-      headers: { 'Authorization': `Bearer ${adminToken}` }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
     return data.success && Array.isArray(data.data) ? data.data : [];

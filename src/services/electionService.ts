@@ -10,19 +10,19 @@ import {
   ElectionStatus
 } from '../types/election';
 
+import { getFreshAdminToken } from '../lib/supabase';
+
 async function getAdminAuthHeader(explicitToken?: string): Promise<Record<string, string>> {
-  if (explicitToken) {
+  if (explicitToken && explicitToken !== 'local_session') {
     return { Authorization: `Bearer ${explicitToken}` };
   }
   try {
-    if (supabase) {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        return { Authorization: `Bearer ${session.access_token}` };
-      }
+    const token = await getFreshAdminToken();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
     }
   } catch (err) {
-    console.warn('Could not retrieve Supabase session token:', err);
+    console.warn('Could not retrieve admin token for election:', err);
   }
   return {};
 }

@@ -63,8 +63,8 @@ import {
 } from '../types/database';
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? (process.env?.VITE_SUPABASE_URL || process.env?.SUPABASE_URL) : undefined);
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined) || (typeof process !== 'undefined' ? (process.env?.VITE_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY) : undefined);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
@@ -90,6 +90,7 @@ const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
   monthly_security_levy: 1500,
+  monthly_estate_levy: 1000,
   payment_due_day: 1,
   currency: 'NGN',
   contact_phone: '08023456789',
@@ -1514,23 +1515,121 @@ export async function verifySupabaseTables(): Promise<{
   };
 }
 
+let activeAdminRefreshPromise: Promise<string | null> | null = null;
+
 /**
- * Returns authenticated headers for administrative REST API requests
+ * Force renews the administrator session using a thread-safe mutex promise.
+ * Deduplicates concurrent renewal calls to prevent refresh-token rotation race conditions.
+ */
+export function forceRenewAdminSession(): Promise<string | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    const cached = typeof window !== 'undefined' ? localStorage.getItem('fog_admin_token') : null;
+    return Promise.resolve(cached);
+  }
+
+  if (activeAdminRefreshPromise) {
+    return activeAdminRefreshPromise;
+  }
+
+  activeAdminRefreshPromise = (async () => {
+    try {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session?.access_token) {
+        console.warn('[Admin Session] Renewal notice from Supabase Auth:', error?.message);
+        return null;
+      }
+      const newToken = data.session.access_token;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('fog_admin_token', newToken);
+        localStorage.setItem('estate_admin_token', newToken);
+      }
+      return newToken;
+    } catch (err) {
+      console.warn('[Admin Session] Renewal exception:', err);
+      return null;
+    } finally {
+      activeAdminRefreshPromise = null;
+    }
+  })();
+
+  return activeAdminRefreshPromise;
+}
+
+/**
+ * Retrieves a fresh, unexpired administrator token.
+ * Proactively renews the token if it is expired or expiring within 60 seconds.
+ */
+export async function getFreshAdminToken(): Promise<string | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    return typeof window !== 'undefined' ? localStorage.getItem('fog_admin_token') : null;
+  }
+
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error || !session) {
+      // If getSession returns no session, try forced renewal before giving up
+      const renewed = await forceRenewAdminSession();
+      if (renewed) return renewed;
+      return typeof window !== 'undefined' ? localStorage.getItem('fog_admin_token') : null;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = session.expires_at || 0;
+    // If token is missing, expired, or expiring in less than 60 seconds, renew proactively
+    if (!session.access_token || (expiresAt > 0 && expiresAt - now < 60)) {
+      const renewed = await forceRenewAdminSession();
+      if (renewed) return renewed;
+    }
+
+    if (session.access_token && typeof window !== 'undefined') {
+      localStorage.setItem('fog_admin_token', session.access_token);
+      localStorage.setItem('estate_admin_token', session.access_token);
+    }
+    return session.access_token || null;
+  } catch (e) {
+    console.warn('[Admin Session] getFreshAdminToken exception:', e);
+    return typeof window !== 'undefined' ? localStorage.getItem('fog_admin_token') : null;
+  }
+}
+
+/**
+ * Returns authenticated headers for administrative REST API requests with a fresh token
  */
 export async function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...extraHeaders
   };
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-    } catch {}
+  const token = await getFreshAdminToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+}
+
+/**
+ * High-reliability fetch wrapper for administrative APIs that automatically handles
+ * token authorization and retries once on 401 via synchronized session renewal.
+ */
+export async function authenticatedAdminFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = await getAdminAuthHeaders(
+    init.headers instanceof Headers 
+      ? Object.fromEntries(init.headers.entries()) 
+      : (init.headers as Record<string, string> || {})
+  );
+
+  let response = await fetch(url, { ...init, headers });
+
+  // If unauthorized (401), trigger synchronized session renewal and retry once
+  if (response.status === 401 && isSupabaseConfigured && supabase) {
+    const refreshedToken = await forceRenewAdminSession();
+    if (refreshedToken) {
+      headers['Authorization'] = `Bearer ${refreshedToken}`;
+      response = await fetch(url, { ...init, headers });
+    }
+  }
+
+  return response;
 }
 
 /**
@@ -6189,8 +6288,10 @@ export const authService = {
   async getActiveAdminUser(): Promise<any | null> {
     if (isSupabaseConfigured && supabase) {
       try {
+        const token = await getFreshAdminToken();
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.id) {
+        const activeToken = token || session?.access_token;
+        if (session?.user?.id && activeToken) {
           // 1. Check profiles table in Supabase using authenticated user's UUID
           try {
             const { data: profileRecord, error: pErr } = await supabase
@@ -6223,7 +6324,7 @@ export const authService = {
           // 2. Server-side authoritative verification check via /api/admin/auth/verify-session
           try {
             const res = await fetch('/api/admin/auth/verify-session', {
-              headers: { Authorization: `Bearer ${session.access_token}` }
+              headers: { Authorization: `Bearer ${activeToken}` }
             });
             const data = await res.json();
             if (data.success && data.user) {
@@ -6235,14 +6336,18 @@ export const authService = {
               };
               this.setCurrentUser(userObj);
               return userObj;
+            } else if (res.status === 401 || res.status === 403) {
+              this.setCurrentUser(null);
+              return null;
             }
           } catch {}
         }
-      } catch {}
-      this.setCurrentUser(null);
-      return null;
+      } catch (err) {
+        console.warn('[Admin Auth] Notice checking active admin user:', err);
+      }
+      return this.getCurrentUser();
     }
-    return null;
+    return this.getCurrentUser();
   },
 
   // Authoritative resolution of authenticated resident from actual Supabase database record
@@ -6469,6 +6574,11 @@ export const authService = {
             role: 'admin'
           };
 
+          if (typeof window !== 'undefined' && data.session.access_token) {
+            localStorage.setItem('fog_admin_token', data.session.access_token);
+            localStorage.setItem('estate_admin_token', data.session.access_token);
+          }
+
           this.setCurrentUser(userObj);
 
           try {
@@ -6496,6 +6606,10 @@ export const authService = {
       });
       const result = await res.json();
       if (result.success && result.user) {
+        if (typeof window !== 'undefined' && result.token) {
+          localStorage.setItem('fog_admin_token', result.token);
+          localStorage.setItem('estate_admin_token', result.token);
+        }
         this.setCurrentUser(result.user);
         return { success: true, user: result.user };
       }
@@ -6601,6 +6715,10 @@ export const authService = {
       } catch (e) {
         console.warn('Supabase signOut error:', e);
       }
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('fog_admin_token');
+      localStorage.removeItem('estate_admin_token');
     }
     this.setCurrentUser(null);
   }

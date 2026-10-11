@@ -422,8 +422,19 @@ export function broadcastRoadProjectUpdate(event: {
   }
 }
 
-// Heartbeat every 25 seconds to keep SSE connections healthy
-setInterval(() => {
+/**
+ * Cleanly closes all active SSE client connections during server shutdown.
+ */
+export function closeRoadSseClients(): void {
+  for (const client of roadSseClients) {
+    try {
+      client.end();
+    } catch {}
+  }
+  roadSseClients.length = 0;
+}
+
+const roadHeartbeatTimer = setInterval(() => {
   if (roadSseClients.length > 0) {
     for (let i = roadSseClients.length - 1; i >= 0; i--) {
       try {
@@ -434,6 +445,7 @@ setInterval(() => {
     }
   }
 }, 25000);
+if (roadHeartbeatTimer.unref) roadHeartbeatTimer.unref();
 
 // Helper for extracting building/resident number from text
 function extractBuildingNumber(text: string): string | null {

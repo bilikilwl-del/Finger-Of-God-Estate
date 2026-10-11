@@ -35,6 +35,7 @@ export interface EstateSettings {
   estate_state: string;
   estate_lga: string;
   monthly_security_levy: number; // Default 1500.00
+  monthly_estate_levy?: number; // Statutory monthly estate levy: ₦1,000.00 per building
   payment_due_day: number; // Default 1
   currency: string; // Default 'NGN' (₦)
   contact_phone: string;
@@ -1255,6 +1256,71 @@ export interface EstateAuditLog {
   ip_address?: string | null;
   created_at: string;
 }
+
+// ==========================================
+// MONTHLY ESTATE LEVY TYPES (₦1,000 PER BUILDING)
+// ==========================================
+export type EstateLevyPaymentStatus = 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'ABANDONED';
+
+export interface BuildingEstateLevyObligation {
+  id: string;
+  building_id: string;
+  billing_month: string; // YYYY-MM
+  amount_due: number; // ₦1,000.00
+  amount_paid: number;
+  balance_due: number;
+  status: ObligationStatus; // 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'
+  due_date: string; // YYYY-MM-01
+  locked_by_reference?: string | null;
+  lock_expires_at?: string | null;
+  paid_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  house_number?: string;
+  building_name?: string | null;
+  landlord_name?: string | null;
+}
+
+export interface BuildingEstateLevyTransaction {
+  id: string;
+  building_id: string;
+  building_house_number: string;
+  billing_month: string; // YYYY-MM
+  amount: number; // ₦1,000.00
+  currency: string; // 'NGN'
+  payer_name: string;
+  payer_email: string;
+  payer_phone?: string | null;
+  paystack_reference: string;
+  paystack_transaction_id?: string | null;
+  payment_status: EstateLevyPaymentStatus;
+  payment_channel?: string | null;
+  gateway_response?: string | null;
+  receipt_number?: string | null;
+  verified_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BuildingEstateLevyReceipt {
+  receipt_number: string;
+  transaction_id: string;
+  building_id: string;
+  building_house_number: string;
+  building_name?: string | null;
+  landlord_name?: string | null;
+  payer_name: string;
+  billing_month: string; // YYYY-MM
+  billing_month_label: string; // e.g. "October 2026"
+  amount_paid: number; // ₦1,000.00
+  currency: string; // 'NGN'
+  paystack_reference: string;
+  payment_date: string;
+  status: 'PAID';
+  issued_at: string;
+}
+
 
 
 

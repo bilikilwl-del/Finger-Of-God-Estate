@@ -174,6 +174,7 @@ export default function App() {
     estate_state: 'Delta',
     estate_lga: 'Oshimili South',
     monthly_security_levy: 1500,
+    monthly_estate_levy: 1000,
     payment_due_day: 1,
     currency: 'NGN',
     contact_phone: '08023456789',
@@ -283,15 +284,29 @@ export default function App() {
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
             if (session?.access_token) {
-              residentSessionService.setResidentToken(session.access_token);
+              localStorage.setItem('fog_admin_token', session.access_token);
+              localStorage.setItem('estate_admin_token', session.access_token);
             }
-            if (session?.user) {
-              const res = await authService.getActiveResident();
-              if (res) {
-                setCurrentResident(res);
+            // Check if authenticated user has an active admin role
+            const admin = await authService.getActiveAdminUser();
+            if (admin) {
+              setAdminUser(admin);
+            } else {
+              // Only associate resident session if not an administrator
+              if (session?.access_token) {
+                residentSessionService.setResidentToken(session.access_token);
+              }
+              if (session?.user) {
+                const res = await authService.getActiveResident();
+                if (res) {
+                  setCurrentResident(res);
+                }
               }
             }
           } else if (event === 'SIGNED_OUT') {
+            setAdminUser(null);
+            localStorage.removeItem('fog_admin_token');
+            localStorage.removeItem('estate_admin_token');
             residentSessionService.setResidentToken(null);
             residentSessionService.setCurrentResident(null);
             setCurrentResident(null);

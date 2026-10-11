@@ -52,6 +52,7 @@ const DEFAULT_ESTATE_SETTINGS = {
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
   monthly_security_levy: 1500,
+  monthly_estate_levy: 1000,
   payment_due_day: 1,
   currency: 'NGN',
   contact_phone: '08023456789',
@@ -103,6 +104,9 @@ export interface PersistentDatabaseSchema {
   flat_security_levy_obligations?: any[];
   security_levy_transactions?: any[];
   flat_payment_allocations?: any[];
+  building_estate_levy_obligations?: any[];
+  building_estate_levy_transactions?: any[];
+  building_estate_levy_receipts?: any[];
   manual_payment_logs?: any[];
   estate_audit_logs?: any[];
   last_updated: string;
@@ -159,6 +163,9 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
         flat_security_levy_obligations: Array.isArray(parsed.flat_security_levy_obligations) ? parsed.flat_security_levy_obligations : [],
         security_levy_transactions: Array.isArray(parsed.security_levy_transactions) ? parsed.security_levy_transactions : [],
         flat_payment_allocations: Array.isArray(parsed.flat_payment_allocations) ? parsed.flat_payment_allocations : [],
+        building_estate_levy_obligations: Array.isArray(parsed.building_estate_levy_obligations) ? parsed.building_estate_levy_obligations : [],
+        building_estate_levy_transactions: Array.isArray(parsed.building_estate_levy_transactions) ? parsed.building_estate_levy_transactions : [],
+        building_estate_levy_receipts: Array.isArray(parsed.building_estate_levy_receipts) ? parsed.building_estate_levy_receipts : [],
         manual_payment_logs: Array.isArray(parsed.manual_payment_logs) ? parsed.manual_payment_logs : [],
         estate_audit_logs: Array.isArray(parsed.estate_audit_logs) ? parsed.estate_audit_logs : [],
         last_updated: new Date().toISOString()
@@ -280,6 +287,9 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
     flat_security_levy_obligations: [],
     security_levy_transactions: [],
     flat_payment_allocations: [],
+    building_estate_levy_obligations: [],
+    building_estate_levy_transactions: [],
+    building_estate_levy_receipts: [],
     manual_payment_logs: [],
     estate_audit_logs: [],
     last_updated: new Date().toISOString()
@@ -346,19 +356,44 @@ export const serverDb = {
   // RESIDENTS
   async getResidents(): Promise<any[]> {
     try {
-      const { data, error } = await supabaseAdmin.from('residents').select('*').order('resident_number', { ascending: true });
-      if (!error && Array.isArray(data)) {
-        localDb.residents = data;
-        saveDbToFile(localDb);
-        return data;
+      let allResidents: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabaseAdmin
+          .from('residents')
+          .select('*')
+          .order('resident_number', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.warn(`[Supabase Notice] getResidents query returned: ${error.message}`);
+          break;
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          allResidents = allResidents.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            from += pageSize;
+          }
+        } else {
+          hasMore = false;
+        }
       }
-      if (error) {
-        console.warn(`[Supabase Notice] getResidents query returned: ${error.message}`);
+
+      if (allResidents.length > 0) {
+        localDb.residents = allResidents;
+        saveDbToFile(localDb);
+        return allResidents;
       }
     } catch (err: any) {
       console.warn(`[Supabase Error] getResidents exception: ${err?.message || err}`);
     }
-    return localDb.residents;
+    return localDb.residents || [];
   },
 
   // RESIDENT SESSIONS
@@ -2243,6 +2278,172 @@ export const serverDb = {
       }
     } catch {}
     return localDb.estate_audit_logs.slice(0, limit);
+  },
+
+  // ==========================================
+  // BUILDING-LEVEL MONTHLY ESTATE LEVY (₦1,000 PER BUILDING)
+  // ==========================================
+  async getBuildingEstateLevyObligations(filter?: { buildingId?: string; billingMonth?: string }): Promise<any[]> {
+    if (!localDb.building_estate_levy_obligations) localDb.building_estate_levy_obligations = [];
+    let list = localDb.building_estate_levy_obligations;
+    if (filter?.buildingId) {
+      list = list.filter(o => o.building_id === filter.buildingId);
+    }
+    if (filter?.billingMonth) {
+      list = list.filter(o => o.billing_month === filter.billingMonth);
+    }
+    return list;
+  },
+
+  async saveBuildingEstateLevyObligation(ob: any): Promise<any> {
+    if (!localDb.building_estate_levy_obligations) localDb.building_estate_levy_obligations = [];
+    const now = new Date().toISOString();
+    const amountDue = 1000.00; // Authoritative ₦1,000 per building
+    const amountPaid = Number(ob.amount_paid) || 0.00;
+    const balanceDue = Math.max(0, amountDue - amountPaid);
+    const status = amountPaid >= amountDue ? 'PAID' : (amountPaid > 0 ? 'PARTIALLY_PAID' : 'UNPAID');
+
+    const record = {
+      id: ob.id || crypto.randomUUID(),
+      building_id: ob.building_id,
+      billing_month: ob.billing_month,
+      amount_due: amountDue,
+      amount_paid: amountPaid,
+      balance_due: balanceDue,
+      status: ob.status || status,
+      due_date: ob.due_date || `${ob.billing_month}-01`,
+      locked_by_reference: ob.locked_by_reference || null,
+      lock_expires_at: ob.lock_expires_at || null,
+      paid_at: ob.paid_at || null,
+      created_at: ob.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.building_estate_levy_obligations.findIndex(
+      o => o.id === record.id || (o.building_id === record.building_id && o.billing_month === record.billing_month)
+    );
+    if (idx >= 0) {
+      localDb.building_estate_levy_obligations[idx] = { ...localDb.building_estate_levy_obligations[idx], ...record };
+    } else {
+      localDb.building_estate_levy_obligations.push(record);
+    }
+    saveDbToFile(localDb);
+    return record;
+  },
+
+  async updateBuildingEstateLevyObligation(id: string, updates: any): Promise<any | null> {
+    if (!localDb.building_estate_levy_obligations) localDb.building_estate_levy_obligations = [];
+    const idx = localDb.building_estate_levy_obligations.findIndex(o => o.id === id);
+    if (idx < 0) return null;
+    const now = new Date().toISOString();
+    localDb.building_estate_levy_obligations[idx] = {
+      ...localDb.building_estate_levy_obligations[idx],
+      ...updates,
+      updated_at: now
+    };
+    saveDbToFile(localDb);
+    return localDb.building_estate_levy_obligations[idx];
+  },
+
+  async getBuildingEstateLevyTransactions(): Promise<any[]> {
+    if (!localDb.building_estate_levy_transactions) localDb.building_estate_levy_transactions = [];
+    return localDb.building_estate_levy_transactions;
+  },
+
+  async getBuildingEstateLevyTransactionByRef(ref: string): Promise<any | null> {
+    const list = await this.getBuildingEstateLevyTransactions();
+    return list.find(t => t.paystack_reference === ref) || null;
+  },
+
+  async saveBuildingEstateLevyTransaction(tx: any): Promise<any> {
+    if (!localDb.building_estate_levy_transactions) localDb.building_estate_levy_transactions = [];
+    const now = new Date().toISOString();
+    const record = {
+      id: tx.id || crypto.randomUUID(),
+      building_id: tx.building_id,
+      building_house_number: String(tx.building_house_number || '').trim(),
+      billing_month: tx.billing_month,
+      amount: 1000.00, // Authoritative ₦1,000 per building
+      currency: 'NGN',
+      payer_name: String(tx.payer_name).trim(),
+      payer_email: String(tx.payer_email).trim(),
+      payer_phone: tx.payer_phone?.trim() || null,
+      paystack_reference: tx.paystack_reference,
+      paystack_transaction_id: tx.paystack_transaction_id || null,
+      payment_status: tx.payment_status || 'PENDING',
+      payment_channel: tx.payment_channel || null,
+      gateway_response: tx.gateway_response || null,
+      receipt_number: tx.receipt_number || null,
+      verified_at: tx.verified_at || null,
+      created_at: tx.created_at || now,
+      updated_at: now
+    };
+
+    const idx = localDb.building_estate_levy_transactions.findIndex(
+      t => t.id === record.id || t.paystack_reference === record.paystack_reference
+    );
+    if (idx >= 0) {
+      localDb.building_estate_levy_transactions[idx] = { ...localDb.building_estate_levy_transactions[idx], ...record };
+    } else {
+      localDb.building_estate_levy_transactions.unshift(record);
+    }
+    saveDbToFile(localDb);
+    return record;
+  },
+
+  async updateBuildingEstateLevyTransaction(id: string, updates: any): Promise<any | null> {
+    if (!localDb.building_estate_levy_transactions) localDb.building_estate_levy_transactions = [];
+    const idx = localDb.building_estate_levy_transactions.findIndex(t => t.id === id);
+    if (idx < 0) return null;
+    const now = new Date().toISOString();
+    localDb.building_estate_levy_transactions[idx] = {
+      ...localDb.building_estate_levy_transactions[idx],
+      ...updates,
+      updated_at: now
+    };
+    saveDbToFile(localDb);
+    return localDb.building_estate_levy_transactions[idx];
+  },
+
+  async getBuildingEstateLevyReceipts(): Promise<any[]> {
+    if (!localDb.building_estate_levy_receipts) localDb.building_estate_levy_receipts = [];
+    return localDb.building_estate_levy_receipts;
+  },
+
+  async getBuildingEstateLevyReceiptByNumber(receiptNumber: string): Promise<any | null> {
+    const list = await this.getBuildingEstateLevyReceipts();
+    return list.find(r => r.receipt_number.toUpperCase() === receiptNumber.trim().toUpperCase()) || null;
+  },
+
+  async saveBuildingEstateLevyReceipt(receipt: any): Promise<any> {
+    if (!localDb.building_estate_levy_receipts) localDb.building_estate_levy_receipts = [];
+    const now = new Date().toISOString();
+    const record = {
+      receipt_number: receipt.receipt_number,
+      transaction_id: receipt.transaction_id,
+      building_id: receipt.building_id,
+      building_house_number: receipt.building_house_number,
+      building_name: receipt.building_name || null,
+      landlord_name: receipt.landlord_name || null,
+      payer_name: receipt.payer_name,
+      billing_month: receipt.billing_month,
+      billing_month_label: receipt.billing_month_label,
+      amount_paid: 1000.00,
+      currency: 'NGN',
+      paystack_reference: receipt.paystack_reference,
+      payment_date: receipt.payment_date || now,
+      status: 'PAID' as const,
+      issued_at: receipt.issued_at || now
+    };
+
+    const idx = localDb.building_estate_levy_receipts.findIndex(r => r.receipt_number === record.receipt_number);
+    if (idx >= 0) {
+      localDb.building_estate_levy_receipts[idx] = record;
+    } else {
+      localDb.building_estate_levy_receipts.unshift(record);
+    }
+    saveDbToFile(localDb);
+    return record;
   }
 };
 
