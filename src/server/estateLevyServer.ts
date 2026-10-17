@@ -149,40 +149,72 @@ estateLevyRouter.get('/lookup', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 3. INITIALIZE ESTATE LEVY PAYMENT (STRICT ₦1,000 PER BUILDING)
+// 3. INITIALIZE ESTATE LEVY PAYMENT (1 MONTH ₦1,000 OR 12 MONTHS ₦12,000 PER BUILDING)
 // -------------------------------------------------------------
 // POST /api/estate-levy/initialize-payment
 estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response) => {
   try {
     const {
       building_id,
+      house_number,
       billing_month,
+      duration_months,
       payer_name,
       payer_email,
       payer_phone
     } = req.body;
 
-    if (!building_id) {
-      return res.status(400).json({ success: false, message: 'Building ID is required for estate levy payment.' });
+    if (!building_id && !house_number) {
+      return res.status(400).json({ success: false, message: 'Building selection or house number is required for estate levy payment.' });
     }
 
     if (!payer_name || !payer_email) {
       return res.status(400).json({ success: false, message: 'Payer name and valid email address are required.' });
     }
 
+    const rawDuration = duration_months !== undefined ? Number(duration_months) : 1;
+    if (rawDuration !== 1 && rawDuration !== 12) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment duration. Only 1 Month and 12 Months payment options are supported.'
+      });
+    }
+    const durationMonths: 1 | 12 = rawDuration === 12 ? 12 : 1;
+
     const cleanMonth = (billing_month || new Date().toISOString().slice(0, 7)).trim();
     if (!/^\d{4}-\d{2}$/.test(cleanMonth)) {
       return res.status(400).json({ success: false, message: 'Invalid billing month format. Expected YYYY-MM.' });
     }
 
-    const building = await serverDb.getBuildingById(building_id);
+    let building = building_id ? await serverDb.getBuildingById(building_id) : null;
+    if (!building && house_number) {
+      building = await serverDb.getBuildingByHouseNumber(String(house_number).trim());
+    }
+    // If resident is paying from Resident Portal and building record doesn't exist yet, create it automatically
+    if (!building && (house_number || (building_id && String(building_id).startsWith('res_bldg_')))) {
+      const targetHouse = house_number ? String(house_number).trim() : `Plot ${String(building_id).replace('res_bldg_', '')}`;
+      building = await serverDb.getBuildingByHouseNumber(targetHouse);
+      if (!building) {
+        building = await serverDb.saveBuilding({
+          house_number: targetHouse,
+          building_name: `${targetHouse} Residence`,
+          total_flats_count: 1,
+          landlord_name: String(payer_name).trim(),
+          landlord_phone: payer_phone ? String(payer_phone).trim() : null,
+          landlord_email: String(payer_email).trim().toLowerCase(),
+          status: 'ACTIVE'
+        });
+      }
+    }
+
     if (!building || building.status !== 'ACTIVE') {
       return res.status(404).json({ success: false, message: 'Building not found or inactive in the estate registry.' });
     }
 
-    // Server-enforced rate: strictly ₦1,000 per building per month
+    // Server-enforced rate: ₦1,000 per building per month (₦1,000 for 1 month, ₦12,000 for 12 months)
     const RATE_PER_BUILDING = 1000.00;
-    const amountKobo = RATE_PER_BUILDING * 100; // 100,000 kobo
+    const totalAmountNaira = RATE_PER_BUILDING * durationMonths;
+    const amountKobo = totalAmountNaira * 100; // 100,000 kobo (1M) or 1,200,000 kobo (12M)
 
     // Check duplicate payment prevention for this building and billing month
     const existingObligations = await serverDb.getBuildingEstateLevyObligations({
@@ -191,7 +223,7 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
     });
 
     const currentOb = existingObligations[0];
-    if (currentOb && currentOb.status === 'PAID') {
+    if (currentOb && currentOb.status === 'PAID' && durationMonths === 1) {
       const allReceipts = await serverDb.getBuildingEstateLevyReceipts();
       const existingReceipt = allReceipts.find(
         r => r.building_id === building.id && r.billing_month === cleanMonth
@@ -205,43 +237,33 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       });
     }
 
-    // Reservation Check (active lock window: 15 mins)
-    const nowMs = Date.now();
-    if (currentOb && currentOb.locked_by_reference && currentOb.lock_expires_at) {
-      const expiry = new Date(currentOb.lock_expires_at).getTime();
-      if (expiry > nowMs) {
-        return res.status(409).json({
-          success: false,
-          message: `A checkout session is currently in progress for building "${building.house_number}" (${cleanMonth}). Please wait a few moments or complete your open transaction.`
-        });
-      }
-    }
-
-    // Unique reference: EST-LEVY-YYYYMM-[BUILDING]-[RANDOM]
+    // Unique reference: EST-LEVY-YYYYMM-[1M|12M]-[BUILDING]-[RANDOM]
     const monthTag = cleanMonth.replace('-', '');
     const cleanHouse = String(building.house_number).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
     const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
-    const reference = `EST-LEVY-${monthTag}-${cleanHouse}-${randomHex}`;
+    const reference = `EST-LEVY-${monthTag}-${durationMonths}M-${cleanHouse}-${randomHex}`;
 
     // Lock obligation
     const lockExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    await serverDb.saveBuildingEstateLevyObligation({
-      building_id: building.id,
-      billing_month: cleanMonth,
-      amount_due: RATE_PER_BUILDING,
-      amount_paid: 0.00,
-      balance_due: RATE_PER_BUILDING,
-      status: 'UNPAID',
-      locked_by_reference: reference,
-      lock_expires_at: lockExpiry
-    });
+    if (!currentOb || currentOb.status !== 'PAID') {
+      await serverDb.saveBuildingEstateLevyObligation({
+        building_id: building.id,
+        billing_month: cleanMonth,
+        amount_due: RATE_PER_BUILDING,
+        amount_paid: 0.00,
+        balance_due: RATE_PER_BUILDING,
+        status: 'UNPAID',
+        locked_by_reference: reference,
+        lock_expires_at: lockExpiry
+      });
+    }
 
     // Save pending transaction record
     await serverDb.saveBuildingEstateLevyTransaction({
       building_id: building.id,
       building_house_number: building.house_number,
       billing_month: cleanMonth,
-      amount: RATE_PER_BUILDING,
+      amount: totalAmountNaira,
       currency: 'NGN',
       payer_name: payer_name.trim(),
       payer_email: payer_email.trim(),
@@ -266,7 +288,7 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
         },
         body: JSON.stringify({
           email: payer_email.trim(),
-          amount: amountKobo, // 100,000 kobo = ₦1,000
+          amount: amountKobo,
           reference: reference,
           callback_url: callbackUrl,
           currency: 'NGN',
@@ -276,7 +298,9 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
             building_id: building.id,
             building_house_number: building.house_number,
             billing_month: cleanMonth,
+            duration_months: durationMonths,
             rate: RATE_PER_BUILDING,
+            total_amount: totalAmountNaira,
             payer_name: payer_name.trim(),
             estate: 'Finger of God Estate'
           }
@@ -290,7 +314,8 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
           authorization_url: pData.data.authorization_url,
           access_code: pData.data.access_code,
           reference: reference,
-          amount: RATE_PER_BUILDING,
+          amount: totalAmountNaira,
+          duration_months: durationMonths,
           currency: 'NGN',
           building_house_number: building.house_number,
           billing_month: cleanMonth,
@@ -312,7 +337,8 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       authorization_url: `/estate-levy?paystack_simulation=true&reference=${reference}`,
       access_code: `sim_${randomHex.toLowerCase()}`,
       reference: reference,
-      amount: RATE_PER_BUILDING,
+      amount: totalAmountNaira,
+      duration_months: durationMonths,
       currency: 'NGN',
       building_house_number: building.house_number,
       billing_month: cleanMonth,
@@ -355,13 +381,15 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
     }
 
     const secretKey = getEstatePaystackSecret();
-    const isLive = isPaystackLiveMode();
+    const expectedAmountNaira = Number(transaction.amount) || (cleanRef.includes('-12M-') ? 12000 : 1000);
+    const expectedKobo = Math.round(expectedAmountNaira * 100);
+    const monthsCount = (cleanRef.includes('-12M-') || Math.round(expectedAmountNaira / 1000) === 12) ? 12 : 1;
 
     let verifiedStatus = false;
     let paystackTxId = `sim_${Date.now()}`;
     let paystackChannel = 'card';
     let gatewayResponse = 'Approved';
-    let paidAmountKobo = 100000; // ₦1,000
+    let paidAmountKobo = expectedKobo;
 
     if (secretKey) {
       const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(cleanRef)}`, {
@@ -410,8 +438,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
         return res.status(400).json({ success: false, verified: false, message: 'Invalid currency. NGN expected.' });
       }
 
-      // 4. Exact amount validation: strictly ₦1,000 (100,000 kobo)
-      const expectedKobo = 100000;
+      // 4. Exact amount validation: ₦1,000 (1 month) or ₦12,000 (12 months)
       if (Number(txData.amount) !== expectedKobo) {
         console.warn(`[Estate Levy Warning] Amount mismatch on ${cleanRef}. Expected: ${expectedKobo}, Got: ${txData.amount}`);
         await serverDb.updateBuildingEstateLevyTransaction(transaction.id, {
@@ -421,7 +448,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
         return res.status(400).json({
           success: false,
           verified: false,
-          message: 'Amount paid does not match the statutory ₦1,000 monthly estate levy per building.'
+          message: `Amount paid does not match the statutory estate levy (₦${expectedAmountNaira.toLocaleString()}).`
         });
       }
 
@@ -438,16 +465,24 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
     if (verifiedStatus) {
       const now = new Date().toISOString();
       const building = await serverDb.getBuildingById(transaction.building_id);
+      const paidNaira = paidAmountKobo / 100;
 
       // Generate Official Stamped Receipt: ELR-YYYYMMDD-[HASH]
       const datePart = now.slice(0, 10).replace(/-/g, '');
       const receiptRandom = crypto.randomBytes(3).toString('hex').toUpperCase();
       const receiptNumber = `ELR-${datePart}-${receiptRandom}`;
 
-      // Calculate Billing Month Label
+      // Calculate Billing Month Label (1 month or 12 months range)
       const [yearStr, monthStr] = transaction.billing_month.split('-');
+      const startYear = parseInt(yearStr, 10);
+      const startMonthIdx = parseInt(monthStr, 10) - 1;
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      const monthLabel = `${monthNames[parseInt(monthStr, 10) - 1] || 'Month'} ${yearStr}`;
+      let monthLabel = `${monthNames[startMonthIdx] || 'Month'} ${yearStr}`;
+      if (monthsCount === 12) {
+        const endDate = new Date(startYear, startMonthIdx + 11, 1);
+        const endMonthLabel = `${monthNames[endDate.getMonth()]} ${endDate.getFullYear()}`;
+        monthLabel = `${monthLabel} – ${endMonthLabel} (12 Months)`;
+      }
 
       const receipt = await serverDb.saveBuildingEstateLevyReceipt({
         receipt_number: receiptNumber,
@@ -459,7 +494,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
         payer_name: transaction.payer_name,
         billing_month: transaction.billing_month,
         billing_month_label: monthLabel,
-        amount_paid: 1000.00,
+        amount_paid: paidNaira,
         currency: 'NGN',
         paystack_reference: cleanRef,
         payment_date: now,
@@ -467,31 +502,35 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
         issued_at: now
       });
 
-      // Update building obligation to PAID
-      const obligations = await serverDb.getBuildingEstateLevyObligations({
-        buildingId: transaction.building_id,
-        billingMonth: transaction.billing_month
-      });
+      // Update building obligation(s) to PAID (1 month or 12 consecutive months)
+      for (let i = 0; i < monthsCount; i++) {
+        const dt = new Date(startYear, startMonthIdx + i, 1);
+        const mStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+        const obligations = await serverDb.getBuildingEstateLevyObligations({
+          buildingId: transaction.building_id,
+          billingMonth: mStr
+        });
 
-      if (obligations.length > 0) {
-        await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
-          amount_paid: 1000.00,
-          balance_due: 0.00,
-          status: 'PAID',
-          paid_at: now,
-          locked_by_reference: null,
-          lock_expires_at: null
-        });
-      } else {
-        await serverDb.saveBuildingEstateLevyObligation({
-          building_id: transaction.building_id,
-          billing_month: transaction.billing_month,
-          amount_due: 1000.00,
-          amount_paid: 1000.00,
-          balance_due: 0.00,
-          status: 'PAID',
-          paid_at: now
-        });
+        if (obligations.length > 0) {
+          await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
+            amount_paid: 1000.00,
+            balance_due: 0.00,
+            status: 'PAID',
+            paid_at: now,
+            locked_by_reference: null,
+            lock_expires_at: null
+          });
+        } else {
+          await serverDb.saveBuildingEstateLevyObligation({
+            building_id: transaction.building_id,
+            billing_month: mStr,
+            amount_due: 1000.00,
+            amount_paid: 1000.00,
+            balance_due: 0.00,
+            status: 'PAID',
+            paid_at: now
+          });
+        }
       }
 
       // Update transaction status
@@ -565,7 +604,10 @@ export async function processVerifiedEstateLevyPaystackEvent(data: any): Promise
     return;
   }
 
-  const expectedKobo = 100000; // ₦1,000 in kobo
+  const expectedAmountNaira = Number(transaction.amount) || (String(reference).includes('-12M-') ? 12000 : 1000);
+  const expectedKobo = Math.round(expectedAmountNaira * 100);
+  const monthsCount = (String(reference).includes('-12M-') || Math.round(expectedAmountNaira / 1000) === 12) ? 12 : 1;
+
   if (Number(data.amount) !== expectedKobo || data.currency !== 'NGN') {
     console.warn(`[Estate Levy Webhook Warning] Amount mismatch on ${reference}. Expected ${expectedKobo}, got ${data.amount}`);
     await serverDb.updateBuildingEstateLevyTransaction(transaction.id, {
@@ -584,8 +626,15 @@ export async function processVerifiedEstateLevyPaystackEvent(data: any): Promise
   const receiptNumber = `ELR-${datePart}-${receiptRandom}`;
 
   const [yearStr, monthStr] = transaction.billing_month.split('-');
+  const startYear = parseInt(yearStr, 10);
+  const startMonthIdx = parseInt(monthStr, 10) - 1;
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const monthLabel = `${monthNames[parseInt(monthStr, 10) - 1] || 'Month'} ${yearStr}`;
+  let monthLabel = `${monthNames[startMonthIdx] || 'Month'} ${yearStr}`;
+  if (monthsCount === 12) {
+    const endDate = new Date(startYear, startMonthIdx + 11, 1);
+    const endMonthLabel = `${monthNames[endDate.getMonth()]} ${endDate.getFullYear()}`;
+    monthLabel = `${monthLabel} – ${endMonthLabel} (12 Months)`;
+  }
 
   await serverDb.saveBuildingEstateLevyReceipt({
     receipt_number: receiptNumber,
@@ -597,7 +646,7 @@ export async function processVerifiedEstateLevyPaystackEvent(data: any): Promise
     payer_name: transaction.payer_name,
     billing_month: transaction.billing_month,
     billing_month_label: monthLabel,
-    amount_paid: 1000.00,
+    amount_paid: expectedAmountNaira,
     currency: 'NGN',
     paystack_reference: reference,
     payment_date: data.paid_at || now,
@@ -605,31 +654,35 @@ export async function processVerifiedEstateLevyPaystackEvent(data: any): Promise
     issued_at: now
   });
 
-  // Update Obligation
-  const obligations = await serverDb.getBuildingEstateLevyObligations({
-    buildingId: transaction.building_id,
-    billingMonth: transaction.billing_month
-  });
+  // Update Obligation(s)
+  for (let i = 0; i < monthsCount; i++) {
+    const dt = new Date(startYear, startMonthIdx + i, 1);
+    const mStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    const obligations = await serverDb.getBuildingEstateLevyObligations({
+      buildingId: transaction.building_id,
+      billingMonth: mStr
+    });
 
-  if (obligations.length > 0) {
-    await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
-      amount_paid: 1000.00,
-      balance_due: 0.00,
-      status: 'PAID',
-      paid_at: data.paid_at || now,
-      locked_by_reference: null,
-      lock_expires_at: null
-    });
-  } else {
-    await serverDb.saveBuildingEstateLevyObligation({
-      building_id: transaction.building_id,
-      billing_month: transaction.billing_month,
-      amount_due: 1000.00,
-      amount_paid: 1000.00,
-      balance_due: 0.00,
-      status: 'PAID',
-      paid_at: data.paid_at || now
-    });
+    if (obligations.length > 0) {
+      await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
+        amount_paid: 1000.00,
+        balance_due: 0.00,
+        status: 'PAID',
+        paid_at: data.paid_at || now,
+        locked_by_reference: null,
+        lock_expires_at: null
+      });
+    } else {
+      await serverDb.saveBuildingEstateLevyObligation({
+        building_id: transaction.building_id,
+        billing_month: mStr,
+        amount_due: 1000.00,
+        amount_paid: 1000.00,
+        balance_due: 0.00,
+        status: 'PAID',
+        paid_at: data.paid_at || now
+      });
+    }
   }
 
   // Update Transaction Record

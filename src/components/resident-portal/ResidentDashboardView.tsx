@@ -141,7 +141,9 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [securityLevyDuration, setSecurityLevyDuration] = useState<1 | 12>(1);
   const [isEstateLevyModalOpen, setIsEstateLevyModalOpen] = useState(false);
+  const [estateLevyDuration, setEstateLevyDuration] = useState<1 | 12>(1);
   const [selectedEstateLevyReceipt, setSelectedEstateLevyReceipt] = useState<BuildingEstateLevyReceipt | null>(null);
   const [paymentTargetMonth, setPaymentTargetMonth] = useState<{ month: number; year: number; label: string } | null>(null);
   
@@ -393,8 +395,9 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
     loadData();
   }, [currentResident.resident_number]);
 
-  const handleOpenPayment = (month: number = 10, year: number = 2026, label: string = 'October 2026') => {
+  const handleOpenPayment = (month: number = 10, year: number = 2026, label: string = 'October 2026', duration: 1 | 12 = 1) => {
     setPaymentTargetMonth({ month, year, label });
+    setSecurityLevyDuration(duration);
     setIsPayModalOpen(true);
   };
 
@@ -934,31 +937,49 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                   </div>
                 </div>
 
-                {/* Prominent Action Button */}
-                <div className="w-full md:w-auto shrink-0">
+                {/* Prominent Action Buttons: 1 Month & 12 Months Security Levy */}
+                <div className="w-full md:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                   {isCurrentMonthPaid ? (
-                    <button
-                      onClick={() => currentMonth && handleFindReceiptForPayment(currentMonth)}
-                      className="w-full md:w-auto px-8 py-4 rounded-2xl bg-white text-emerald-950 hover:bg-emerald-50 font-black text-sm tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2.5 cursor-pointer"
-                    >
-                      <FileText className="w-5 h-5 text-emerald-700" />
-                      <span>VIEW RECEIPT</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => currentMonth && handleFindReceiptForPayment(currentMonth)}
+                        className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-white text-emerald-950 hover:bg-emerald-50 font-black text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <FileText className="w-4 h-4 text-emerald-700" />
+                        <span>VIEW RECEIPT</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenPayment(10, 2026, 'October 2026', 12)}
+                        className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs tracking-wider uppercase transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer border border-emerald-500"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <span>12 MONTHS (₦{((estateSettings?.monthly_security_levy || 1500) * 12).toLocaleString()})</span>
+                      </button>
+                    </>
                   ) : (
-                    <button
-                      onClick={() => handleOpenPayment(10, 2026, 'October 2026')}
-                      className="w-full md:w-auto px-8 py-4 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer ring-4 ring-emerald-600/30"
-                    >
-                      <CreditCard className="w-5 h-5" />
-                      <span>PAY ₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleOpenPayment(10, 2026, 'October 2026', 1)}
+                        className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer ring-4 ring-emerald-600/30"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <span>1 MONTH (₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()})</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenPayment(10, 2026, 'October 2026', 12)}
+                        className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Calendar className="w-4 h-4 text-emerald-400" />
+                        <span>12 MONTHS (₦{((estateSettings?.monthly_security_levy || 1500) * 12).toLocaleString()})</span>
+                      </button>
+                    </>
                   )}
                 </div>
 
               </div>
             </div>
 
-            {/* STATUTORY ESTATE LEVY (₦1,000 PER BUILDING) */}
+            {/* STATUTORY ESTATE LEVY (₦1,000 PER BUILDING • 1 MONTH OR 12 MONTHS) */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-emerald-300 shadow-md transition-all">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div className="space-y-2">
@@ -967,7 +988,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                       STATUTORY ESTATE LEVY
                     </span>
                     <span className="text-xs font-bold text-slate-500">
-                      ₦1,000 / Building • Due 1st of Every Month
+                      1 Month (₦1,000) or 12 Months (₦12,000) • Per Building
                     </span>
                   </div>
 
@@ -978,10 +999,10 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                   <div className="flex flex-wrap items-center gap-4 pt-1">
                     <div>
                       <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
-                        Amount Due
+                        Payment Options
                       </span>
-                      <span className="text-xl sm:text-2xl font-black font-display text-emerald-800">
-                        ₦1,000.00
+                      <span className="text-lg sm:text-xl font-black font-display text-emerald-800">
+                        ₦1,000 (1M) / ₦12,000 (12M)
                       </span>
                     </div>
 
@@ -1009,13 +1030,26 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                   </div>
                 </div>
 
-                <div className="w-full md:w-auto shrink-0">
+                <div className="w-full md:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                   <button
-                    onClick={() => setIsEstateLevyModalOpen(true)}
-                    className="w-full md:w-auto px-8 py-4 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-sm tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer ring-4 ring-emerald-600/30"
+                    onClick={() => {
+                      setEstateLevyDuration(1);
+                      setIsEstateLevyModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2 cursor-pointer ring-4 ring-emerald-600/30"
                   >
-                    <Building2 className="w-5 h-5" />
-                    <span>PAY ESTATE LEVY (₦1,000)</span>
+                    <Building2 className="w-4 h-4" />
+                    <span>1 MONTH (₦1,000)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEstateLevyDuration(12);
+                      setIsEstateLevyModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Calendar className="w-4 h-4 text-emerald-400" />
+                    <span>12 MONTHS (₦12,000)</span>
                   </button>
                 </div>
               </div>
@@ -2052,6 +2086,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           preselectedResident={currentResident}
           targetMonth={paymentTargetMonth?.month || 10}
           targetYear={paymentTargetMonth?.year || 2026}
+          initialDurationMonths={securityLevyDuration}
           estateSettings={estateSettings}
           onPaymentSuccess={async () => {
             setIsPayModalOpen(false);
@@ -2075,6 +2110,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
         <EstateLevyPaymentModal
           isOpen={isEstateLevyModalOpen}
           onClose={() => setIsEstateLevyModalOpen(false)}
+          preselectedResident={currentResident}
+          initialDurationMonths={estateLevyDuration}
           onPaymentSuccess={(receipt) => {
             setIsEstateLevyModalOpen(false);
             setSelectedEstateLevyReceipt(receipt);

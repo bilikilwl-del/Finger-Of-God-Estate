@@ -124,11 +124,16 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   // Support / Help Modal or Drawer
   const [showHelpModal, setShowHelpModal] = useState(false);
 
-  // ID + Email Login State (Primary)
+  // ID + Email Login State (Primary - with 6-digit Email OTP verification)
   const [residentIdInput, setResidentIdInput] = useState('');
   const [residentEmailInput, setResidentEmailInput] = useState('');
+  const [idEmailStep, setIdEmailStep] = useState<'enter_credentials' | 'enter_otp'>('enter_credentials');
+  const [idEmailOtpCode, setIdEmailOtpCode] = useState(['', '', '', '', '', '']);
+  const [idEmailMasked, setIdEmailMasked] = useState('');
+  const [idEmailResendCooldown, setIdEmailResendCooldown] = useState(0);
+  const idEmailOtpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Update Resident Details State (Full Names, Phone Numbers, Email Address, Home Address)
+  // Activate Account State (Full Names, Phone Numbers, Email Address, Home Address - One-Time Only)
   const [updateResidentNumber, setUpdateResidentNumber] = useState('');
   const [updateFullName, setUpdateFullName] = useState('');
   const [updatePhoneNumber, setUpdatePhoneNumber] = useState('');
@@ -143,6 +148,55 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Cooldown Countdown Timer for ID + Email OTP Resend
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (idEmailResendCooldown > 0) {
+      interval = setInterval(() => {
+        setIdEmailResendCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [idEmailResendCooldown]);
+
+  // Focus first OTP box when entering OTP step in ID + Email Login
+  useEffect(() => {
+    if (activeTab === 'id_email_login' && idEmailStep === 'enter_otp' && idEmailOtpInputRefs.current[0]) {
+      idEmailOtpInputRefs.current[0]?.focus();
+    }
+  }, [activeTab, idEmailStep]);
+
+  const handleIdEmailOtpChange = (index: number, value: string) => {
+    if (lockoutTimer > 0) return;
+    const cleanVal = value.replace(/\D/g, '');
+
+    if (cleanVal.length > 1) {
+      const pasted = cleanVal.slice(0, 6).split('');
+      const newOtp = [...idEmailOtpCode];
+      pasted.forEach((ch, idx) => {
+        if (idx < 6) newOtp[idx] = ch;
+      });
+      setIdEmailOtpCode(newOtp);
+      const nextIndex = Math.min(pasted.length, 5);
+      idEmailOtpInputRefs.current[nextIndex]?.focus();
+      return;
+    }
+
+    const newOtp = [...idEmailOtpCode];
+    newOtp[index] = cleanVal;
+    setIdEmailOtpCode(newOtp);
+
+    if (cleanVal && index < 5) {
+      idEmailOtpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleIdEmailOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !idEmailOtpCode[index] && index > 0) {
+      idEmailOtpInputRefs.current[index - 1]?.focus();
+    }
+  };
 
   // Cooldown Countdown Timer for Resend Activation OTP
   useEffect(() => {
@@ -244,7 +298,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   };
 
-  // CHECK RESIDENT ID & LOAD UPDATE FORM
+  // CHECK RESIDENT ID FOR ONE-TIME ACCOUNT ACTIVATION
   const handleLookupIdForUpdate = async (idInput: string) => {
     const raw = idInput.trim();
     if (!raw) {
@@ -260,6 +314,19 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     try {
       const res = await dbService.checkResidentId(cleanNum);
       if (res.found) {
+        // STRICT ONE-TIME ACTIVATION RULE:
+        // If already activated, do NOT allow activating again! Direct resident to Login.
+        if (res.already_activated || !res.needs_update) {
+          setIsDetailsStepTwo(false);
+          setActiveTab('id_email_login');
+          setIdEmailStep('enter_credentials');
+          setResidentIdInput(cleanNum);
+          setErrorMessage(
+            `Resident #${cleanNum} account has already been activated and cannot be activated again. Please log in below with your Resident ID and registered Email (${res.masked_email || 'your email'}) to receive your login OTP.`
+          );
+          return;
+        }
+
         setIsDetailsStepTwo(true);
         setActiveTab('update_details');
         setUpdateFullName(res.full_name && !res.full_name.startsWith('Resident ') ? res.full_name : '');
@@ -267,11 +334,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setUpdateEmail(res.email || '');
         setUpdateHouseNumber(res.house_number || `Plot ${cleanNum}`);
         setUpdateHomeAddress(res.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba');
-        if (res.needs_update) {
-          setSuccessMessage(`Resident #${cleanNum} found! Please enter your Full Names, Phone Numbers, Email Address, and Home Address to activate your account.`);
-        } else {
-          setSuccessMessage(`Account details for Resident #${cleanNum}.`);
-        }
+        setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, and Home Address to activate your account (one-time activation).`);
       } else {
         setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
       }
@@ -282,7 +345,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   };
 
-  // SUBMIT LOGIN WITH RESIDENT ID & EMAIL
+  // STEP 1: SUBMIT RESIDENT ID & EMAIL TO RECEIVE EMAIL OTP
   const handleIdEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -298,22 +361,29 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
     const cleanNum = normalizeResidentNumber(rawId);
 
-    // If user didn't enter email, or clicks to update
-    if (!rawEmail) {
-      await handleLookupIdForUpdate(cleanNum);
+    if (!rawEmail || !rawEmail.includes('@')) {
+      setErrorMessage('Please enter the Email Address used during your account activation.');
       return;
     }
 
     setIsLoading(true);
     try {
       const res = await dbService.loginWithIdAndEmail(cleanNum, rawEmail);
-      if (res.success && res.resident) {
+      if (res.success && res.otp_required) {
+        setIdEmailMasked(res.masked_email || rawEmail);
+        setIdEmailResendCooldown(res.cooldownSeconds || 45);
+        setIdEmailOtpCode(['', '', '', '', '', '']);
+        setIdEmailStep('enter_otp');
+        setSuccessMessage(
+          res.message || `A 6-digit verification code (OTP) has been sent to ${rawEmail}. Please enter it below to access your account.`
+        );
+      } else if (res.success && res.resident) {
         setSuccessMessage(`Welcome back, ${res.resident.full_name}! Opening resident portal...`);
         setTimeout(() => {
           onSuccess(res.resident!);
         }, 300);
       } else if (res.needs_update) {
-        // Needs update first!
+        // Account not activated yet — take them to Activate Account
         await handleLookupIdForUpdate(cleanNum);
       } else {
         setErrorMessage(res.message || 'Those login credentials could not be verified. Please check your Resident ID and Email.');
@@ -325,7 +395,69 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   };
 
-  // SUBMIT UPDATE DETAILS (Full Names, Phone Numbers, Email Address, Home Address)
+  // STEP 2: VERIFY 6-DIGIT EMAIL OTP TO COMPLETE LOGIN
+  const handleVerifyIdEmailOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const fullOtp = idEmailOtpCode.join('').trim();
+    if (fullOtp.length !== 6) {
+      setErrorMessage('Please enter the complete 6-digit OTP verification code sent to your email.');
+      return;
+    }
+
+    const cleanNum = normalizeResidentNumber(residentIdInput.trim());
+    const cleanEmail = residentEmailInput.trim().toLowerCase();
+
+    setIsLoading(true);
+    try {
+      const res = await dbService.loginWithIdAndEmail(cleanNum, cleanEmail, fullOtp);
+      if (res.success && res.resident) {
+        setSuccessMessage(`OTP verified! Welcome back, ${res.resident.full_name}. Opening your account...`);
+        setTimeout(() => {
+          onSuccess(res.resident!);
+          if (isModal && onCloseModal) onCloseModal();
+        }, 400);
+      } else {
+        setErrorMessage(res.message || 'Incorrect or expired verification code. Please check the 6-digit OTP sent to your email.');
+      }
+    } catch {
+      setErrorMessage('Unable to verify OTP right now. Please check your network and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // RESEND EMAIL OTP FOR LOGIN
+  const handleResendIdEmailOtp = async () => {
+    if (idEmailResendCooldown > 0 || isLoading) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanNum = normalizeResidentNumber(residentIdInput.trim());
+    const cleanEmail = residentEmailInput.trim().toLowerCase();
+
+    setIsLoading(true);
+    try {
+      const res = await dbService.loginWithIdAndEmail(cleanNum, cleanEmail, undefined, true);
+      if (res.success && res.otp_required) {
+        setIdEmailResendCooldown(res.cooldownSeconds || 45);
+        setIdEmailOtpCode(['', '', '', '', '', '']);
+        setSuccessMessage(`A fresh 6-digit verification code has been sent to ${cleanEmail}.`);
+      } else {
+        if (res.cooldownSeconds) setIdEmailResendCooldown(res.cooldownSeconds);
+        setErrorMessage(res.message || 'Unable to resend OTP right now. Please wait a moment.');
+      }
+    } catch {
+      setErrorMessage('Network error while resending OTP.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // SUBMIT ONE-TIME ACCOUNT ACTIVATION (Full Names, Phone Numbers, Email Address, Home Address)
+  // After activation, requires resident to log in and verify via Email OTP
   const handleSaveResidentDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -357,27 +489,40 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
       return;
     }
 
+    const activatedEmail = updateEmail.trim().toLowerCase();
+
     setIsLoading(true);
     try {
       const res = await dbService.updateResidentDetails({
         residentNumber: cleanNum,
         full_name: updateFullName.trim(),
         phone_number: updatePhoneNumber.trim(),
-        email: updateEmail.trim().toLowerCase(),
+        email: activatedEmail,
         house_number: updateHouseNumber.trim() || `Plot ${cleanNum}`,
         address: updateHomeAddress.trim()
       });
 
-      if (res.success && res.resident) {
-        setSuccessMessage(`Details updated successfully! Welcome, ${res.resident.full_name}. You can now log in anytime using your Resident ID and Email.`);
-        setTimeout(() => {
-          onSuccess(res.resident!);
-        }, 500);
+      if (res.success) {
+        // Account activated once! Now require the resident to log in with their ID & Email OTP
+        setIsDetailsStepTwo(false);
+        setResidentIdInput(cleanNum);
+        setResidentEmailInput(activatedEmail);
+        setIdEmailStep('enter_credentials');
+        setActiveTab('id_email_login');
+        setSuccessMessage(
+          `Account for Resident #${cleanNum} has been activated! Please log in below — a 6-digit OTP will be sent to ${activatedEmail} to access your account.`
+        );
       } else {
-        setErrorMessage(res.message || 'Failed to update details. Please review your entries and try again.');
+        if (res.already_activated) {
+          setIsDetailsStepTwo(false);
+          setResidentIdInput(cleanNum);
+          setActiveTab('id_email_login');
+          setIdEmailStep('enter_credentials');
+        }
+        setErrorMessage(res.message || 'Failed to activate account. Please review your entries and try again.');
       }
     } catch {
-      setErrorMessage('Network error occurred while saving details. Please try again.');
+      setErrorMessage('Network error occurred while activating account. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -856,155 +1001,239 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         )}
 
         {/* ============================================================ */}
-        {/* TAB 0: RESIDENT ID & EMAIL LOGIN (PRIMARY FLOW) */}
+        {/* TAB 0: RESIDENT ID & EMAIL OTP LOGIN (PRIMARY FLOW) */}
         {/* ============================================================ */}
         {activeTab === 'id_email_login' && (
-          <form onSubmit={handleIdEmailLogin} className="space-y-3 sm:space-y-3.5">
-            <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-950">
-              <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
-                <span>Resident Portal Sign-In</span>
-              </div>
-              <p className="text-emerald-800 leading-relaxed text-[11px]">
-                Enter your Resident ID number (001–100 or 1–100) and Email Address to access your account to pay for estate levy and security levy.
-              </p>
-            </div>
-
-            {/* Resident ID Number (001 or 1) */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Resident ID Number
-                </label>
-                <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">
-                  Estate IDs 001 – 100
-                </span>
-              </div>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
-                  #
+          <div>
+            {idEmailStep === 'enter_credentials' ? (
+              <form onSubmit={handleIdEmailLogin} className="space-y-3 sm:space-y-3.5">
+                <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-950">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Resident Portal Sign-In (Email OTP)</span>
+                  </div>
+                  <p className="text-emerald-800 leading-relaxed text-[11px]">
+                    Enter your Resident ID number (001–100 or 1–100) and the Email Address used during your account activation. A 6-digit OTP verification code will be sent to your email to access your account.
+                  </p>
                 </div>
-                <input
-                  type="text"
-                  value={residentIdInput}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 3);
-                    setResidentIdInput(val);
-                  }}
-                  placeholder="e.g. 001 or 1"
-                  maxLength={3}
-                  required
-                  disabled={isLoading || lockoutTimer > 0}
-                  className="w-full pl-8 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 mt-0.5">
-                Enter your resident number (e.g. 1 or 001).
-              </p>
-            </div>
 
-            {/* Email Address */}
-            <div>
-              <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Registered Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={residentEmailInput}
-                  onChange={(e) => setResidentEmailInput(e.target.value)}
-                  placeholder="e.g. resident@example.com"
-                  disabled={isLoading || lockoutTimer > 0}
-                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
-                />
-              </div>
-              <p className="text-[10px] text-slate-500 mt-0.5">
-                If you have not set up your email yet, click "Activate Account" below to complete your profile.
-              </p>
-            </div>
+                {/* Resident ID Number (001 or 1) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Resident ID Number
+                    </label>
+                    <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">
+                      Estate IDs 001 – 100
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
+                      #
+                    </div>
+                    <input
+                      type="text"
+                      value={residentIdInput}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+                        setResidentIdInput(val);
+                      }}
+                      placeholder="e.g. 001 or 1"
+                      maxLength={3}
+                      required
+                      disabled={isLoading || lockoutTimer > 0}
+                      className="w-full pl-8 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Enter your resident number (e.g. 1 or 001).
+                  </p>
+                </div>
 
-            {/* Action Buttons */}
-            <div className="pt-1 flex flex-col gap-2">
-              <button
-                type="submit"
-                disabled={isLoading || lockoutTimer > 0}
-                className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <RotateCw className="w-4 h-4 animate-spin" />
-                    <span>Signing In...</span>
-                  </span>
-                ) : (
-                  <>
-                    <KeyRound className="w-4 h-4" />
-                    <span>LOG IN TO RESIDENT PORTAL</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
+                {/* Email Address */}
+                <div>
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Activation Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={residentEmailInput}
+                      onChange={(e) => setResidentEmailInput(e.target.value)}
+                      placeholder="e.g. resident@example.com"
+                      required
+                      disabled={isLoading || lockoutTimer > 0}
+                      className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    A 6-digit login OTP will be sent to this email address. If you have not activated your account yet, click "Activate Account" below.
+                  </p>
+                </div>
 
-            {/* First Time / Activate Account Prompt */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
-              <div>
-                <span className="font-bold text-slate-800 block text-[11px] sm:text-xs">First time logging in?</span>
-                <span className="text-[10px] sm:text-[11px] text-slate-500">Activate your account with your Full Name, Phone, Email and Address.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (residentIdInput.trim()) {
-                    handleLookupIdForUpdate(residentIdInput);
-                  } else {
-                    setActiveTab('update_details');
-                    setIsDetailsStepTwo(false);
-                  }
-                }}
-                className="px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs transition-colors cursor-pointer shrink-0"
-              >
-                Activate Account &rarr;
-              </button>
-            </div>
+                {/* Action Buttons */}
+                <div className="pt-1 flex flex-col gap-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading || lockoutTimer > 0}
+                    className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <RotateCw className="w-4 h-4 animate-spin" />
+                        <span>Sending Login OTP...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <Mail className="w-4 h-4" />
+                        <span>SEND LOGIN OTP TO EMAIL</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
 
-            {/* Other Login Methods */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-              <span className="text-[11px] text-slate-500">Other login options:</span>
-              <div className="flex items-center gap-2">
+                {/* First Time / Activate Account Prompt */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-slate-800 block text-[11px] sm:text-xs">First time logging in?</span>
+                    <span className="text-[10px] sm:text-[11px] text-slate-500">Activate your account once with your Full Name, Phone, Email and Address.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (residentIdInput.trim()) {
+                        handleLookupIdForUpdate(residentIdInput);
+                      } else {
+                        setActiveTab('update_details');
+                        setIsDetailsStepTwo(false);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs transition-colors cursor-pointer shrink-0"
+                  >
+                    Activate Account &rarr;
+                  </button>
+                </div>
+
+                {/* Other Login Methods */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                  <span className="text-[11px] text-slate-500">Other login options:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('login');
+                        setOtpStep('enter_details');
+                      }}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                    >
+                      Phone OTP
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('password_login')}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                    >
+                      Password
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              /* STEP 2: ENTER 6-DIGIT EMAIL OTP TO COMPLETE LOGIN */
+              <form onSubmit={handleVerifyIdEmailOtp} className="space-y-4">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-900 flex items-center gap-1.5">
+                      <Mail className="w-4 h-4 text-emerald-700" />
+                      <span>Enter Email Verification OTP</span>
+                    </span>
+                    <span className="font-mono font-bold text-[11px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-900">
+                      Resident #{normalizeResidentNumber(residentIdInput)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    We sent a 6-digit verification code to <strong>{residentEmailInput || idEmailMasked}</strong>. Enter the 6 digits below to access your resident portal account.
+                  </p>
+                </div>
+
+                {/* 6-Digit OTP Input Boxes */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2 text-center">
+                    6-Digit Email OTP Code
+                  </label>
+                  <div className="grid grid-cols-6 gap-2 max-w-xs mx-auto">
+                    {idEmailOtpCode.map((digit, index) => (
+                      <input
+                        key={index}
+                        ref={(el) => {
+                          idEmailOtpInputRefs.current[index] = el;
+                        }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={digit}
+                        onChange={(e) => handleIdEmailOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleIdEmailOtpKeyDown(index, e)}
+                        disabled={isLoading || lockoutTimer > 0}
+                        className="w-full h-12 text-center font-mono text-lg font-extrabold text-slate-900 bg-slate-50 border-2 border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-600 focus:bg-white transition-all"
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIdEmailStep('enter_credentials');
+                      setIdEmailOtpCode(['', '', '', '', '', '']);
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                    }}
+                    className="text-slate-600 hover:text-slate-900 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Change ID / Email</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendIdEmailOtp}
+                    disabled={idEmailResendCooldown > 0 || isLoading}
+                    className="text-emerald-700 hover:text-emerald-900 disabled:text-slate-400 font-bold cursor-pointer"
+                  >
+                    {idEmailResendCooldown > 0 ? `Resend OTP in ${idEmailResendCooldown}s` : 'Resend OTP to Email'}
+                  </button>
+                </div>
+
                 <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('login');
-                    setOtpStep('enter_details');
-                  }}
-                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                  type="submit"
+                  disabled={isLoading || idEmailOtpCode.join('').length !== 6}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  Phone OTP
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <RotateCw className="w-4 h-4 animate-spin" />
+                      <span>Verifying OTP...</span>
+                    </span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>VERIFY OTP &amp; LOGIN TO ACCOUNT</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
-                <span className="text-slate-300">•</span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('password_login')}
-                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                >
-                  Password
-                </button>
-                <span className="text-slate-300">•</span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('activate')}
-                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
-                >
-                  Activate
-                </button>
-              </div>
-            </div>
-          </form>
+              </form>
+            )}
+          </div>
         )}
 
         {/* ============================================================ */}
-        {/* TAB 0.5: UPDATE RESIDENT DETAILS (001 OR 1) */}
+        {/* TAB 0.5: ONE-TIME ACTIVATE ACCOUNT (001 OR 1) */}
         {/* ============================================================ */}
         {activeTab === 'update_details' && (
           <div className="space-y-3.5">
@@ -1017,9 +1246,9 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 className="space-y-3.5"
               >
                 <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950">
-                  <p className="font-bold text-emerald-900 text-sm mb-1">Enter Your Resident ID Number</p>
+                  <p className="font-bold text-emerald-900 text-sm mb-1">One-Time Account Activation</p>
                   <p className="text-emerald-800 leading-relaxed text-[11px]">
-                    Estate residents (1–100): enter your resident ID number (e.g. <strong>001</strong> or <strong>1</strong>) to activate your account with your Full Names, Phone Numbers, Email Address, and Home Address.
+                    Estate residents (1–100): enter your resident ID number (e.g. <strong>001</strong> or <strong>1</strong>) to activate your account with your Full Names, Phone Numbers, Email Address, and Home Address. <strong>Note:</strong> Account activation can only be done once.
                   </p>
                 </div>
 
@@ -1065,7 +1294,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     {isLoading ? (
                       <span className="flex items-center gap-2">
                         <RotateCw className="w-4 h-4 animate-spin" />
-                        <span>Finding Resident ID...</span>
+                        <span>Checking Activation Status...</span>
                       </span>
                     ) : (
                       <>
@@ -1080,8 +1309,8 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               <form onSubmit={handleSaveResidentDetails} className="space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">Activate Resident Account</h3>
-                    <p className="text-[11px] text-slate-500">Provide your details to activate your account and enable ID &amp; Email login.</p>
+                    <h3 className="text-sm font-extrabold text-slate-900">Activate Resident Account (One-Time)</h3>
+                    <p className="text-[11px] text-slate-500">Provide your details once. After activation, you will log in via OTP sent to your email.</p>
                   </div>
                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 rounded-lg font-mono font-bold text-xs border border-emerald-200">
                     Resident #{updateResidentNumber}
@@ -1127,7 +1356,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 {/* Email Address */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Email Address *
+                    Email Address (For Login OTP) *
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1140,7 +1369,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Used with your Resident ID #{updateResidentNumber} to log into your account.</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">A 6-digit OTP will be sent to this email whenever you log into your account.</p>
                 </div>
 
                 {/* House / Plot Number */}
@@ -1195,12 +1424,12 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     {isLoading ? (
                       <span className="flex items-center gap-2">
                         <RotateCw className="w-4 h-4 animate-spin" />
-                        <span>Saving Details...</span>
+                        <span>Activating Account...</span>
                       </span>
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>ACTIVATE ACCOUNT &amp; ACCESS PORTAL</span>
+                        <span>ACTIVATE ACCOUNT</span>
                       </>
                     )}
                   </button>

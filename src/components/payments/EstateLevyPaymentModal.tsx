@@ -9,13 +9,16 @@ import {
   Lock,
   ChevronRight
 } from 'lucide-react';
-import { Building, BuildingEstateLevyReceipt } from '../../types/database';
+import { Building, BuildingEstateLevyReceipt, Resident } from '../../types/database';
 import { estateLevyService } from '../../services/estateLevyService';
+import { getPaystackConfig, loadPaystackInlineScript, PaystackConfig } from '../../lib/paystack';
 
 interface EstateLevyPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialBuilding?: Building | null;
+  preselectedResident?: Resident | null;
+  initialDurationMonths?: 1 | 12;
   onPaymentSuccess?: (receipt: BuildingEstateLevyReceipt) => void;
 }
 
@@ -23,11 +26,15 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
   isOpen,
   onClose,
   initialBuilding,
+  preselectedResident,
+  initialDurationMonths = 1,
   onPaymentSuccess
 }) => {
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(initialBuilding?.id || '');
+  const [durationMonths, setDurationMonths] = useState<1 | 12>(initialDurationMonths === 12 ? 12 : 1);
+  const [paystackConfig, setPaystackConfig] = useState<PaystackConfig | null>(null);
 
   // Billing month (Default: current month YYYY-MM)
   const currentMonthStr = new Date().toISOString().slice(0, 7);
@@ -46,25 +53,63 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setDurationMonths(initialDurationMonths === 12 ? 12 : 1);
+      getPaystackConfig('estate_levy').then(cfg => setPaystackConfig(cfg));
+      loadPaystackInlineScript();
       loadBuildings();
       setErrorMsg('');
       setStep('DETAILS');
+      if (preselectedResident) {
+        setPayerName(preselectedResident.full_name || '');
+        setPayerEmail(preselectedResident.email || '');
+        setPayerPhone(
+          preselectedResident.phone_number && !preselectedResident.phone_number.startsWith('08000000')
+            ? preselectedResident.phone_number
+            : ''
+        );
+      }
       if (initialBuilding) {
         setSelectedBuildingId(initialBuilding.id);
-        if (initialBuilding.landlord_name) {
+        if (initialBuilding.landlord_name && !preselectedResident) {
           setPayerName(initialBuilding.landlord_name);
         }
       }
     }
-  }, [isOpen, initialBuilding]);
+  }, [isOpen, initialBuilding, preselectedResident, initialDurationMonths]);
 
   const loadBuildings = async () => {
     setLoadingBuildings(true);
     try {
       const res = await estateLevyService.getBuildings();
-      if (res.success && Array.isArray(res.data)) {
-        setBuildings(res.data as any);
+      let list: Building[] = res.success && Array.isArray(res.data) ? (res.data as any) : [];
+
+      if (preselectedResident) {
+        const resHouse = (preselectedResident.house_number || `Plot ${preselectedResident.resident_number}`).trim();
+        const existingMatch = list.find(
+          b => b.house_number.trim().toLowerCase() === resHouse.toLowerCase()
+        );
+        if (existingMatch) {
+          setSelectedBuildingId(existingMatch.id);
+        } else {
+          const virtualId = `res_bldg_${preselectedResident.resident_number}`;
+          const virtualBuilding: Building = {
+            id: virtualId,
+            house_number: resHouse,
+            building_name: `Resident #${preselectedResident.resident_number} Residence`,
+            total_flats_count: 1,
+            landlord_name: preselectedResident.full_name,
+            landlord_phone: preselectedResident.phone_number,
+            landlord_email: preselectedResident.email,
+            status: 'ACTIVE',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          list = [virtualBuilding, ...list];
+          setSelectedBuildingId(virtualId);
+        }
       }
+
+      setBuildings(list);
     } catch (err) {
       console.error('Error fetching estate buildings:', err);
     } finally {
@@ -74,8 +119,26 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
 
   const selectedBuilding = buildings.find(b => b.id === selectedBuildingId);
 
-  // Strict ₦1,000 per building billing rule
+  // Strict ₦1,000 per building per month billing rule (₦1,000 for 1 month, ₦12,000 for 12 months)
   const LEVY_PER_BUILDING = 1000;
+  const totalAmount = LEVY_PER_BUILDING * durationMonths;
+
+  const verifyEstateLevyReference = async (reference: string) => {
+    try {
+      const verifyRes = await estateLevyService.verifyPayment(reference);
+      if (verifyRes.success && verifyRes.verified && verifyRes.receipt) {
+        setVerifiedReceipt(verifyRes.receipt);
+        setStep('SUCCESS');
+        if (onPaymentSuccess) onPaymentSuccess(verifyRes.receipt);
+      } else {
+        setErrorMsg(verifyRes.message || 'Verification could not be confirmed.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error verifying payment.');
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const handleInitiatePayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,7 +157,9 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
     try {
       const res = await estateLevyService.initializePayment({
         building_id: selectedBuildingId,
+        house_number: selectedBuilding?.house_number,
         billing_month: billingMonth,
+        duration_months: durationMonths,
         payer_name: payerName.trim(),
         payer_email: payerEmail.trim(),
         payer_phone: payerPhone.trim() || undefined
@@ -114,25 +179,36 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
 
       // If sandbox simulation mode (development / mock verification)
       if (res.is_simulation) {
-        const verifyRes = await estateLevyService.verifyPayment(res.reference);
-        if (verifyRes.success && verifyRes.verified && verifyRes.receipt) {
-          setVerifiedReceipt(verifyRes.receipt);
-          setStep('SUCCESS');
-          if (onPaymentSuccess) onPaymentSuccess(verifyRes.receipt);
-        } else {
-          setErrorMsg(verifyRes.message || 'Verification could not be confirmed.');
-        }
-        setProcessing(false);
+        await verifyEstateLevyReference(res.reference);
         return;
       }
 
-      // Live Paystack redirect
+      // If Paystack Inline Popup is available, open inline checkout
+      if (paystackConfig?.publicKey && (window as any).PaystackPop && res.access_code) {
+        const handler = (window as any).PaystackPop.setup({
+          key: paystackConfig.publicKey,
+          email: payerEmail.trim(),
+          amount: totalAmount * 100,
+          currency: 'NGN',
+          ref: res.reference,
+          callback: (response: any) => {
+            verifyEstateLevyReference(response.reference || res.reference!);
+          },
+          onClose: () => {
+            setProcessing(false);
+            setErrorMsg('Payment cancelled. Transaction was not completed.');
+          }
+        });
+        handler.openIframe();
+        return;
+      }
+
+      // Live Paystack redirect fallback
       if (res.authorization_url) {
         window.location.href = res.authorization_url;
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Server error communicating with payment gateway.');
-    } finally {
       setProcessing(false);
     }
   };
@@ -150,7 +226,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
             </span>
             <div>
               <h3 className="font-bold text-sm sm:text-base">Pay Estate Levy</h3>
-              <p className="text-[11px] text-slate-300">₦1,000 per building, per month</p>
+              <p className="text-[11px] text-slate-300">₦1,000 per building / month (1 Month or 12 Months)</p>
             </div>
           </div>
           <button
@@ -199,10 +275,62 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                 </p>
               </div>
 
-              {/* Billing Month */}
+              {/* Payment Duration Option: 1 Month or 12 Months Only */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  2. Billing Month
+                  2. Select Payment Option (1 Month or 12 Months)
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDurationMonths(1);
+                      setErrorMsg('');
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                      durationMonths === 1
+                        ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 shadow-2xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase">1 Month</span>
+                      {durationMonths === 1 && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                    <div className="text-base font-black font-mono mt-1 text-slate-900">
+                      ₦{LEVY_PER_BUILDING.toLocaleString()}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">1 Month Estate Levy</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDurationMonths(12);
+                      setErrorMsg('');
+                    }}
+                    className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                      durationMonths === 12
+                        ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 shadow-2xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase">12 Months</span>
+                      {durationMonths === 12 && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                    <div className="text-base font-black font-mono mt-1 text-slate-900">
+                      ₦{(LEVY_PER_BUILDING * 12).toLocaleString()}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">1 Year (12 × ₦1,000)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Starting Billing Month */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
+                  3. {durationMonths === 12 ? 'Starting Billing Month (Covers 12 Months)' : 'Billing Month'}
                 </label>
                 <input
                   type="month"
@@ -220,11 +348,13 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
                     Amount Due (Authoritative)
                   </span>
-                  <span className="text-xs text-slate-600">1 Building × ₦1,000</span>
+                  <span className="text-xs text-slate-600">
+                    1 Building × ₦1,000 × {durationMonths} {durationMonths === 12 ? 'Months (1 Year)' : 'Month'}
+                  </span>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black font-mono text-emerald-950">
-                    ₦{LEVY_PER_BUILDING.toLocaleString()}
+                    ₦{totalAmount.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -232,7 +362,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
               {/* Payer Information */}
               <div className="space-y-3 pt-1 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  3. Payer Information
+                  4. Payer Information
                 </label>
 
                 <div>
@@ -287,7 +417,11 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                 className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs sm:text-sm transition-all cursor-pointer shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <CreditCard className="w-4 h-4" />
-                <span>{processing ? 'Connecting Gateway...' : `Proceed to Pay ₦${LEVY_PER_BUILDING.toLocaleString()}`}</span>
+                <span>
+                  {processing
+                    ? 'Connecting Gateway...'
+                    : `Proceed to Pay ${durationMonths === 12 ? '12 Months' : '1 Month'} (₦${totalAmount.toLocaleString()})`}
+                </span>
               </button>
             </form>
           )}
@@ -301,7 +435,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
               <div>
                 <h4 className="text-lg font-bold text-slate-900">Payment Confirmed</h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Estate levy of ₦{Number(verifiedReceipt.amount_paid || 1000).toLocaleString()} successfully recorded for building {verifiedReceipt.building_house_number}.
+                  Estate levy of ₦{Number(verifiedReceipt.amount_paid || totalAmount).toLocaleString()} successfully recorded for building {verifiedReceipt.building_house_number}.
                 </p>
               </div>
 
@@ -315,8 +449,12 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   <span className="font-semibold text-slate-800">{verifiedReceipt.building_house_number}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Billing Month:</span>
+                  <span className="text-slate-500">Period Covered:</span>
                   <span className="font-semibold text-slate-800">{verifiedReceipt.billing_month_label || verifiedReceipt.billing_month}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Amount Paid:</span>
+                  <span className="font-bold text-slate-900">₦{Number(verifiedReceipt.amount_paid || totalAmount).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Reference:</span>

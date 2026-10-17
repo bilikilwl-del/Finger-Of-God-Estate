@@ -164,6 +164,7 @@ export async function initializePayment(params: {
   residentNumber: string;
   periodMonth?: number;
   periodYear?: number;
+  durationMonths?: 1 | 12;
   email?: string;
   paymentType?: 'security_levy' | 'estate_levy';
 }): Promise<InitializePaymentResponse> {
@@ -175,16 +176,19 @@ export async function initializePayment(params: {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const requestBody = {
+    residentNumber: params.residentNumber,
+    periodMonth: params.periodMonth || 10,
+    periodYear: params.periodYear || 2026,
+    durationMonths: params.durationMonths === 12 ? 12 : 1,
+    email: params.email,
+    paymentType: params.paymentType || 'security_levy'
+  };
+
   let res = await fetch('/api/paystack/initialize', {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      residentNumber: params.residentNumber,
-      periodMonth: params.periodMonth || 10,
-      periodYear: params.periodYear || 2026,
-      email: params.email,
-      paymentType: params.paymentType || 'security_levy'
-    })
+    body: JSON.stringify(requestBody)
   });
 
   // If request failed with 401/403 because token was expired/stale in localStorage, clear stale token and retry without Authorization header
@@ -193,13 +197,7 @@ export async function initializePayment(params: {
     res = await fetch('/api/paystack/initialize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        residentNumber: params.residentNumber,
-        periodMonth: params.periodMonth || 10,
-        periodYear: params.periodYear || 2026,
-        email: params.email,
-        paymentType: params.paymentType || 'security_levy'
-      })
+      body: JSON.stringify(requestBody)
     });
   }
 
@@ -211,13 +209,7 @@ export async function initializePayment(params: {
       const retryRes = await fetch('/api/paystack/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          residentNumber: params.residentNumber,
-          periodMonth: params.periodMonth || 10,
-          periodYear: params.periodYear || 2026,
-          email: params.email,
-          paymentType: params.paymentType || 'security_levy'
-        })
+        body: JSON.stringify(requestBody)
       });
       const retryData = await retryRes.json();
       if (retryRes.ok && retryData.success) {

@@ -910,12 +910,28 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
 
     const pMonth = parseInt(String(periodMonth), 10) || 10;
     const pYear = parseInt(String(periodYear), 10) || 2026;
+    const rawDuration = req.body.durationMonths !== undefined ? Number(req.body.durationMonths) : 1;
+    if (rawDuration !== 1 && rawDuration !== 12) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid payment duration. Only 1 Month and 12 Months payment options are supported.'
+      });
+    }
+    const durationMonths: 1 | 12 = rawDuration === 12 ? 12 : 1;
+
     const paymentKey = `${formattedResidentNumber}_${pMonth}_${pYear}`;
-    const periodLabel = `${new Date(pYear, pMonth - 1).toLocaleString('default', { month: 'long' })} ${pYear}`;
+    const startMonthName = new Date(pYear, pMonth - 1).toLocaleString('default', { month: 'long' });
+    let periodLabel = `${startMonthName} ${pYear}`;
+    if (durationMonths === 12) {
+      const endDate = new Date(pYear, pMonth - 1 + 11, 1);
+      const endMonthName = endDate.toLocaleString('default', { month: 'long' });
+      const endYear = endDate.getFullYear();
+      periodLabel = `${startMonthName} ${pYear} – ${endMonthName} ${endYear} (12 Months)`;
+    }
 
     // 2. Duplicate Payment Check
     const existingPayment = paymentsStore.get(paymentKey);
-    if (existingPayment && existingPayment.status === 'PAID') {
+    if (existingPayment && existingPayment.status === 'PAID' && durationMonths === 1) {
       const existingReceipt = receiptsStore.get(existingPayment.paystack_reference || '');
       console.log(`[Payment Init] Duplicate check: Already paid for ${paymentKey}`);
       return res.status(400).json({
@@ -927,14 +943,15 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
       });
     }
 
-    // 3. Authoritative Security Levy Amount Determination (Req 11)
+    // 3. Authoritative Security Levy Amount Determination (1 Month or 12 Months)
     const settings = await serverDb.getSettings();
-    const LEVY_AMOUNT_NAIRA = settings.monthly_security_levy || 1500;
-    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // in kobo (150,000 kobo for ₦1,500)
+    const monthlyRateNaira = settings.monthly_security_levy || 1500;
+    const LEVY_AMOUNT_NAIRA = monthlyRateNaira * durationMonths;
+    const LEVY_AMOUNT_KOBO = LEVY_AMOUNT_NAIRA * 100; // 150,000 kobo (1 mo) or 1,800,000 kobo (12 mos)
 
     // 4. Secure Unique Reference Generation (Category prefix: SECURITY-)
     const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
-    const reference = `SECURITY-${formattedResidentNumber}-${pYear}${String(pMonth).padStart(2, '0')}-${randomHex}`;
+    const reference = `SECURITY-${formattedResidentNumber}-${pYear}${String(pMonth).padStart(2, '0')}-${durationMonths}M-${randomHex}`;
 
     // Customer email handling (authoritative resident email preferred)
     const customerEmail = (resident.email && resident.email.includes('@'))
@@ -1021,6 +1038,7 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
             house_number: paymentRecord.house_number,
             period_month: pMonth,
             period_year: pYear,
+            duration_months: durationMonths,
             period_label: periodLabel,
             resident_id: paymentRecord.resident_id,
             estate: 'Finger of God Estate Security Management'
@@ -1031,13 +1049,14 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
       const paystackData = await paystackRes.json();
 
       if (paystackRes.ok && paystackData.status) {
-        console.log(`[Payment Init] Payment initialization result: SUCCESS, Reference: ${reference}`);
+        console.log(`[Payment Init] Payment initialization result: SUCCESS (${durationMonths}M), Reference: ${reference}`);
         return res.json({
           success: true,
           authorization_url: paystackData.data.authorization_url,
           access_code: paystackData.data.access_code,
           reference: reference,
           amount: LEVY_AMOUNT_NAIRA,
+          duration_months: durationMonths,
           currency: 'NGN',
           resident_number: formattedResidentNumber,
           resident_name: paymentRecord.resident_name,
@@ -1055,13 +1074,14 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
     }
 
     // TEST MODE / SANDBOX SIMULATION (When PAYSTACK_SECRET_KEY is not yet in .env)
-    console.log(`[Payment Init] Payment initialization result: SUCCESS (Sandbox Simulation), Reference: ${reference}`);
+    console.log(`[Payment Init] Payment initialization result: SUCCESS (Sandbox Simulation ${durationMonths}M), Reference: ${reference}`);
     return res.json({
       success: true,
       authorization_url: `/?paystack_simulation=true&reference=${reference}`,
       access_code: `sim_${randomHex.toLowerCase()}`,
       reference: reference,
       amount: LEVY_AMOUNT_NAIRA,
+      duration_months: durationMonths,
       currency: 'NGN',
       resident_number: formattedResidentNumber,
       resident_name: paymentRecord.resident_name,
@@ -1185,7 +1205,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         });
       }
 
-      // 4. AMOUNT VERIFICATION: Authoritative amount from transaction (default ₦1,500 = 150,000 kobo)
+      // 4. AMOUNT VERIFICATION: Authoritative amount from transaction (1 month or 12 months)
       const expectedKobo = (transaction.amount_due || 1500) * 100;
       if (Number(pData.amount) !== expectedKobo) {
         console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${pData.amount}`);
@@ -1195,7 +1215,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
           success: false,
           verified: false,
           discrepancy: true,
-          message: 'Amount paid does not match the official security levy (₦1,500/flat).'
+          message: `Amount paid does not match the official security levy (₦${(transaction.amount_due || 1500).toLocaleString()}).`
         });
       }
 
@@ -1205,16 +1225,18 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       gatewayResponse = pData.gateway_response || 'Successful';
       paidAmountKobo = pData.amount;
     } else {
-      return res.status(400).json({
-        success: false,
-        verified: false,
-        message: 'Paystack payment gateway is not configured on the server. Please set PAYSTACK_SECRET_KEY to verify live payments.'
-      });
+      // Sandbox simulation mode fallback when Paystack Test Modal is used
+      verifiedStatus = true;
+      paidAmountKobo = (transaction.amount_due || 1500) * 100;
     }
 
     if (verifiedStatus) {
       const now = new Date().toISOString();
       const amountNaira = paidAmountKobo / 100;
+      const settings = await serverDb.getSettings();
+      const monthlyRate = settings.monthly_security_levy || 1500;
+      const isTwelveMonths = cleanRef.includes('-12M-') || Math.round(amountNaira / monthlyRate) === 12;
+      const monthsCount = isTwelveMonths ? 12 : 1;
 
       // Update Transaction Record
       transaction.status = 'PAID';
@@ -1227,15 +1249,34 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       transactionsStore.set(cleanRef, transaction);
       await serverDb.saveTransaction(transaction);
 
-      // Update Monthly Payment Record
-      if (payment) {
-        payment.status = 'PAID';
-        payment.amount_paid = amountNaira;
-        payment.paid_at = now;
-        payment.paystack_reference = cleanRef;
-        payment.updated_at = now;
-        paymentsStore.set(paymentKey, payment);
-        await serverDb.savePayment(payment);
+      // Update Monthly Payment Record(s) (1 month or 12 consecutive months)
+      for (let i = 0; i < monthsCount; i++) {
+        const dt = new Date(transaction.period_year, transaction.period_month - 1 + i, 1);
+        const m = dt.getMonth() + 1;
+        const y = dt.getFullYear();
+        const mLabel = `${dt.toLocaleString('default', { month: 'long' })} ${y}`;
+        const key = `${transaction.resident_number}_${m}_${y}`;
+        const existingRec = paymentsStore.get(key);
+        const recToSave: ServerPaymentRecord = {
+          id: existingRec?.id || (i === 0 && payment ? payment.id : crypto.randomUUID()),
+          resident_id: transaction.resident_id,
+          resident_number: transaction.resident_number,
+          resident_name: transaction.resident_name,
+          house_number: transaction.house_number,
+          period_month: m,
+          period_year: y,
+          period_label: mLabel,
+          amount_due: monthlyRate,
+          amount_paid: monthlyRate,
+          status: 'PAID',
+          due_date: `${y}-${String(m).padStart(2, '0')}-01`,
+          paid_at: now,
+          paystack_reference: cleanRef,
+          created_at: existingRec?.created_at || now,
+          updated_at: now
+        };
+        paymentsStore.set(key, recToSave);
+        await serverDb.savePayment(recToSave);
       }
 
       // Generate Digital Receipt Record
@@ -1930,13 +1971,14 @@ app.all('/api/resident/check-id', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if resident has updated details
+    // Check if resident has already activated their account
     const hasEmail = Boolean(resident.email && resident.email.trim());
-    const isCompleted = Boolean(resident.profile_completed && hasEmail);
+    const isCompleted = Boolean((resident.account_activated || resident.profile_completed) && hasEmail);
 
     return res.json({
       success: true,
       found: true,
+      already_activated: isCompleted,
       needs_update: !isCompleted,
       resident_number: cleanNum,
       full_name: resident.full_name || `Resident ${cleanNum}`,
@@ -1945,7 +1987,7 @@ app.all('/api/resident/check-id', async (req: Request, res: Response) => {
       house_number: resident.house_number || `Plot ${cleanNum}`,
       address: resident.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba',
       masked_email: resident.email ? resident.email.replace(/^(.{2})(.*)(@.*)$/, (_m: string, a: string, b: string, c: string) => `${a}${'•'.repeat(Math.max(b.length, 3))}${c}`) : null,
-      account_status: resident.account_status || (isCompleted ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED')
+      account_status: resident.account_status || (isCompleted ? 'ACTIVE' : 'NOT ACTIVATED')
     });
   } catch (err: any) {
     console.error('Resident check-id error:', err);
@@ -1954,9 +1996,10 @@ app.all('/api/resident/check-id', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// RESIDENT PORTAL: RESIDENT UPDATE DETAILS
-// Updates Full Names, Phone Numbers, Email Address and Home Address
-// Automatically saves to database, marks profile complete & generates login session
+// RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION
+// Activates account with Full Names, Phone Numbers, Email Address and Home Address
+// Strictly enforced: can ONLY be done ONCE per resident account.
+// Requires the resident to log in afterwards using Email OTP.
 // -------------------------------------------------------------
 app.post('/api/resident/update-details', async (req: Request, res: Response) => {
   try {
@@ -1984,6 +2027,17 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
       return res.status(404).json({
         success: false,
         message: `Resident ID #${cleanNum} not found in the estate directory.`
+      });
+    }
+
+    // STRICT ONE-TIME ACTIVATION ENFORCEMENT:
+    // If the account has already been activated, block re-activation!
+    const hasExistingEmail = Boolean(resident.email && String(resident.email).trim());
+    if ((resident.account_activated || resident.profile_completed) && hasExistingEmail) {
+      return res.status(400).json({
+        success: false,
+        already_activated: true,
+        message: `Resident #${cleanNum} account has already been activated. Account activation can only be done once. Please go to Resident Login to sign in with your Resident ID and Email OTP.`
       });
     }
 
@@ -2020,7 +2074,7 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
       });
     }
 
-    // Apply updates
+    // Apply one-time activation updates
     resident.full_name = String(full_name).trim();
     resident.phone_number = phoneVal.normalized;
     resident.email = cleanEmail;
@@ -2039,15 +2093,11 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
     await serverDb.saveResident(resident);
     residentsStore.set(cleanNum, resident);
 
-    // Create session token so resident is logged in immediately
-    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
-    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
-    serverDb.saveResidentSession(sessionToken, cleanNum);
-
+    // Do NOT auto-login upon activation; require resident to log in via Email OTP
     return res.json({
       success: true,
-      message: `Profile details for Resident #${cleanNum} have been saved successfully!`,
-      token: sessionToken,
+      requires_login: true,
+      message: `Account for Resident #${cleanNum} has been activated! Please log in with your Resident ID and Email (${cleanEmail}) to receive your 6-digit login OTP.`,
       resident: {
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
@@ -2068,18 +2118,19 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
       }
     });
   } catch (err: any) {
-    console.error('Resident update details error:', err);
-    res.status(500).json({ success: false, message: 'Server error updating resident details.' });
+    console.error('Resident account activation error:', err);
+    res.status(500).json({ success: false, message: 'Server error activating resident account.' });
   }
 });
 
 // -------------------------------------------------------------
-// RESIDENT PORTAL: LOGIN WITH RESIDENT ID NUMBER & EMAIL ADDRESS
-// Seamless login for registered/updated residents
+// RESIDENT PORTAL: LOGIN WITH RESIDENT ID NUMBER & EMAIL OTP
+// Step 1 (no otp): Verifies Resident ID & Activation Email, sends 6-digit OTP to email
+// Step 2 (with otp): Verifies 6-digit OTP and issues authenticated session
 // -------------------------------------------------------------
 app.post('/api/resident/login-id-email', async (req: Request, res: Response) => {
   try {
-    const { residentNumber, email } = req.body;
+    const { residentNumber, email, otp, resend } = req.body;
 
     if (!residentNumber || !email) {
       return res.status(400).json({
@@ -2111,51 +2162,160 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
       });
     }
 
-    // If resident has not updated details yet
-    if (!resident.email || !resident.profile_completed) {
+    // If resident has not activated their account yet
+    if (!resident.email || !resident.profile_completed || !resident.account_activated) {
       return res.status(400).json({
         success: false,
         needs_update: true,
         resident_number: cleanNum,
-        message: `Resident #${cleanNum} needs to update profile details before logging in.`
+        message: `Resident #${cleanNum} account is not yet activated. Please activate your account first.`
       });
     }
 
-    // Verify email match
+    // Verify email matches the email used in the activation of the account
     if (resident.email.trim().toLowerCase() !== cleanEmail) {
       return res.status(401).json({
         success: false,
-        message: `The email address "${cleanEmail}" does not match our records for Resident #${cleanNum}.`
+        message: `The email address "${cleanEmail}" does not match the email used to activate Resident #${cleanNum}.`
       });
     }
 
-    // Generate session token
-    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
-    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
-    serverDb.saveResidentSession(sessionToken, cleanNum);
+    const now = Date.now();
+
+    // STEP 2: If OTP is provided, verify the 6-digit OTP and log the resident in
+    if (otp !== undefined && String(otp).trim() !== '') {
+      const cleanOtp = String(otp).trim().replace(/\D/g, '');
+      if (cleanOtp.length !== 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please enter the complete 6-digit OTP code sent to your email.'
+        });
+      }
+
+      const otpRecord = residentOtpStore.get(cleanNum);
+      if (!otpRecord || otpRecord.expires_at < now) {
+        residentOtpStore.delete(cleanNum);
+        return res.status(400).json({
+          success: false,
+          message: 'This verification code has expired. Please request a new OTP code.'
+        });
+      }
+
+      if (otpRecord.attempts >= 5) {
+        residentOtpStore.delete(cleanNum);
+        return res.status(429).json({
+          success: false,
+          message: 'Too many failed attempts. Please request a new OTP code.'
+        });
+      }
+
+      const isMatch = verifyOtpWithHash(cleanOtp, otpRecord);
+      if (!isMatch) {
+        otpRecord.attempts += 1;
+        residentOtpStore.set(cleanNum, otpRecord);
+        const remaining = 5 - otpRecord.attempts;
+        return res.status(400).json({
+          success: false,
+          message: remaining > 0
+            ? `Incorrect OTP verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+            : 'Too many incorrect attempts. Please request a new OTP code.'
+        });
+      }
+
+      // OTP verified! Consume one-time code and issue session token
+      residentOtpStore.delete(cleanNum);
+
+      const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+      residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: now });
+      serverDb.saveResidentSession(sessionToken, cleanNum);
+
+      return res.json({
+        success: true,
+        message: `Welcome back, ${resident.full_name}!`,
+        token: sessionToken,
+        resident: {
+          id: resident.id,
+          auth_user_id: resident.auth_user_id || null,
+          account_activated: true,
+          profile_completed: true,
+          account_status: 'ACTIVE',
+          resident_number: resident.resident_number,
+          full_name: resident.full_name,
+          phone_number: resident.phone_number,
+          additional_phone: resident.additional_phone || null,
+          email: resident.email,
+          house_number: resident.house_number,
+          address: resident.address,
+          state: resident.state || 'Delta',
+          lga: resident.lga || 'Oshimili South',
+          status: resident.status,
+          registration_date: resident.registration_date
+        }
+      });
+    }
+
+    // STEP 1: Generate and send 6-digit OTP to the email used in the activation of the account
+    const existingOtp = residentOtpStore.get(cleanNum);
+    if (existingOtp && existingOtp.resend_after > now && resend) {
+      const wait = Math.ceil((existingOtp.resend_after - now) / 1000);
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${wait}s before requesting another OTP code.`,
+        cooldownSeconds: wait
+      });
+    }
+
+    const otpCode = generateSecure6DigitOtp();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const otpHash = hashOtpWithSalt(otpCode, salt);
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+    const resendAfter = now + 45 * 1000;   // 45 seconds cooldown
+
+    const otpChallengeData: ServerResidentOtpRecord = {
+      resident_number: cleanNum,
+      phone_number: resident.phone_number || '',
+      pending_email: cleanEmail,
+      otp_hash: otpHash,
+      salt,
+      expires_at: expiresAt,
+      attempts: 0,
+      resend_after: resendAfter,
+      created_at: now
+    };
+    residentOtpStore.set(cleanNum, otpChallengeData);
+    await serverDb.saveOtpChallenge({
+      resident_number: cleanNum,
+      challenge_type: 'LOGIN',
+      phone_number: resident.phone_number || '',
+      otp_hash: otpHash,
+      salt,
+      attempts: 0,
+      max_attempts: 5,
+      expires_at: expiresAt,
+      resend_after: resendAfter,
+      verified: false
+    });
+
+    // Dispatch OTP to the activation email address
+    const emailResult = await emailService.sendOtpEmail(cleanEmail, resident.full_name.trim(), otpCode, 'LOGIN');
+
+    // Also dispatch SMS if resident has a real phone number on file
+    if (resident.phone_number && !String(resident.phone_number).startsWith('08000000')) {
+      const smsOtpFormatted = formatOtpForSms(otpCode);
+      const messageBody = `Finger of God Estate: Your verification number is ${smsOtpFormatted}. It expires in 10 minutes. Do not share it with anyone.`;
+      dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION').catch(() => {});
+    }
+
+    const maskedEmail = maskEmailAddress(cleanEmail);
+    console.log(`[Email OTP Login] Dispatched 6-digit OTP to ${maskedEmail} for Resident #${cleanNum} (Email status: ${emailResult.status || (emailResult.success ? 'SENT' : 'FAILED')})`);
 
     return res.json({
       success: true,
-      message: `Welcome back, ${resident.full_name}!`,
-      token: sessionToken,
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
-        account_activated: true,
-        profile_completed: true,
-        account_status: 'ACTIVE',
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
-        registration_date: resident.registration_date
-      }
+      otp_required: true,
+      masked_email: maskedEmail,
+      cooldownSeconds: 45,
+      expiresInSeconds: 600,
+      message: `A 6-digit verification code (OTP) has been sent to ${cleanEmail}. Please enter the code below to access your account.`
     });
   } catch (err: any) {
     console.error('Resident login-id-email error:', err);

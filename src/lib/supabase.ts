@@ -3345,6 +3345,7 @@ export const dbService = {
   async checkResidentId(residentNumber: string): Promise<{
     success: boolean;
     found: boolean;
+    already_activated?: boolean;
     needs_update?: boolean;
     resident_number?: string;
     full_name?: string;
@@ -3361,6 +3362,7 @@ export const dbService = {
       return {
         success: res.ok && data.found,
         found: !!data.found,
+        already_activated: !!data.already_activated,
         needs_update: data.needs_update,
         resident_number: data.resident_number,
         full_name: data.full_name,
@@ -3380,7 +3382,7 @@ export const dbService = {
     }
   },
 
-  // RESIDENT PORTAL: UPDATE DETAILS & AUTOMATIC LOGIN
+  // RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION (Requires login via Email OTP afterwards)
   async updateResidentDetails(details: {
     residentNumber: string;
     full_name: string;
@@ -3390,6 +3392,8 @@ export const dbService = {
     address?: string;
   }): Promise<{
     success: boolean;
+    already_activated?: boolean;
+    requires_login?: boolean;
     resident?: Resident;
     token?: string;
     message?: string;
@@ -3402,13 +3406,14 @@ export const dbService = {
       });
       const data = await res.json();
       if (res.ok && data.success && data.resident) {
-        residentSessionService.setCurrentResident(data.resident);
-        if (data.token) {
+        if (!data.requires_login && data.token) {
+          residentSessionService.setCurrentResident(data.resident);
           residentSessionService.setResidentToken(data.token);
           residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
         }
         return {
           success: true,
+          requires_login: !!data.requires_login,
           resident: data.resident,
           token: data.token,
           message: data.message
@@ -3416,19 +3421,28 @@ export const dbService = {
       }
       return {
         success: false,
-        message: data.message || 'Failed to update details. Please review your entries and try again.'
+        already_activated: !!data.already_activated,
+        message: data.message || 'Failed to activate account. Please review your entries and try again.'
       };
     } catch {
       return {
         success: false,
-        message: 'Network error occurred while saving details. Please try again.'
+        message: 'Network error occurred while activating account. Please try again.'
       };
     }
   },
 
-  // RESIDENT PORTAL: LOGIN WITH RESIDENT ID & EMAIL
-  async loginWithIdAndEmail(residentNumber: string, email: string): Promise<{
+  // RESIDENT PORTAL: LOGIN WITH RESIDENT ID & ACTIVATION EMAIL OTP
+  async loginWithIdAndEmail(
+    residentNumber: string,
+    email: string,
+    otp?: string,
+    resend?: boolean
+  ): Promise<{
     success: boolean;
+    otp_required?: boolean;
+    masked_email?: string;
+    cooldownSeconds?: number;
     resident?: Resident;
     token?: string;
     needs_update?: boolean;
@@ -3440,26 +3454,40 @@ export const dbService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           residentNumber: residentNumber.trim(),
-          email: email.trim()
+          email: email.trim(),
+          otp: otp ? otp.trim() : undefined,
+          resend: Boolean(resend)
         })
       });
       const data = await res.json();
-      if (res.ok && data.success && data.resident) {
-        residentSessionService.setCurrentResident(data.resident);
-        if (data.token) {
-          residentSessionService.setResidentToken(data.token);
-          residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
+      if (res.ok && data.success) {
+        if (data.otp_required) {
+          return {
+            success: true,
+            otp_required: true,
+            masked_email: data.masked_email,
+            cooldownSeconds: data.cooldownSeconds || 45,
+            message: data.message
+          };
         }
-        return {
-          success: true,
-          resident: data.resident,
-          token: data.token,
-          message: data.message
-        };
+        if (data.resident) {
+          residentSessionService.setCurrentResident(data.resident);
+          if (data.token) {
+            residentSessionService.setResidentToken(data.token);
+            residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
+          }
+          return {
+            success: true,
+            resident: data.resident,
+            token: data.token,
+            message: data.message
+          };
+        }
       }
       return {
         success: false,
         needs_update: data.needs_update,
+        cooldownSeconds: data.cooldownSeconds,
         message: data.message || 'Login details could not be verified. Please check your Resident ID and Email.'
       };
     } catch {

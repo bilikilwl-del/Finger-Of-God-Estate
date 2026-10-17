@@ -69,10 +69,12 @@ export const estateLevyService = {
     return res.json();
   },
 
-  // Initialize payment for a specific building (₦1,000 per building)
+  // Initialize payment for a specific building (₦1,000 for 1 month or ₦12,000 for 12 months)
   async initializePayment(params: {
-    building_id: string;
+    building_id?: string;
+    house_number?: string;
     billing_month: string;
+    duration_months?: 1 | 12;
     payer_name: string;
     payer_email: string;
     payer_phone?: string;
@@ -82,6 +84,7 @@ export const estateLevyService = {
     access_code?: string;
     reference?: string;
     amount?: number;
+    duration_months?: 1 | 12;
     currency?: string;
     building_house_number?: string;
     billing_month?: string;

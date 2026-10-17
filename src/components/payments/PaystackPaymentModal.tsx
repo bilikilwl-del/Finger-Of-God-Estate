@@ -40,6 +40,7 @@ interface PaystackPaymentModalProps {
   onPaymentSuccess?: () => void;
   targetMonth?: number; // Default: 10 (October)
   targetYear?: number; // Default: 2026
+  initialDurationMonths?: 1 | 12;
 }
 
 type PaymentStep = 
@@ -57,13 +58,15 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   estateSettings,
   onPaymentSuccess,
   targetMonth = 10,
-  targetYear = 2026
+  targetYear = 2026,
+  initialDurationMonths = 1
 }) => {
   const [step, setStep] = useState<PaymentStep>('input_resident');
   const [residentNumberInput, setResidentNumberInput] = useState('');
   const [selectedResident, setSelectedResident] = useState<Resident | null>(null);
   const [existingPayment, setExistingPayment] = useState<MonthlyPayment | null>(null);
   const [existingReceipt, setExistingReceipt] = useState<Receipt | null>(null);
+  const [durationMonths, setDurationMonths] = useState<1 | 12>(initialDurationMonths === 12 ? 12 : 1);
   
   // Paystack transaction state
   const [paystackConfig, setPaystackConfig] = useState<PaystackConfig | null>(null);
@@ -76,16 +79,23 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const periodLabel = `${new Date(targetYear, targetMonth - 1).toLocaleString('default', { month: 'long' })} ${targetYear}`;
-  const levyAmount = estateSettings?.monthly_security_levy || 1500;
+  const startMonthLabel = `${new Date(targetYear, targetMonth - 1).toLocaleString('default', { month: 'long' })} ${targetYear}`;
+  const endDate = new Date(targetYear, targetMonth - 1 + 11, 1);
+  const endMonthLabel = `${endDate.toLocaleString('default', { month: 'long' })} ${endDate.getFullYear()}`;
+  const periodLabel = durationMonths === 12
+    ? `${startMonthLabel} – ${endMonthLabel} (12 Months)`
+    : `${startMonthLabel} (1 Month)`;
+  const monthlyLevyRate = estateSettings?.monthly_security_levy || 1500;
+  const levyAmount = monthlyLevyRate * durationMonths;
 
   // Initialize Paystack configuration on open
   useEffect(() => {
     if (isOpen) {
+      setDurationMonths(initialDurationMonths === 12 ? 12 : 1);
       getPaystackConfig().then(cfg => setPaystackConfig(cfg));
       loadPaystackInlineScript();
     }
-  }, [isOpen]);
+  }, [isOpen, initialDurationMonths]);
 
   // Handle preselected or active session resident
   useEffect(() => {
@@ -188,11 +198,11 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
     if (!selectedResident) return;
 
     if (selectedResident.status !== 'Active') {
-      setErrorMessage('Resident is inactive. Only active residents can pay monthly security levies.');
+      setErrorMessage('Resident is inactive. Only active residents can pay security levies.');
       return;
     }
 
-    if (existingPayment && existingPayment.status.toUpperCase() === 'PAID') {
+    if (existingPayment && existingPayment.status.toUpperCase() === 'PAID' && durationMonths === 1) {
       setErrorMessage('Your security levy for this month has already been paid.');
       return;
     }
@@ -205,6 +215,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         residentNumber: selectedResident.resident_number,
         periodMonth: targetMonth,
         periodYear: targetYear,
+        durationMonths: durationMonths,
         email: selectedResident.email || undefined
       });
 
@@ -220,13 +231,14 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         const handler = (window as any).PaystackPop.setup({
           key: paystackConfig.publicKey,
           email: selectedResident.email || `resident.${selectedResident.resident_number}@fingerofgodestate.ng`,
-          amount: (levyAmount || 1500) * 100, // ₦1,500 in kobo
+          amount: levyAmount * 100, // in kobo
           currency: 'NGN',
           ref: ref,
           metadata: {
             resident_number: selectedResident.resident_number,
             resident_name: selectedResident.full_name,
             house_number: selectedResident.house_number,
+            duration_months: durationMonths,
             period_label: periodLabel
           },
           callback: (response: any) => {
@@ -421,8 +433,60 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                   </div>
                 </div>
 
-                {/* ALREADY PAID STATE */}
-                {existingPayment && existingPayment.status.toUpperCase() === 'PAID' ? (
+                {/* PAYMENT DURATION SELECTOR: 1 MONTH OR 12 MONTHS ONLY */}
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    Select Security Levy Payment Option
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDurationMonths(1);
+                        setErrorMessage(null);
+                      }}
+                      className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                        durationMonths === 1
+                          ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold uppercase tracking-wide">1 Month</span>
+                        {durationMonths === 1 && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                      </div>
+                      <div className="text-base font-black font-display mt-1 text-slate-900">
+                        {formatNaira(monthlyLevyRate)}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Monthly Security Levy</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDurationMonths(12);
+                        setErrorMessage(null);
+                      }}
+                      className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
+                        durationMonths === 12
+                          ? 'border-emerald-600 bg-emerald-50/70 text-emerald-950 shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold uppercase tracking-wide">12 Months</span>
+                        {durationMonths === 12 && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                      </div>
+                      <div className="text-base font-black font-display mt-1 text-slate-900">
+                        {formatNaira(monthlyLevyRate * 12)}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">1 Year (12 × {formatNaira(monthlyLevyRate)})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ALREADY PAID STATE (for 1-month selection if already paid) */}
+                {existingPayment && existingPayment.status.toUpperCase() === 'PAID' && durationMonths === 1 ? (
                   <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-4">
                     <div className="flex items-center gap-2.5">
                       <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
@@ -467,7 +531,9 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                     {/* Current Levy Box */}
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-900 to-slate-900 text-white space-y-3">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-emerald-300 font-bold uppercase tracking-wider">Current Security Levy</span>
+                        <span className="text-emerald-300 font-bold uppercase tracking-wider">
+                          {durationMonths === 12 ? '12 Months Security Levy' : '1 Month Security Levy'}
+                        </span>
                         <span className="font-semibold bg-white/10 px-2 py-0.5 rounded">
                           {periodLabel}
                         </span>
@@ -477,7 +543,9 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                         <span className="text-3xl font-black font-display tracking-tight">
                           {formatNaira(levyAmount)}
                         </span>
-                        <span className="text-xs text-slate-300 font-medium">Monthly Levy • NGN</span>
+                        <span className="text-xs text-slate-300 font-medium">
+                          {durationMonths === 12 ? `12 × ${formatNaira(monthlyLevyRate)}` : '1 Month'} • NGN
+                        </span>
                       </div>
                     </div>
 
@@ -488,7 +556,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                       className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer"
                     >
                       <CreditCard className="w-4 h-4" />
-                      <span>Proceed to Payment ({formatNaira(levyAmount)})</span>
+                      <span>Proceed to Pay {durationMonths === 12 ? '12 Months' : '1 Month'} ({formatNaira(levyAmount)})</span>
                     </button>
 
                     <div className="flex items-center justify-center gap-2 text-center text-[11px] text-slate-400">
