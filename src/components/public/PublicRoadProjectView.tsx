@@ -497,7 +497,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
       {/* 3. FINANCIAL TRANSPARENCY SUMMARY & RECENT ACTIVITY & BREAKDOWN */}
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
         
-        {/* A. MONEY RECEIVED SUMMARY CARD */}
+        {/* A. MONEY RECEIVED SUMMARY CARD - DISPLAYS ALL PAYMENTS */}
         <div className="bg-white rounded-3xl p-6 border border-emerald-200 shadow-sm flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
@@ -515,31 +515,86 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Latest Credits</span>
-            {creditsList.length === 0 ? (
-              <p className="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded-xl">No road project contributions yet.</p>
-            ) : (
-              creditsList.slice(0, 3).map((c) => (
-                <div key={c.id} className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-slate-900 truncate max-w-[200px]">{c.description}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(c.date)} • {formatTxTime(c.verified_at || c.date)}</p>
-                  </div>
-                  <div className="text-right font-mono font-bold text-emerald-700">
-                    +{formatNaira(c.amount)}
-                  </div>
-                </div>
-              ))
-            )}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                <span>All Received Payments ({creditsList.length})</span>
+              </span>
+              <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                All Showing
+              </span>
+            </div>
+
+            <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
+              {creditsList.length === 0 ? (
+                <p className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  No road project contributions yet.
+                </p>
+              ) : (
+                creditsList.map((c, index) => {
+                  const contributorName = c.contributor_display_name || c.payer_or_vendor || (c.building_number ? `Resident ${c.building_number}` : 'Anonymous Contributor');
+                  const txDate = formatTxDate(c.date);
+                  const txTime = formatTxTime(c.verified_at || c.date);
+                  return (
+                    <div 
+                      key={c.id || index}
+                      onClick={() => setSelectedTx(c)}
+                      className="p-3 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-100/90 hover:border-emerald-300 transition-all flex items-center justify-between text-xs cursor-pointer group shadow-2xs"
+                      title="Click to view full transaction receipt & audit record"
+                    >
+                      <div className="min-w-0 pr-3 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-slate-900 group-hover:text-emerald-800 transition-colors truncate">
+                            {contributorName}
+                          </p>
+                          {c.building_number && (
+                            <span className="px-1.5 py-0.2 rounded bg-white text-emerald-800 border border-emerald-200 font-mono text-[9px] font-bold shrink-0">
+                              Bldg {c.building_number}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600 truncate mt-0.5">
+                          {c.description || 'Road Modernization Contribution'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {txDate} • {txTime} • <span className="text-emerald-700 font-semibold">{c.source || 'Paystack'}</span>
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-mono font-bold text-emerald-700 text-sm">
+                          +{formatNaira(c.amount)}
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full mt-0.5">
+                          <CheckCircle2 className="w-2.5 h-2.5" />
+                          <span>Verified</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
-          <button
-            onClick={() => setTypeFilter('CREDIT')}
-            className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
-          >
-            <span>View All Credits ({creditsList.length})</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Total Donated:</span>
+              <span className="font-mono font-black text-emerald-700">
+                {formatNaira(summary?.total_collected || 0)}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setTypeFilter('CREDIT');
+                const el = document.getElementById('public-ledger');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-full py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+            >
+              <span>View All in Public Ledger ({creditsList.length})</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* B. PROJECT EXPENDITURE SUMMARY CARD */}
@@ -560,31 +615,51 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Latest Expenditures</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Expenditures ({debitsList.length})</span>
             {debitsList.length === 0 ? (
-              <p className="text-xs text-slate-500 py-3 text-center bg-slate-50 rounded-xl">No project expenditures recorded yet.</p>
+              <p className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                No project expenditures recorded yet.
+              </p>
             ) : (
-              debitsList.slice(0, 3).map((d) => (
-                <div key={d.id} className="p-3 rounded-xl bg-rose-50/60 border border-rose-100 flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-slate-900 truncate max-w-[200px]">{d.description}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(d.date)} • {formatTxTime(d.verified_at || d.date)}</p>
+              <div className="space-y-2 overflow-y-auto max-h-[340px] pr-1">
+                {debitsList.map((d) => (
+                  <div 
+                    key={d.id} 
+                    onClick={() => setSelectedTx(d)}
+                    className="p-3 rounded-xl bg-rose-50/60 hover:bg-rose-100/60 border border-rose-100 flex items-center justify-between text-xs cursor-pointer transition-colors"
+                  >
+                    <div>
+                      <p className="font-bold text-slate-900 truncate max-w-[200px]">{d.description}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{formatTxDate(d.date)} • {formatTxTime(d.verified_at || d.date)}</p>
+                    </div>
+                    <div className="text-right font-mono font-bold text-rose-600">
+                      -{formatNaira(d.amount)}
+                    </div>
                   </div>
-                  <div className="text-right font-mono font-bold text-rose-600">
-                    -{formatNaira(d.amount)}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
 
-          <button
-            onClick={() => setTypeFilter('DEBIT')}
-            className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
-          >
-            <span>View All Expenditures ({debitsList.length})</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Total Spent:</span>
+              <span className="font-mono font-black text-rose-600">
+                {formatNaira(summary?.total_spent || 0)}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                setTypeFilter('DEBIT');
+                const el = document.getElementById('public-ledger');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+            >
+              <span>View All Expenditures ({debitsList.length})</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* C. LATEST ACTIVITY (DIGITAL TIME-BASED FEED) */}
@@ -604,23 +679,34 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             </span>
           </div>
 
-          <div className="space-y-3 overflow-y-auto max-h-[220px] pr-1">
+          <div className="space-y-3 overflow-y-auto max-h-[340px] pr-1">
             {transactions.length === 0 ? (
-              <p className="text-xs text-slate-500 py-4 text-center">No transactions recorded yet.</p>
+              <p className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">No transactions recorded yet.</p>
             ) : (
-              transactions.slice(0, 4).map((tx) => {
+              transactions.map((tx) => {
                 const timeStr = formatTxTime(tx.verified_at || tx.date);
                 const isCredit = tx.type === 'CREDIT';
                 return (
-                  <div key={tx.id} className="flex items-start gap-3 text-xs border-b border-slate-100 pb-2.5 last:border-0">
+                  <div 
+                    key={tx.id} 
+                    onClick={() => setSelectedTx(tx)}
+                    className="flex items-start gap-3 text-xs border-b border-slate-100 pb-2.5 last:border-0 hover:bg-slate-50/80 p-1.5 rounded-xl transition-colors cursor-pointer"
+                  >
                     <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
                       {timeStr}
                     </span>
-                    <div className="flex-1">
-                      <p className="font-semibold text-slate-800 leading-tight">
-                        {isCredit ? 'Credit received from' : 'Disbursement for'} {tx.payer_or_vendor}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 leading-tight truncate">
+                        {isCredit ? 'Credit received from' : 'Disbursement for'} {tx.contributor_display_name || tx.payer_or_vendor}
                       </p>
                       <p className="text-[11px] text-slate-500 truncate mt-0.5">{tx.description}</p>
+                    </div>
+                    <div className="font-mono font-bold text-[11px] shrink-0 text-right">
+                      {isCredit ? (
+                        <span className="text-emerald-700">+{formatNaira(tx.amount)}</span>
+                      ) : (
+                        <span className="text-rose-600">-{formatNaira(tx.amount)}</span>
+                      )}
                     </div>
                   </div>
                 );
@@ -628,7 +714,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             )}
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 border-t border-slate-100">
             <div className="p-3 bg-slate-50 rounded-xl text-center text-[11px] text-slate-600 font-medium">
               Current Project Balance: <strong className="text-slate-900 font-mono">{formatNaira(summary?.current_balance || 0)}</strong>
             </div>
@@ -666,7 +752,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
       </section>
 
       {/* 5. DIGITAL TRANSACTION LEDGER SECTION */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 mt-10 mb-16 flex-1 w-full">
+      <section id="public-ledger" className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 mt-10 mb-16 flex-1 w-full">
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           
           {/* Controls Bar */}
