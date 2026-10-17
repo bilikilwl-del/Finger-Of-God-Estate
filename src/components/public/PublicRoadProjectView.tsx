@@ -287,9 +287,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
       />
 
       {/* 1. HERO SECTION & PAGE TITLE */}
-      <section className="bg-gradient-to-b from-slate-900 via-slate-850 to-slate-900 text-white pt-10 pb-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:24px_24px] opacity-15 pointer-events-none" />
-        
+      <section className="bg-slate-900 text-white pt-10 pb-16 relative overflow-hidden border-b border-slate-800">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           
           {/* Top Status & Live Clock Bar */}
@@ -297,30 +295,26 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={onNavigateHome}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer border border-slate-700 shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer border border-slate-700"
               >
                 <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Home</span>
+                <span>Estate Homepage</span>
               </button>
-              <span className="text-slate-650">/</span>
-              <span className="text-amber-400 font-bold text-xs">Transparent Public Ledger</span>
+              <span className="text-slate-600">/</span>
+              <span className="text-amber-400 font-semibold text-xs">Road Modernization Public Ledger</span>
             </div>
 
-            {/* Live Clock & Status Indicator */}
+            {/* Live Clock & Real-Time Stream Connection Indicator */}
             <div className="flex flex-wrap items-center gap-3 text-xs">
-              {/* Live Status Indicator */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-200">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isStreamConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isStreamConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                </span>
-                <span className="font-mono font-bold tracking-wider text-[11px] uppercase">
-                  {isStreamConnected ? '● LIVE UPDATES CONNECTED' : '● RECONNECTING / AUTO-SYNC'}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700 text-slate-200">
+                <span className={`inline-flex rounded-full h-2 w-2 ${isStreamConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className="font-mono font-semibold text-[11px]">
+                  {isStreamConnected ? 'Live Stream Connected' : 'Auto-Sync Active'}
                 </span>
               </div>
 
               {/* Digital Clock */}
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-emerald-300 font-mono font-bold">
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700 text-emerald-300 font-mono font-semibold tabular-nums">
                 <Clock className="w-3.5 h-3.5 text-emerald-400" />
                 <span>
                   {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} — {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -329,21 +323,17 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
             </div>
           </div>
 
-          <div className="max-w-4xl space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Capital Infrastructure Transparency Portal</span>
+          <div className="max-w-4xl space-y-2.5">
+            <div className="text-xs font-semibold text-amber-400">
+              Capital Infrastructure &amp; Financial Accountability · Finger of God Estate, Asaba
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight font-display">
-              ROAD MODERNIZATION PROJECT
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight font-display">
+              Road Modernization Project &amp; Public Ledger
             </h1>
-            <p className="text-lg sm:text-xl font-bold text-emerald-400 font-display">
-              Transparent Public Ledger
-            </p>
 
-            <p className="text-slate-300 text-sm sm:text-base leading-relaxed pt-1">
-              Track verified project contributions, expenditures, and the current project balance in real time.
+            <p className="text-slate-300 text-sm sm:text-base leading-relaxed max-w-2xl">
+              Track verified resident contributions, approved contractor disbursements, and the live project balance for Phase 1 grading, covered concrete stormwater drains, and 80mm interlocking paving.
             </p>
           </div>
         </div>
@@ -354,15 +344,15 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
         
         {/* Live Notification Banner if any */}
         {lastNotification && (
-          <div className="mb-4 bg-emerald-700 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between gap-3 border border-emerald-500/40">
+          <div className="mb-4 bg-[#064E3B] text-white p-4 rounded-xl shadow-md flex items-center justify-between gap-3 border border-emerald-700">
             <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 animate-bounce shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
               <div>
-                <span className="text-[10px] uppercase font-black bg-white/20 px-2 py-0.5 rounded-full">Live Ledger Update</span>
-                <p className="font-bold text-xs sm:text-sm mt-0.5">{lastNotification.message}</p>
+                <span className="text-[11px] font-semibold text-emerald-200 block">Live Ledger Update</span>
+                <p className="font-semibold text-xs sm:text-sm mt-0.5">{lastNotification.message}</p>
               </div>
             </div>
-            <button onClick={dismissNotification} className="p-1 rounded-lg hover:bg-white/10 text-emerald-200">
+            <button onClick={dismissNotification} className="p-1 rounded-lg hover:bg-white/10 text-emerald-200 cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>

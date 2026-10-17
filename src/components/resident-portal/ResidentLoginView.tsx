@@ -444,7 +444,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
       if (res.success && res.otp_required) {
         setIdEmailResendCooldown(res.cooldownSeconds || 45);
         setIdEmailOtpCode(['', '', '', '', '', '']);
-        setSuccessMessage(`A fresh 6-digit verification code has been sent to ${cleanEmail}.`);
+        setSuccessMessage(res.message || `A fresh 6-digit verification code has been sent to ${cleanEmail}.`);
       } else {
         if (res.cooldownSeconds) setIdEmailResendCooldown(res.cooldownSeconds);
         setErrorMessage(res.message || 'Unable to resend OTP right now. Please wait a moment.');

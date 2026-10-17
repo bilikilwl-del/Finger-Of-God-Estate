@@ -3,22 +3,14 @@ import {
   Bell,
   Search,
   Calendar,
-  User,
   ArrowRight,
-  ShieldCheck,
-  ChevronLeft,
-  AlertCircle,
-  FileText,
-  Filter,
-  CheckCircle2,
-  Lock,
-  ExternalLink,
-  Coins
+  ArrowLeft,
+  FileText
 } from 'lucide-react';
 import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/database';
 import { dbService } from '../../lib/supabase';
-import { EstateLogo } from '../common/EstateLogo';
 import { PublicNavbar } from '../layout/PublicNavbar';
+import { PublicFooter } from '../layout/PublicFooter';
 import { SEOHead } from '../common/SEOHead';
 
 interface PublicAnnouncementsViewProps {
@@ -72,8 +64,17 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
     loadData();
   }, [selectedCategory, searchQuery]);
 
+  const handleNavigate = (tab: any) => {
+    if (tab === 'home') onNavigateHome();
+    else if (tab === 'security_public' && onNavigateToSecurity) onNavigateToSecurity();
+    else if (tab === 'road_project' && onNavigateToRoadProject) onNavigateToRoadProject();
+    else if (tab === 'verify_receipt') onNavigateToVerifyReceipt();
+    else if (tab === 'estate_levy') onOpenPayLevy();
+    else onNavigateHome();
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+    <div className="min-h-screen bg-[#FAF9F6] text-slate-900 font-sans flex flex-col">
       <SEOHead
         title="Official Estate Announcements & Resident Notices — Finger of God Estate"
         description="Official executive committee broadcasts, meeting notices, security alerts, and infrastructure advisories for residents of Finger of God Estate, Asaba."
@@ -86,37 +87,40 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
       <PublicNavbar
         currentTab="public_announcements"
         estateSettings={estateSettings}
-        onNavigate={(tab) => {
-          if (tab === 'home') onNavigateHome();
-          else if (tab === 'security_public' && onNavigateToSecurity) onNavigateToSecurity();
-          else if (tab === 'road_project' && onNavigateToRoadProject) onNavigateToRoadProject();
-          else if (tab === 'verify_receipt') onNavigateToVerifyReceipt();
-          else if (tab === 'estate_levy') onOpenPayLevy();
-          else onNavigateHome();
-        }}
+        onNavigate={handleNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full">
-        {/* Page Banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 sm:p-10 text-white mb-8 shadow-md">
-          <div className="max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
-              <Bell className="w-3.5 h-3.5" />
-              <span>Official Estate Communications</span>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full space-y-8">
+        {/* Header Section */}
+        <div className="border-b border-stone-200 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <button
+              onClick={onNavigateHome}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#064E3B] transition-colors mb-2 cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Estate Homepage</span>
+            </button>
+            <div className="text-xs font-semibold text-[#064E3B] mb-1">
+              Executive Committee Secretariat · Iyiaba, Asaba
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
-              Estate Announcements & Notices
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight font-display">
+              Estate Announcements &amp; Official Circulars
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Timely updates, security directives, payment advisories, and facility maintenance schedules published by the Executive Committee (EXCO) of {estateSettings.estate_name || 'Finger of God Estate'}.
+            <p className="text-xs sm:text-sm text-slate-600 mt-1.5 max-w-2xl leading-relaxed">
+              Verified updates, security directives, general meeting schedules, and facility maintenance notices published by the Executive Committee (EXCO) of {estateSettings.estate_name || 'Finger of God Estate'}.
             </p>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium shrink-0">
+            Showing <span className="font-mono font-bold text-slate-900 tabular-nums">{announcements.length}</span> active notice{announcements.length === 1 ? '' : 's'}
           </div>
         </div>
 
         {/* Filter & Search Bar */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-8 shadow-xs space-y-4">
+        <div className="bg-white rounded-xl p-4 border border-stone-200 shadow-2xs space-y-4">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             {/* Search Input */}
             <div className="relative w-full md:w-96">
@@ -124,51 +128,46 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search notices by keyword, title, topic..."
-                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                placeholder="Search notices by keyword, title, or topic..."
+                className="w-full pl-9 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-lg text-xs font-medium text-slate-900 focus:ring-2 focus:ring-[#064E3B] focus:bg-white focus:outline-none transition-colors"
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
 
-            {/* Results count */}
-            <div className="text-xs text-slate-500 font-medium self-start md:self-center">
-              Showing <span className="font-bold text-slate-900">{announcements.length}</span> active notice{announcements.length === 1 ? '' : 's'}
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 w-full md:w-auto scrollbar-none">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => setSelectedCategory(cat.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    selectedCategory === cat.value
+                      ? 'bg-[#064E3B] text-white shadow-2xs'
+                      : 'bg-stone-100 text-slate-600 hover:bg-stone-200 hover:text-slate-900'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 scrollbar-none">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => setSelectedCategory(cat.value)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  selectedCategory === cat.value
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
           </div>
         </div>
 
         {/* Announcements List */}
         {loading ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-slate-200">
-            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <div className="text-xs font-semibold text-slate-500">Loading estate notices...</div>
+          <div className="text-center py-20 bg-white rounded-xl border border-stone-200">
+            <div className="w-7 h-7 border-2 border-[#064E3B] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="text-xs font-medium text-slate-500">Loading official estate circulars...</div>
           </div>
         ) : announcements.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 space-y-3">
-            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
-              <FileText className="w-6 h-6" />
+          <div className="text-center py-16 bg-white rounded-xl border border-stone-200 p-8 space-y-3">
+            <div className="w-11 h-11 bg-stone-100 text-slate-400 rounded-lg flex items-center justify-center mx-auto">
+              <FileText className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-800">No active notices found</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            <h3 className="text-base font-bold text-slate-900">No active notices found</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
               {searchQuery || selectedCategory !== 'ALL'
-                ? 'Try adjusting your search query or selecting a different category.'
+                ? 'Try adjusting your search query or selecting a different notice category.'
                 : 'There are currently no active public bulletins published by the estate administration.'}
             </p>
             {(searchQuery || selectedCategory !== 'ALL') && (
@@ -177,7 +176,7 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                   setSearchQuery('');
                   setSelectedCategory('ALL');
                 }}
-                className="text-xs font-semibold text-blue-600 hover:underline pt-2 inline-block cursor-pointer"
+                className="text-xs font-semibold text-[#064E3B] hover:underline pt-2 inline-block cursor-pointer"
               >
                 Clear all filters
               </button>
@@ -193,34 +192,33 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                 <article
                   key={item.id}
                   onClick={() => onSelectAnnouncement(item.slug)}
-                  className={`bg-white rounded-2xl p-6 border transition-all cursor-pointer flex flex-col justify-between group shadow-xs hover:shadow-md ${
+                  className={`bg-white rounded-xl p-6 border transition-all cursor-pointer flex flex-col justify-between group shadow-2xs hover:shadow-md ${
                     isUrgent
-                      ? 'border-rose-300 ring-1 ring-rose-300/40 hover:border-rose-500'
+                      ? 'border-rose-300 hover:border-rose-500'
                       : isImportant
-                      ? 'border-amber-300 ring-1 ring-amber-300/40 hover:border-amber-500'
-                      : 'border-slate-200 hover:border-blue-300'
+                      ? 'border-amber-300 hover:border-amber-500'
+                      : 'border-stone-200 hover:border-emerald-700/40'
                   }`}
                 >
                   <div>
-                    {/* Header tags */}
-                    <div className="flex items-center gap-2 mb-3">
+                    {/* Clean unboxed metadata with typographic separator */}
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-2.5">
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        className={`font-semibold ${
                           isUrgent
-                            ? 'bg-rose-100 text-rose-800'
+                            ? 'text-rose-700'
                             : isImportant
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'text-amber-800'
+                            : 'text-[#064E3B]'
                         }`}
                       >
-                        {item.priority}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">
                         {item.category}
                       </span>
+                      <span aria-hidden="true">·</span>
+                      <span>{item.priority}</span>
                     </div>
 
-                    <h2 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors mb-2 line-clamp-2 leading-snug">
+                    <h2 className="text-base font-bold text-slate-900 group-hover:text-[#064E3B] transition-colors mb-2 line-clamp-2 leading-snug">
                       {item.title}
                     </h2>
 
@@ -229,13 +227,13 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
                     </p>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="pt-4 border-t border-stone-100 flex items-center justify-between text-xs text-slate-500">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       <span>{new Date(item.publish_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     </div>
 
-                    <span className="font-semibold text-blue-600 group-hover:text-blue-800 flex items-center gap-1 transition-transform group-hover:translate-x-0.5">
+                    <span className="font-semibold text-[#064E3B] flex items-center gap-1">
                       <span>Read Notice</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </span>
@@ -247,35 +245,11 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 text-xs text-slate-500 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div>
-            &copy; {new Date().getFullYear()} {estateSettings.estate_name || 'Finger of God Estate'} Security Management.
-          </div>
-          <div className="flex items-center gap-4">
-            <button onClick={onNavigateHome} className="hover:text-slate-900 cursor-pointer">
-              Home
-            </button>
-            {onNavigateToSecurity && (
-              <button onClick={onNavigateToSecurity} className="hover:text-slate-900 cursor-pointer">
-                Security
-              </button>
-            )}
-            {onNavigateToRoadProject && (
-              <button onClick={onNavigateToRoadProject} className="text-amber-800 font-semibold hover:text-amber-900 cursor-pointer">
-                Road Project
-              </button>
-            )}
-            <button onClick={onNavigateToVerifyReceipt} className="hover:text-slate-900 cursor-pointer">
-              Verify Receipt
-            </button>
-            <button onClick={onOpenResidentLogin} className="hover:text-slate-900 cursor-pointer">
-              Resident Login
-            </button>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter
+        estateSettings={estateSettings}
+        onNavigate={handleNavigate}
+        onOpenResidentLogin={onOpenResidentLogin}
+      />
     </div>
   );
 };

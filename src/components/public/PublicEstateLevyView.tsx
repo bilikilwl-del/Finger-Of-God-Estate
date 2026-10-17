@@ -9,7 +9,6 @@ import {
   Building,
   FileCheck2,
   Lock,
-  ChevronRight,
   Clock
 } from 'lucide-react';
 import {
@@ -40,6 +39,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
 }) => {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedBuildingForPay, setSelectedBuildingForPay] = useState<any | null>(null);
+  const [selectedDurationForPay, setSelectedDurationForPay] = useState<1 | 12>(1);
 
   // Search / Lookup state
   const [searchBuildingTag, setSearchBuildingTag] = useState(currentResident?.house_number || '');
@@ -123,16 +123,17 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
     }
   };
 
-  const handleOpenPayment = (building?: any) => {
+  const handleOpenPayment = (building?: any, duration: 1 | 12 = 1) => {
     setSelectedBuildingForPay(building || null);
+    setSelectedDurationForPay(duration);
     setIsPayModalOpen(true);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+    <div className="min-h-screen bg-[#FAF9F6] text-slate-900 font-sans flex flex-col">
       <SEOHead
         title="Monthly Estate Levy — Finger of God Estate"
-        description="Pay your monthly estate levy online, track your payment status, and access your verified payment receipts."
+        description="Pay your monthly or annual building estate levy online, track your building clearance status, and access verified payment receipts."
         keywords={['Monthly Estate Levy', 'Finger of God Estate', 'Paystack Online Checkout', 'Estate Dues Receipt', 'Asaba Delta State']}
         canonicalPath="/#estate-levy"
         ogType="website"
@@ -146,80 +147,95 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         onOpenResidentLogin={onOpenResidentLogin}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
         {/* 1. Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-stone-200 pb-6">
           <div>
             <button
               onClick={() => onNavigate('home')}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition-colors mb-2 cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#064E3B] transition-colors mb-2 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Home Dashboard</span>
+              <span>Return to Estate Homepage</span>
             </button>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
-              Monthly Estate Levy
+            <div className="text-xs font-semibold text-[#064E3B] mb-1">
+              Building Maintenance &amp; Civic Administration · ₦1,000 Per Building
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight font-display">
+              Building Estate Levy
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl">
-              Pay your monthly estate levy online, track your payment status, and access your verified payment receipts.
+            <p className="text-xs sm:text-sm text-slate-600 mt-1.5 max-w-3xl leading-relaxed">
+              Pay your building estate levy online for 1 Month (₦1,000) or 12 Months (₦12,000), track your building clearance status, and download verified digital receipts.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
-              onClick={() => handleOpenPayment()}
-              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              onClick={() => handleOpenPayment(undefined, 1)}
+              className="px-4 py-2.5 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
             >
               <CreditCard className="w-4 h-4" />
-              <span>Pay Estate Levy</span>
+              <span>Pay 1 Month (₦1,000)</span>
+            </button>
+            <button
+              onClick={() => handleOpenPayment(undefined, 12)}
+              className="px-4 py-2.5 bg-white hover:bg-stone-100 text-slate-900 border border-stone-300 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              <Calendar className="w-4 h-4 text-[#064E3B]" />
+              <span>Pay 12 Months (₦12,000)</span>
             </button>
           </div>
         </div>
 
         {/* 2. Professional Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Monthly Levy</p>
-            <p className="text-3xl font-black text-emerald-950 font-mono">₦1,000</p>
-            <p className="text-xs text-slate-600">Per building, per month.</p>
-            <div className="pt-2 flex items-center gap-1.5 text-[11px] text-emerald-800 font-semibold">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Due date: 1st of every month</span>
+          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-2">
+            <p className="text-xs font-semibold text-slate-500">Approved Building Rate</p>
+            <div className="flex items-baseline gap-2">
+              <p className="text-3xl font-bold text-[#064E3B] font-mono tabular-nums">₦1,000</p>
+              <span className="text-xs text-slate-500">/ month per building</span>
+            </div>
+            <p className="text-xs text-slate-600">
+              1 Month (<strong className="font-mono">₦1,000</strong>) or 12 Months (<strong className="font-mono">₦12,000</strong>) option available.
+            </p>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-[#064E3B] font-medium">
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Due date: 1st of every calendar month</span>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Payment Channel</p>
-            <p className="text-sm font-bold text-slate-900">Secure Online Checkout</p>
+          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-2">
+            <p className="text-xs font-semibold text-slate-500">Payment Channel</p>
+            <p className="text-base font-bold text-slate-900">Paystack Online Checkout</p>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Secure online checkout through Paystack, using the payment channels actually enabled for this account.
+              Verified online checkout via card, bank transfer, or USSD with automatic server-side ledger allocation.
             </p>
-            <div className="pt-2 flex items-center gap-1.5 text-[11px] text-slate-600">
-              <Lock className="w-3.5 h-3.5 text-emerald-600" />
-              <span>PCI-DSS certified gateway</span>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-slate-600">
+              <Lock className="w-3.5 h-3.5 text-[#064E3B]" />
+              <span>PCI-DSS certified payment gateway</span>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Receipt Information</p>
-            <p className="text-sm font-bold text-slate-900">Verified Payment Receipt</p>
+          <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-2">
+            <p className="text-xs font-semibold text-slate-500">Official Receipting</p>
+            <p className="text-base font-bold text-slate-900">Instant Digital Receipt</p>
             <p className="text-xs text-slate-600 leading-relaxed">
-              A verified receipt will be available once payment has been confirmed.
+              A stamped digital receipt covering 1 month or 12 consecutive months is issued immediately upon confirmation.
             </p>
-            <div className="pt-2 flex items-center gap-1.5 text-[11px] text-slate-600">
-              <FileCheck2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Instant digital confirmation</span>
+            <div className="pt-2 flex items-center gap-1.5 text-xs text-slate-600">
+              <FileCheck2 className="w-3.5 h-3.5 text-[#064E3B]" />
+              <span>Verifiable building payment record</span>
             </div>
           </div>
         </div>
 
-        {/* 3. Building Status Lookup & Quick Payment */}
+        {/* 3. Building Status Lookup & Policy */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left: Building Status Lookup */}
-          <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-5">
+          <div className="lg:col-span-7 bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-5">
             <div>
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Search className="w-4 h-4 text-emerald-700" />
+                <Search className="w-4 h-4 text-[#064E3B]" />
                 <span>Check Building Levy Status</span>
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -233,70 +249,78 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                 placeholder="Enter building or house number (e.g. 016, 238, Plot 14)"
                 value={searchBuildingTag}
                 onChange={(e) => setSearchBuildingTag(e.target.value)}
-                className="flex-1 px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-600 text-slate-900 font-medium"
+                className="flex-1 px-3.5 py-2.5 text-xs bg-stone-50 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#064E3B] focus:bg-white text-slate-900 font-medium"
               />
               <button
                 type="submit"
                 disabled={searching}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 {searching ? 'Checking...' : 'Check Status'}
               </button>
             </form>
 
             {searchError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-800">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-800">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>{searchError}</span>
               </div>
             )}
 
             {lookupResult && lookupResult.building && (
-              <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
+              <div className="p-5 bg-stone-50 border border-stone-200 rounded-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200 pb-3">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                    <span className="text-xs font-semibold text-[#064E3B] block">
                       Verified Building Record
                     </span>
-                    <p className="text-sm font-bold text-emerald-950">
+                    <p className="text-base font-bold text-slate-900">
                       Building: {lookupResult.building.house_number}
                       {lookupResult.building.building_name ? ` (${lookupResult.building.building_name})` : ''}
                     </p>
                     {lookupResult.building.landlord_name && (
-                      <p className="text-xs text-emerald-800">
+                      <p className="text-xs text-slate-600">
                         Responsible Account: {lookupResult.building.landlord_name}
                       </p>
                     )}
                   </div>
 
                   {lookupResult.obligation?.status === 'PAID' ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-200/80 text-emerald-900 font-bold text-xs">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-100 text-emerald-900 font-semibold text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-[#064E3B]" />
                       <span>PAID FOR {selectedMonth}</span>
                     </span>
                   ) : (
-                    <button
-                      onClick={() => handleOpenPayment(lookupResult.building)}
-                      className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg shadow-xs cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>Pay ₦1,000</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleOpenPayment(lookupResult.building, 1)}
+                        className="px-3.5 py-2 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-lg shadow-2xs cursor-pointer flex items-center gap-1.5"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>1 Month (₦1,000)</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenPayment(lookupResult.building, 12)}
+                        className="px-3.5 py-2 bg-white hover:bg-stone-100 text-slate-900 border border-stone-300 font-semibold text-xs rounded-lg cursor-pointer"
+                      >
+                        12 Months (₦12,000)
+                      </button>
+                    </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="bg-white p-2.5 rounded-lg border border-emerald-100">
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Billing Unit</p>
-                    <p className="font-semibold text-slate-800">1 Building</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                  <div className="bg-white p-3 rounded-lg border border-stone-200">
+                    <p className="text-[11px] text-slate-500">Billing Unit</p>
+                    <p className="font-semibold text-slate-900 mt-0.5">1 Building</p>
                   </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-emerald-100">
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Monthly Rate</p>
-                    <p className="font-mono font-bold text-emerald-900">₦1,000</p>
+                  <div className="bg-white p-3 rounded-lg border border-stone-200">
+                    <p className="text-[11px] text-slate-500">Monthly / Annual Rate</p>
+                    <p className="font-mono font-bold text-[#064E3B] mt-0.5 tabular-nums">₦1,000 / ₦12,000</p>
                   </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-emerald-100 col-span-2 sm:col-span-1">
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Status ({selectedMonth})</p>
-                    <p className="font-bold text-slate-800">
+                  <div className="bg-white p-3 rounded-lg border border-stone-200 col-span-2 sm:col-span-1">
+                    <p className="text-[11px] text-slate-500">Status ({selectedMonth})</p>
+                    <p className="font-bold text-slate-900 mt-0.5">
                       {lookupResult.obligation?.status || 'UNPAID'}
                     </p>
                   </div>
@@ -304,13 +328,13 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
 
                 {/* Receipts for this building */}
                 {lookupResult.receipts && lookupResult.receipts.length > 0 && (
-                  <div className="pt-2 border-t border-emerald-200/70 space-y-1.5">
-                    <p className="text-[11px] font-bold text-emerald-950">Verified Payment Receipts:</p>
-                    <div className="space-y-1">
+                  <div className="pt-2 border-t border-stone-200 space-y-2">
+                    <p className="text-xs font-semibold text-slate-900">Verified Payment Receipts:</p>
+                    <div className="space-y-1.5">
                       {lookupResult.receipts.map((r) => (
                         <div
                           key={r.receipt_number}
-                          className="bg-white p-2.5 rounded-lg border border-emerald-100 flex items-center justify-between text-xs"
+                          className="bg-white p-2.5 rounded-lg border border-stone-200 flex items-center justify-between text-xs"
                         >
                           <div>
                             <span className="font-mono font-bold text-slate-900">#{r.receipt_number}</span>
@@ -321,7 +345,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                               setViewingReceipt(r);
                               setIsReceiptModalOpen(true);
                             }}
-                            className="text-emerald-700 hover:text-emerald-800 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                            className="text-[#064E3B] hover:underline font-semibold text-xs flex items-center gap-1 cursor-pointer"
                           >
                             <FileCheck2 className="w-3.5 h-3.5" />
                             <span>View Receipt</span>
@@ -336,31 +360,31 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
           </div>
 
           {/* Right: Policy & Billing Rules */}
-          <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+          <div className="lg:col-span-5 bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Building className="w-4 h-4 text-emerald-700" />
+              <Building className="w-4 h-4 text-[#064E3B]" />
               <span>Estate Levy Billing Policy</span>
             </h3>
 
             <div className="space-y-3 text-xs text-slate-600">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+              <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-200 space-y-1">
                 <p className="font-bold text-slate-900">₦1,000 Per Building Rate</p>
                 <p className="leading-relaxed">
-                  The monthly estate levy is fixed at exactly ₦1,000 per billable building. A building containing multiple residents or flats is not charged multiple times merely because several residents reside in that building.
+                  The monthly estate levy is fixed at ₦1,000 per billable building (or ₦12,000 for 12 months). A building containing multiple residents or flats is assessed as a single building unit.
                 </p>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                <p className="font-bold text-slate-900">Billing Schedule</p>
+              <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-200 space-y-1">
+                <p className="font-bold text-slate-900">1-Month &amp; 12-Month Schedules</p>
                 <p className="leading-relaxed">
-                  Dues are assessed on the 1st of every calendar month. Payments made online are verified server-side and recorded immediately against the building ledger.
+                  Dues are assessed on the 1st of every calendar month. Building owners and representatives may pay for 1 month (₦1,000) or 12 consecutive months (₦12,000) in a single transaction.
                 </p>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                <p className="font-bold text-slate-900">Fund Separation</p>
+              <div className="p-3.5 bg-stone-50 rounded-lg border border-stone-200 space-y-1">
+                <p className="font-bold text-slate-900">Dedicated Building Ledger</p>
                 <p className="leading-relaxed">
-                  Monthly estate levy dues are maintained in a dedicated estate account and managed strictly separate from road modernization contributions and gate security operations.
+                  Monthly estate levy dues are maintained in a dedicated building ledger and managed strictly separate from capital infrastructure contributions and other estate collections.
                 </p>
               </div>
             </div>
@@ -368,12 +392,12 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         </div>
 
         {/* 4. Active Buildings Directory */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-4">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Building className="w-4 h-4 text-emerald-700" />
-                <span>Estate Buildings Directory & Payment Ledger</span>
+                <Building className="w-4 h-4 text-[#064E3B]" />
+                <span>Estate Buildings Directory &amp; Payment Ledger</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Overview of billable buildings and monthly levy clearance status.
@@ -385,18 +409,18 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-2.5 py-1 text-xs border border-slate-300 rounded-lg bg-white"
+                className="px-2.5 py-1.5 text-xs border border-stone-300 rounded-lg bg-white font-medium text-slate-800"
               />
             </div>
           </div>
 
           {loadingList ? (
-            <div className="py-8 text-center text-xs text-slate-400">Loading building records...</div>
+            <div className="py-10 text-center text-xs text-slate-500">Loading building records...</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
+                  <tr className="border-b border-stone-200 bg-stone-50 text-slate-600 font-semibold">
                     <th className="py-3 px-4">Building Tag</th>
                     <th className="py-3 px-4">Building Description</th>
                     <th className="py-3 px-4">Responsible Account</th>
@@ -405,10 +429,10 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                     <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-stone-100">
                   {buildingsList.slice(0, 15).map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                    <tr key={b.id} className="hover:bg-stone-50/80 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 tabular-nums">
                         {b.house_number}
                       </td>
                       <td className="py-3 px-4 text-slate-700">
@@ -417,32 +441,40 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                       <td className="py-3 px-4 text-slate-700">
                         {b.landlord_name || 'Registered Landlord'}
                       </td>
-                      <td className="py-3 px-4 font-mono font-semibold text-slate-900">
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-900 tabular-nums">
                         ₦1,000
                       </td>
                       <td className="py-3 px-4">
                         {b.obligation?.status === 'PAID' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 className="w-3 h-3" />
-                            PAID
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#064E3B]">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Paid</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                            <Clock className="w-3 h-3" />
-                            UNPAID
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Unpaid</span>
                           </span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         {b.obligation?.status === 'PAID' ? (
-                          <span className="text-[11px] font-medium text-slate-400">Clear</span>
+                          <span className="text-xs font-medium text-slate-400">Cleared</span>
                         ) : (
-                          <button
-                            onClick={() => handleOpenPayment(b)}
-                            className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                          >
-                            Pay ₦1,000
-                          </button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenPayment(b, 1)}
+                              className="px-2.5 py-1 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-md transition-colors cursor-pointer"
+                            >
+                              1m (₦1k)
+                            </button>
+                            <button
+                              onClick={() => handleOpenPayment(b, 12)}
+                              className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-slate-800 border border-stone-300 font-semibold text-xs rounded-md transition-colors cursor-pointer"
+                            >
+                              12m (₦12k)
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -450,7 +482,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
                 </tbody>
               </table>
               {buildingsList.length > 15 && (
-                <p className="text-[11px] text-slate-400 text-center pt-3">
+                <p className="text-xs text-slate-500 text-center pt-4">
                   Showing 15 of {buildingsList.length} estate buildings. Use the lookup tool above to search for any specific building tag.
                 </p>
               )}
@@ -470,6 +502,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         <EstateLevyPaymentModal
           isOpen={isPayModalOpen}
           initialBuilding={selectedBuildingForPay}
+          initialDuration={selectedDurationForPay}
           onClose={() => {
             setIsPayModalOpen(false);
             setSelectedBuildingForPay(null);

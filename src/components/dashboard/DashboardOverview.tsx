@@ -157,30 +157,26 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   return (
     <div className="space-y-6">
       {/* 1. Header Banner & Month Selector */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs">
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 text-emerald-400 text-xs font-semibold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                EXCO Security Command
-              </span>
-              <span className="text-xs text-slate-500 font-mono">Stage 7 Financial Management</span>
+            <div className="text-xs font-semibold text-[#064E3B] mb-1">
+              Executive Committee Administration · Asaba, Delta State
             </div>
-            <h1 className="text-2xl font-bold font-display text-slate-900 mt-1">
-              FINGER OF GOD ESTATE SECURITY MANAGEMENT
+            <h1 className="text-2xl font-bold font-display text-slate-900">
+              {estateSettings?.estate_name || 'Finger of God Estate'} — Management Overview
             </h1>
-            <p className="text-sm font-semibold text-emerald-800">
-              ADMIN / EXCO DASHBOARD
+            <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+              Financial governance, resident compliance, building levies, and security operations.
             </p>
           </div>
 
           {/* Month Selector Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 shadow-2xs">
-              <Calendar className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2">
+              <Calendar className="w-4 h-4 text-[#064E3B]" />
               <div className="text-xs">
-                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Viewing Levy Month</span>
+                <span className="text-slate-500 block text-[10px] font-semibold">Billing Period</span>
                 <select
                   value={`${selectedMonth}-${selectedYear}`}
                   onChange={(e) => {
@@ -201,10 +197,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
             <button
               onClick={loadFinancialData}
-              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+              className="p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
               title="Refresh Financial Figures"
             >
-              <RefreshCw className={`w-4 h-4 ${summaryLoading ? 'animate-spin text-emerald-600' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${summaryLoading ? 'animate-spin text-[#064E3B]' : ''}`} />
             </button>
           </div>
         </div>
@@ -686,19 +682,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
 
           <div className="space-y-2 text-xs">
-            <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-                <span className="text-slate-700">Reminder 1 (Day 1 - 10 of Month)</span>
-              </div>
-              <span className="font-mono font-bold text-slate-900">{smsStats.reminder1Sent} Sent</span>
+            <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+              <span className="text-slate-700 font-medium">Reminder 1 (Day 1 – 10 of Month)</span>
+              <span className="font-mono font-bold text-slate-900 tabular-nums">{smsStats.reminder1Sent} Sent</span>
             </div>
-            <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-500" />
-                <span className="text-slate-700">Reminder 2 (Post-Day 10 Overdue)</span>
-              </div>
-              <span className="font-mono font-bold text-slate-900">{smsStats.reminder2Sent} Sent</span>
+            <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
+              <span className="text-slate-700 font-medium">Reminder 2 (Post-Day 10 Overdue)</span>
+              <span className="font-mono font-bold text-slate-900 tabular-nums">{smsStats.reminder2Sent} Sent</span>
             </div>
           </div>
         </div>

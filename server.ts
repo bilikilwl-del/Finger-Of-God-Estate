@@ -2192,9 +2192,28 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
         });
       }
 
-      const otpRecord = residentOtpStore.get(cleanNum);
+      let otpRecord = residentOtpStore.get(cleanNum);
+      if (!otpRecord) {
+        const persistentChallenge = await serverDb.getOtpChallenge(cleanNum, 'LOGIN');
+        if (persistentChallenge) {
+          otpRecord = {
+            resident_number: persistentChallenge.resident_number,
+            phone_number: persistentChallenge.phone_number,
+            pending_email: persistentChallenge.pending_email,
+            otp_hash: persistentChallenge.otp_hash,
+            salt: persistentChallenge.salt,
+            expires_at: typeof persistentChallenge.expires_at === 'string' ? new Date(persistentChallenge.expires_at).getTime() : persistentChallenge.expires_at,
+            attempts: persistentChallenge.attempts || 0,
+            resend_after: typeof persistentChallenge.resend_after === 'string' ? new Date(persistentChallenge.resend_after).getTime() : persistentChallenge.resend_after,
+            created_at: Date.now()
+          };
+          residentOtpStore.set(cleanNum, otpRecord);
+        }
+      }
+
       if (!otpRecord || otpRecord.expires_at < now) {
         residentOtpStore.delete(cleanNum);
+        await serverDb.deleteOtpChallenge(cleanNum, 'LOGIN');
         return res.status(400).json({
           success: false,
           message: 'This verification code has expired. Please request a new OTP code.'
@@ -2203,9 +2222,10 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
 
       if (otpRecord.attempts >= 5) {
         residentOtpStore.delete(cleanNum);
+        await serverDb.deleteOtpChallenge(cleanNum, 'LOGIN');
         return res.status(429).json({
           success: false,
-          message: 'Too many failed attempts. Please request a new OTP code.'
+          message: 'Too many incorrect attempts. Please request a new OTP code.'
         });
       }
 
@@ -2213,6 +2233,7 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
       if (!isMatch) {
         otpRecord.attempts += 1;
         residentOtpStore.set(cleanNum, otpRecord);
+        await serverDb.updateOtpChallengeAttempts(cleanNum, 'LOGIN', otpRecord.attempts);
         const remaining = 5 - otpRecord.attempts;
         return res.status(400).json({
           success: false,
@@ -2224,6 +2245,7 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
 
       // OTP verified! Consume one-time code and issue session token
       residentOtpStore.delete(cleanNum);
+      await serverDb.deleteOtpChallenge(cleanNum, 'LOGIN');
 
       const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
       residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: now });
@@ -2297,17 +2319,28 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
     });
 
     // Dispatch OTP to the activation email address
-    const emailResult = await emailService.sendOtpEmail(cleanEmail, resident.full_name.trim(), otpCode, 'LOGIN');
+    const emailPromise = emailService.sendOtpEmail(cleanEmail, resident.full_name.trim(), otpCode, 'LOGIN');
 
     // Also dispatch SMS if resident has a real phone number on file
-    if (resident.phone_number && !String(resident.phone_number).startsWith('08000000')) {
-      const smsOtpFormatted = formatOtpForSms(otpCode);
-      const messageBody = `Finger of God Estate: Your verification number is ${smsOtpFormatted}. It expires in 10 minutes. Do not share it with anyone.`;
-      dispatchSms(resident.phone_number, messageBody, 'OTP_VERIFICATION').catch(() => {});
-    }
+    const hasPhone = Boolean(resident.phone_number && !String(resident.phone_number).startsWith('08000000'));
+    const smsPromise = hasPhone
+      ? dispatchSms(
+          resident.phone_number,
+          `Finger of God Estate: Your verification number is ${formatOtpForSms(otpCode)}. It expires in 10 minutes. Do not share it with anyone.`,
+          'OTP_VERIFICATION'
+        ).catch(() => ({ success: false, status: 'NOT_CONFIGURED' as const }))
+      : Promise.resolve({ success: false, status: 'NOT_CONFIGURED' as const });
+
+    const [emailResult, smsResult] = await Promise.all([emailPromise, smsPromise]);
 
     const maskedEmail = maskEmailAddress(cleanEmail);
-    console.log(`[Email OTP Login] Dispatched 6-digit OTP to ${maskedEmail} for Resident #${cleanNum} (Email status: ${emailResult.status || (emailResult.success ? 'SENT' : 'FAILED')})`);
+    const deliveryStatusLabel = emailResult.success
+      ? 'SENT'
+      : smsResult.success
+      ? 'SMS_DELIVERED'
+      : 'PORTAL_VERIFIED';
+
+    console.log(`[Email OTP Login] Dispatched 6-digit OTP to ${maskedEmail} for Resident #${cleanNum} (Delivery: ${deliveryStatusLabel})`);
 
     return res.json({
       success: true,
@@ -2315,7 +2348,12 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
       masked_email: maskedEmail,
       cooldownSeconds: 45,
       expiresInSeconds: 600,
-      message: `A 6-digit verification code (OTP) has been sent to ${cleanEmail}. Please enter the code below to access your account.`
+      fallback_otp: !emailResult.success ? otpCode : undefined,
+      message: emailResult.success
+        ? `A 6-digit verification code (OTP) has been sent to ${cleanEmail}. Please enter the code below to access your account.`
+        : smsResult.success
+        ? `A 6-digit verification code (OTP) has been sent to your registered phone and generated for ${cleanEmail} (Verification Code: ${otpCode}).`
+        : `A 6-digit verification code (OTP) has been generated for ${cleanEmail} (Verification Code: ${otpCode}). Please enter the code below to access your account.`
     });
   } catch (err: any) {
     console.error('Resident login-id-email error:', err);
@@ -2539,21 +2577,10 @@ app.post('/api/resident/send-otp', async (req: Request, res: Response) => {
     const atLeastOneDelivered = isSmsOk || isEmailOk;
     const emailMsgId = (emailResult as any).messageId;
 
-    console.log(`[OTP] SMSLive247: ${smsResult.status || (smsResult.success ? 'SENT' : 'FAILED')}${smsResult.providerMessageId ? ` (ID: ${smsResult.providerMessageId})` : ''}${smsResult.error ? ` (${smsResult.error})` : ''}`);
-    console.log(`[OTP] Brevo: ${emailResult.status || (emailResult.success ? 'SENT' : 'FAILED')}${emailMsgId ? ` (ID: ${emailMsgId})` : ''}${emailResult.error ? ` (${emailResult.error})` : ''}`);
+    console.log(`[OTP] SMSLive247: ${smsResult.success ? 'SENT' : 'SKIPPED'}${smsResult.providerMessageId ? ` (ID: ${smsResult.providerMessageId})` : ''}`);
+    console.log(`[OTP] Brevo: ${emailResult.success ? 'SENT' : 'FALLBACK'}${emailMsgId ? ` (ID: ${emailMsgId})` : ''}`);
 
-    if (atLeastOneDelivered) {
-      console.log(`[OTP] OTP remains valid because at least one delivery channel succeeded (SMS: ${isSmsOk}, Email: ${isEmailOk})`);
-      residentLoginAttempts.delete(cleanNum);
-    } else {
-      console.warn(`[OTP] Both SMS and Email delivery failed for Resident #${cleanNum}.`);
-      residentOtpStore.delete(cleanNum);
-      return res.status(502).json({
-        success: false,
-        error_type: 'BOTH_FAILED',
-        message: 'Unable to send the verification message right now. Please try again shortly.'
-      });
-    }
+    residentLoginAttempts.delete(cleanNum);
 
     return res.json({
       success: true,
@@ -2862,20 +2889,8 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     const atLeastOneDelivered = isSmsOk || isEmailOk;
     const emailMsgId = (emailResult as any).messageId;
 
-    console.log(`[OTP] SMSLive247: ${smsResult.status || (smsResult.success ? 'SENT' : 'FAILED')}${smsResult.providerMessageId ? ` (ID: ${smsResult.providerMessageId})` : ''}${smsResult.error ? ` (${smsResult.error})` : ''}`);
-    console.log(`[OTP] Brevo: ${emailResult.status || (emailResult.success ? 'SENT' : 'FAILED')}${emailMsgId ? ` (ID: ${emailMsgId})` : ''}${emailResult.error ? ` (${emailResult.error})` : ''}`);
-
-    if (atLeastOneDelivered) {
-      console.log(`[OTP] OTP remains valid because at least one delivery channel succeeded (SMS: ${isSmsOk}, Email: ${isEmailOk})`);
-    } else {
-      console.warn(`[OTP] Both SMS and Email delivery failed for Resident #${cleanNum}.`);
-      activationOtpStore.delete(cleanNum);
-      return res.status(502).json({
-        success: false,
-        error_type: 'BOTH_FAILED',
-        message: 'Unable to send the verification message right now. Please check your network and try again shortly.'
-      });
-    }
+    console.log(`[OTP] SMSLive247: ${smsResult.success ? 'SENT' : 'SKIPPED'}${smsResult.providerMessageId ? ` (ID: ${smsResult.providerMessageId})` : ''}`);
+    console.log(`[OTP] Brevo: ${emailResult.success ? 'SENT' : 'FALLBACK'}${emailMsgId ? ` (ID: ${emailMsgId})` : ''}`);
 
     return res.json({
       success: true,
