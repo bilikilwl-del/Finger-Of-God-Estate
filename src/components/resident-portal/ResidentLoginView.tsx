@@ -268,9 +268,9 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setUpdateHouseNumber(res.house_number || `Plot ${cleanNum}`);
         setUpdateHomeAddress(res.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba');
         if (res.needs_update) {
-          setSuccessMessage(`Resident #${cleanNum} found! Please update your Full Names, Phone Numbers, Email Address, and Home Address below.`);
+          setSuccessMessage(`Resident #${cleanNum} found! Please enter your Full Names, Phone Numbers, Email Address, and Home Address to activate your account.`);
         } else {
-          setSuccessMessage(`Update details for Resident #${cleanNum}.`);
+          setSuccessMessage(`Account details for Resident #${cleanNum}.`);
         }
       } else {
         setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
@@ -813,7 +813,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
           }`}
         >
           <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="truncate">Update Details</span>
+          <span className="truncate">Activate Account</span>
         </button>
       </div>
 
@@ -920,7 +920,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 />
               </div>
               <p className="text-[10px] text-slate-500 mt-0.5">
-                If you have not set up your email yet, click "Update Details" below to complete your profile.
+                If you have not set up your email yet, click "Activate Account" below to complete your profile.
               </p>
             </div>
 
@@ -946,11 +946,11 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               </button>
             </div>
 
-            {/* First Time / Update Details Prompt */}
+            {/* First Time / Activate Account Prompt */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
               <div>
                 <span className="font-bold text-slate-800 block text-[11px] sm:text-xs">First time logging in?</span>
-                <span className="text-[10px] sm:text-[11px] text-slate-500">Update your Full Name, Phone, Email and Address.</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-500">Activate your account with your Full Name, Phone, Email and Address.</span>
               </div>
               <button
                 type="button"
@@ -964,7 +964,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 }}
                 className="px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs transition-colors cursor-pointer shrink-0"
               >
-                Update Details &rarr;
+                Activate Account &rarr;
               </button>
             </div>
 
@@ -1019,7 +1019,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950">
                   <p className="font-bold text-emerald-900 text-sm mb-1">Enter Your Resident ID Number</p>
                   <p className="text-emerald-800 leading-relaxed text-[11px]">
-                    Estate residents (1–100): enter your resident ID number (e.g. <strong>001</strong> or <strong>1</strong>) to update your Full Names, Phone Numbers, Email Address, and Home Address.
+                    Estate residents (1–100): enter your resident ID number (e.g. <strong>001</strong> or <strong>1</strong>) to activate your account with your Full Names, Phone Numbers, Email Address, and Home Address.
                   </p>
                 </div>
 
@@ -1069,7 +1069,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                       </span>
                     ) : (
                       <>
-                        <span>CONTINUE TO UPDATE DETAILS</span>
+                        <span>CONTINUE TO ACTIVATE ACCOUNT</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -1080,8 +1080,8 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               <form onSubmit={handleSaveResidentDetails} className="space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                   <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">Update Resident Details</h3>
-                    <p className="text-[11px] text-slate-500">Update your details to enable ID &amp; Email login.</p>
+                    <h3 className="text-sm font-extrabold text-slate-900">Activate Resident Account</h3>
+                    <p className="text-[11px] text-slate-500">Provide your details to activate your account and enable ID &amp; Email login.</p>
                   </div>
                   <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 rounded-lg font-mono font-bold text-xs border border-emerald-200">
                     Resident #{updateResidentNumber}
@@ -1200,7 +1200,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>SAVE DETAILS &amp; ACCESS ACCOUNT</span>
+                        <span>ACTIVATE ACCOUNT &amp; ACCESS PORTAL</span>
                       </>
                     )}
                   </button>
