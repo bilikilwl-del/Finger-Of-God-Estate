@@ -1532,7 +1532,7 @@ app.post('/api/resident/auth', async (req: Request, res: Response) => {
     if (!residentNumber || !phoneNumber) {
       return res.status(400).json({
         success: false,
-        message: 'Both Resident Number (001–300) and registered Phone Number are required.'
+        message: 'Both Resident Number (001–100) and registered Phone Number are required.'
       });
     }
 
@@ -1540,7 +1540,7 @@ app.post('/api/resident/auth', async (req: Request, res: Response) => {
     if (!isValidResidentNumber(cleanNum)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Resident Number. Estate resident numbers must be between 001 and 300 with leading zeros (e.g. 001, 010, 300).'
+        message: 'Invalid Resident Number. Estate resident numbers must be between 001 and 100 with leading zeros (e.g. 001, 010, 100).'
       });
     }
 
@@ -1623,7 +1623,7 @@ app.post('/api/resident/verify-activation', async (req: Request, res: Response) 
     if (!isValidResidentNumber(cleanNum)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 100.'
       });
     }
 
@@ -1704,7 +1704,7 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
     if (!isValidResidentNumber(cleanNum)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 100.'
       });
     }
 
@@ -1981,11 +1981,11 @@ app.all('/api/resident/check-id', async (req: Request, res: Response) => {
       already_activated: isCompleted,
       needs_update: !isCompleted,
       resident_number: cleanNum,
-      full_name: resident.full_name || `Resident ${cleanNum}`,
-      phone_number: resident.phone_number && !resident.phone_number.startsWith('08000000') ? resident.phone_number : '',
-      email: resident.email || '',
-      house_number: resident.house_number || `Plot ${cleanNum}`,
-      address: resident.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba',
+      full_name: isCompleted ? (resident.full_name || '') : '',
+      phone_number: isCompleted && resident.phone_number && !resident.phone_number.startsWith('08000000') ? resident.phone_number : '',
+      email: isCompleted ? (resident.email || '') : '',
+      house_number: isCompleted ? (resident.house_number || '') : '',
+      address: isCompleted ? (resident.address || '') : '',
       masked_email: resident.email ? resident.email.replace(/^(.{2})(.*)(@.*)$/, (_m: string, a: string, b: string, c: string) => `${a}${'•'.repeat(Math.max(b.length, 3))}${c}`) : null,
       account_status: resident.account_status || (isCompleted ? 'ACTIVE' : 'NOT ACTIVATED')
     });
@@ -2757,7 +2757,7 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
     if (!isValidResidentNumber(cleanNum)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid Resident Number. Resident numbers must be between 001 and 300.'
+        message: 'Invalid Resident Number. Resident numbers must be between 001 and 100.'
       });
     }
 
@@ -4552,12 +4552,12 @@ const INITIAL_SERVER_SMS: ServerSmsLogRecord[] = [
     id: 'sms-srv-3',
     resident_id: 'res-001',
     resident_number: '001',
-    phone_number: '08023456789',
+    phone_number: '07057543935',
     payment_month: 10,
     payment_year: 2026,
     period_label: 'October 2026',
     reminder_type: 'TEST',
-    message: 'Dear Engr. Babatunde Adeleke, this is a test notification from Finger of God Estate Security Management. Estate security line: 08023456789. Resident No: 001.',
+    message: 'Dear Engr. Babatunde Adeleke, this is a test notification from Finger of God Estate Security Management. Estate security line: 07057543935. Resident No: 001.',
     provider: 'termii',
     provider_message_id: 'tm-msg-test-01',
     delivery_status: 'SENT',
@@ -4654,7 +4654,7 @@ function buildReminder2Text(residentName: string, residentNumber: string, period
 }
 
 function buildTestText(residentName: string, residentNumber: string): string {
-  return `Dear ${residentName.trim()}, this is a test notification from Finger of God Estate Security Management. Estate security line: 08023456789. Resident No: ${residentNumber}.`;
+  return `Dear ${residentName.trim()}, this is a test notification from Finger of God Estate Security Management. Estate security line: 07057543935. Resident No: ${residentNumber}.`;
 }
 
 // Core Dispatch: Dispatches SMS via configured provider or reports NOT_CONFIGURED

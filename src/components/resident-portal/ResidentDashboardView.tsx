@@ -2123,6 +2123,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
       {/* Official Estate Levy Receipt Modal */}
       {selectedEstateLevyReceipt && (
         <EstateLevyReceiptModal
+          isOpen={true}
           receipt={selectedEstateLevyReceipt}
           onClose={() => setSelectedEstateLevyReceipt(null)}
         />

@@ -78,7 +78,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
     description: '',
     opening_at: '',
     closing_at: '',
-    election_rules: '1. One accredited vote per estate plot (001–300).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
+    election_rules: '1. One accredited vote per estate plot (001–100).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
     tie_resolution_rule: 'Run-off election within 7 days in accordance with Estate Electoral Guidelines.'
   });
 
@@ -245,7 +245,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
           description: '',
           opening_at: '',
           closing_at: '',
-          election_rules: '1. One accredited vote per estate plot (001–300).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
+          election_rules: '1. One accredited vote per estate plot (001–100).\n2. Ballots are cryptographically isolated and anonymous.\n3. Simple majority determines the winning candidate for each position.',
           tie_resolution_rule: 'Run-off election within 7 days in accordance with Estate Electoral Guidelines.'
         });
         await loadElections();
@@ -661,7 +661,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
               {selectedElection?.title || 'Estate Executive Election'}
             </h1>
             <p className="text-xs text-slate-400 max-w-2xl">
-              Manage election configuration, approve candidate manifestos, monitor voter accreditation (001–300), and execute certified ballot counts.
+              Manage election configuration, approve candidate manifestos, monitor voter accreditation (001–100), and execute certified ballot counts.
             </p>
           </div>
 
@@ -744,7 +744,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 font-medium block">Accredited Voters</span>
             <span className="text-xl sm:text-2xl font-bold text-white">{voters.length}</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">Plots 001–300</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">Plots 001–100</span>
           </div>
 
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
@@ -878,7 +878,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Voting Restriction:</span>
-                <span className="text-slate-900 font-bold">1 Vote per Accredited Property (001–300)</span>
+                <span className="text-slate-900 font-bold">1 Vote per Accredited Property (001–100)</span>
               </div>
             </div>
 
@@ -1296,7 +1296,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
               className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${actionLoading ? 'animate-spin' : ''}`} />
-              <span>Sync Resident Register (001–300)</span>
+              <span>Sync Resident Register (001–100)</span>
             </button>
           </div>
 
@@ -1369,7 +1369,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
           </div>
 
           <div className="p-3 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500">
-            Showing {filteredVoters.length} accredited voter records (Estate Plots 001–300).
+            Showing {filteredVoters.length} accredited voter records (Estate Plots 001–100).
           </div>
         </div>
       )}

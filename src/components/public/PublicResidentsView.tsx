@@ -60,7 +60,7 @@ export const PublicResidentsView: React.FC<PublicResidentsViewProps> = ({
               <span>Return to Estate Homepage</span>
             </button>
             <div className="text-xs font-semibold text-[#064E3B] mb-1">
-              Homeowner &amp; Tenant Self-Service · IDs #001 – #300
+              Homeowner &amp; Tenant Self-Service · IDs #001 – #100
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight font-display">
               Resident Services &amp; Portal Hub

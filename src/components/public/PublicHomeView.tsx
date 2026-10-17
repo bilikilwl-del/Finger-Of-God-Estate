@@ -157,7 +157,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       index: '01',
       id: 'residents',
       title: 'Resident Portal & Household Registry',
-      meta: 'Plots 001 – 300 · Verified Access',
+      meta: 'Plots 001 – 100 · Verified Access',
       description: 'Access your personal plot ledger, manage household vehicles, pre-register guests for gate clearance, and review official payment records.',
       actionLabel: 'Open Resident Portal',
       tab: 'resident_portal' as NavigationTab,
@@ -211,7 +211,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
   ];
 
   const roadProgressPercent = roadSummary
-    ? Math.min(100, Math.round((roadSummary.total_collected / (roadSummary.target_amount || 35000000)) * 100))
+    ? Math.min(100, Math.round((roadSummary.total_collected / (roadSummary.target_budget || 35000000)) * 100))
     : 0;
 
   return (
@@ -425,7 +425,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                       Quick Resident Lookup
                     </h3>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Enter your assigned Resident ID (<span className="font-mono">001</span> – <span className="font-mono">300</span>) to pay your 1-month or 12-month security levy and download an official receipt.
+                      Enter your assigned Resident ID (<span className="font-mono">001</span> – <span className="font-mono">100</span>) to pay your 1-month or 12-month security levy and download an official receipt.
                     </p>
                   </div>
 
@@ -498,7 +498,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
             <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/90">
               <div className="py-6 sm:px-6 first:pl-0">
                 <p className="text-xs text-slate-500 font-medium">Registered Residences</p>
-                <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">Plots 001–300</p>
+                <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums mt-1">Plots 001–100</p>
                 <p className="text-xs text-slate-500 mt-1">Phase 1 residential layout</p>
               </div>
               <div className="py-6 px-4 sm:px-6">
@@ -761,24 +761,24 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                   <div className="py-3.5 flex items-start gap-3.5">
                     <MapPin className="w-4 h-4 text-emerald-800 shrink-0 mt-1" />
                     <div>
-                      <p className="font-semibold text-slate-900">Estate Location & Office</p>
-                      <p className="text-slate-600 mt-0.5">{estateSettings.estate_address}</p>
+                      <p className="font-semibold text-slate-900">Physical Address</p>
+                      <p className="text-slate-600 mt-0.5">1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.</p>
                     </div>
                   </div>
 
                   <div className="py-3.5 flex items-start gap-3.5">
                     <Phone className="w-4 h-4 text-emerald-800 shrink-0 mt-1" />
                     <div>
-                      <p className="font-semibold text-slate-900">24/7 Main Gate Security Desk</p>
-                      <p className="text-slate-600 font-mono mt-0.5">{estateSettings.contact_phone} · Main Gate Guard Post</p>
+                      <p className="font-semibold text-slate-900">Gate Security &amp; Incident Control Desk</p>
+                      <p className="text-slate-600 font-mono mt-0.5">07057543935 (Gate &amp; Security Desk)</p>
                     </div>
                   </div>
 
                   <div className="py-3.5 flex items-start gap-3.5">
                     <Mail className="w-4 h-4 text-emerald-800 shrink-0 mt-1" />
                     <div>
-                      <p className="font-semibold text-slate-900">Official Electronic Mail</p>
-                      <p className="text-slate-600 mt-0.5">{estateSettings.contact_email}</p>
+                      <p className="font-semibold text-slate-900">Official Email</p>
+                      <p className="text-slate-600 mt-0.5">support@fingerofgodestate.com</p>
                     </div>
                   </div>
                 </div>

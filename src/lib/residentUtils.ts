@@ -2,16 +2,16 @@
  * Resident Number Integrity & Validation Utilities
  * Finger of God Estate Resident Management System
  * 
- * Enforces strict 001 - 300 range, leading-zero preservation, and duplicate prevention.
+ * Enforces strict 001 - 100 range, leading-zero preservation, and duplicate prevention.
  */
 
 import { normalizeNigerianPhone, arePhoneNumbersEqual } from './phoneUtils';
 
 export const RESIDENT_NUMBER_MIN = 1;
-export const RESIDENT_NUMBER_MAX = 300;
+export const RESIDENT_NUMBER_MAX = 100;
 
-// Strict Regex: 001 to 009, 010 to 099, 100 to 299, 300
-export const RESIDENT_NUMBER_REGEX = /^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$/;
+// Strict Regex: 001 to 009, 010 to 099, 100
+export const RESIDENT_NUMBER_REGEX = /^(00[1-9]|0[1-9][0-9]|100)$/;
 
 export interface ResidentNumberValidationResult {
   isValid: boolean;
@@ -20,7 +20,7 @@ export interface ResidentNumberValidationResult {
 }
 
 /**
- * Checks if a string is a strictly valid resident number (001 through 300)
+ * Checks if a string is a strictly valid resident number (001 through 100)
  */
 export function isValidResidentNumber(input: string | number | undefined | null): boolean {
   if (input === undefined || input === null) return false;
@@ -29,7 +29,7 @@ export function isValidResidentNumber(input: string | number | undefined | null)
 }
 
 /**
- * Normalizes user input into canonical 3-digit resident number (e.g. "1" -> "001", "25" -> "025", "300" -> "300")
+ * Normalizes user input into canonical 3-digit resident number (e.g. "1" -> "001", "25" -> "025", "100" -> "100")
  * Preserves leading zeros.
  */
 export function normalizeResidentNumber(input: string | number | undefined | null): string {
@@ -49,7 +49,7 @@ export function normalizeResidentNumber(input: string | number | undefined | nul
 
 /**
  * Full validation for resident numbers with actionable error messages
- * Strictly requires 3-digit format (001 through 300) with preserved leading zeros.
+ * Strictly requires 3-digit format (001 through 100) with preserved leading zeros.
  * Does not allow: 1, 01, 0001, ABC, duplicate numbers.
  */
 export function validateResidentNumber(input: string | number | undefined | null): ResidentNumberValidationResult {
@@ -64,14 +64,14 @@ export function validateResidentNumber(input: string | number | undefined | null
   const raw = String(input).trim();
   const normalized = normalizeResidentNumber(raw);
 
-  // Strictly check if the entered string is 3 digits matching 001-300
+  // Strictly check if the entered string is 3 digits matching 001-100
   if (!RESIDENT_NUMBER_REGEX.test(raw)) {
     const num = parseInt(raw, 10);
     if (isNaN(num)) {
       return {
         isValid: false,
         normalized: raw,
-        error: `"${raw}" is not a valid resident number. Estate resident numbers must be numeric between 001 and 300.`
+        error: `"${raw}" is not a valid resident number. Estate resident numbers must be numeric between 001 and 100.`
       };
     }
     if (num < RESIDENT_NUMBER_MIN) {
@@ -85,7 +85,7 @@ export function validateResidentNumber(input: string | number | undefined | null
       return {
         isValid: false,
         normalized: raw,
-        error: `Resident number cannot exceed 300. The estate directory is designated for residents 001–300.`
+        error: `Resident number cannot exceed 100. The estate directory is designated for residents 001–100.`
       };
     }
     if (raw.length < 3) {
@@ -99,13 +99,13 @@ export function validateResidentNumber(input: string | number | undefined | null
       return {
         isValid: false,
         normalized,
-        error: `Invalid resident number format "${raw}". Resident numbers must be exactly 3 digits (001–300). Extra leading zeros or digits (e.g. 0001) are not allowed.`
+        error: `Invalid resident number format "${raw}". Resident numbers must be exactly 3 digits (001–100). Extra leading zeros or digits (e.g. 0001) are not allowed.`
       };
     }
     return {
       isValid: false,
       normalized,
-      error: `Invalid resident number format. Must be formatted as 3 digits with leading zeros (e.g. 001, 042, 300).`
+      error: `Invalid resident number format. Must be formatted as 3 digits with leading zeros (e.g. 001, 042, 100).`
     };
   }
 
@@ -149,6 +149,7 @@ export function checkDuplicatePhone(
 
   for (const r of existingResidents) {
     if (r.id === excludeId) continue;
+    if (r.phone_number && String(r.phone_number).startsWith('08000000')) continue;
     const rPrimary = normalizeNigerianPhone(r.phone_number);
     const rAlt = r.additional_phone ? normalizeNigerianPhone(r.additional_phone) : null;
 
@@ -162,6 +163,5 @@ export function checkDuplicatePhone(
       };
     }
   }
-
   return { isDuplicate: false };
 }

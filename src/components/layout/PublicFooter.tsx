@@ -50,15 +50,15 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
             <div className="pt-2 space-y-2 text-xs text-slate-400">
               <div className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>{estateSettings.estate_address || 'Phase 1, Iyiaba, Asaba, Delta State, Nigeria'}</span>
+                <span>1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Hotline: {estateSettings.contact_phone || '08023456789'} (Gate & Security Desk)</span>
+                <span>Hotline: 07057543935 (Gate &amp; Security Desk)</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{estateSettings.contact_email || 'admin@fingerofgodestate.ng'}</span>
+                <span>support@fingerofgodestate.com</span>
               </div>
             </div>
           </div>

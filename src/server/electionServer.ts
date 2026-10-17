@@ -486,19 +486,19 @@ electionRouter.post('/auth/initiate', async (req: Request, res: Response) => {
     const { residentNumber, electionId } = req.body;
     const rawNum = String(residentNumber || '').trim();
 
-    // Strict 3-digit format validation (e.g. 001, 291). Non-digit or wrong length must be rejected.
+    // Strict 3-digit format validation (e.g. 001, 100). Non-digit or wrong length must be rejected.
     if (!/^\d{3}$/.test(rawNum)) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid 3-digit Estate Number between 001 and 300 (e.g. 001).'
+        message: 'Please provide a valid 3-digit Estate Number between 001 and 100 (e.g. 001).'
       });
     }
 
     const numInt = parseInt(rawNum, 10);
-    if (numInt < 1 || numInt > 300) {
+    if (numInt < 1 || numInt > 100) {
       return res.status(400).json({
         success: false,
-        message: 'Estate Number must be between 001 and 300.'
+        message: 'Estate Number must be between 001 and 100.'
       });
     }
 
@@ -861,7 +861,7 @@ electionRouter.post('/admin/elections', requireElectionAdmin, async (req: Reques
         status: 'DRAFT',
         starts_at: opening_at || new Date().toISOString(),
         ends_at: closing_at || new Date(Date.now() + 14 * 86400000).toISOString(),
-        constitution_rules: election_rules || '1. One vote per accredited resident 001–300.\n2. Secret ballot.',
+        constitution_rules: election_rules || '1. One vote per accredited resident 001–100.\n2. Secret ballot.',
         tie_breaking_rule: tie_resolution_rule || 'Run-off election within 7 days in accordance with Article 8.',
         created_by: adminUser.email
       })
@@ -1428,7 +1428,7 @@ electionRouter.get('/admin/elections/:id/voters', requireElectionAdmin, async (r
   }
 });
 
-// POST /api/election/admin/elections/:id/voters/sync - Sync resident register (001 - 300) into Supabase
+// POST /api/election/admin/elections/:id/voters/sync - Sync resident register (001 - 100) into Supabase
 electionRouter.post('/admin/elections/:id/voters/sync', requireElectionAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

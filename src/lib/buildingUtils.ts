@@ -2,15 +2,15 @@
  * Building and Flat Management Integrity Utilities
  * Finger of God Estate Management System
  * 
- * Enforces building tag integrity (e.g. 001 - 300), leading-zero preservation,
+ * Enforces building tag integrity (e.g. 001 - 100), leading-zero preservation,
  * duplicate prevention, and privacy-conscious household name masking.
  */
 
 export const BUILDING_TAG_MIN = 1;
-export const BUILDING_TAG_MAX = 300;
+export const BUILDING_TAG_MAX = 100;
 
-// Strict Regex for canonical 3-digit estate tags: 001 to 300
-export const CANONICAL_BUILDING_TAG_REGEX = /^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$/;
+// Strict Regex for canonical 3-digit estate tags: 001 to 100
+export const CANONICAL_BUILDING_TAG_REGEX = /^(00[1-9]|0[1-9][0-9]|100)$/;
 
 export interface BuildingTagValidationResult {
   isValid: boolean;
@@ -20,14 +20,14 @@ export interface BuildingTagValidationResult {
 
 /**
  * Normalizes a building tag into its canonical string representation,
- * strictly preserving leading zeros (e.g. "16" -> "016", "016" -> "016", "300" -> "300").
+ * strictly preserving leading zeros (e.g. "16" -> "016", "016" -> "016", "100" -> "100").
  */
 export function normalizeBuildingTag(input: string | number | undefined | null): string {
   if (input === undefined || input === null) return '';
   const str = String(input).trim();
   if (!str) return '';
 
-  // If purely numeric digits, normalize to 3 digits if in range 1-300
+  // If purely numeric digits, normalize to 3 digits if in range 1-100
   if (/^\d+$/.test(str)) {
     const val = parseInt(str, 10);
     if (!isNaN(val) && val >= BUILDING_TAG_MIN && val <= BUILDING_TAG_MAX) {
@@ -54,14 +54,14 @@ export function validateBuildingTag(input: string | number | undefined | null): 
   const raw = String(input).trim();
   const normalized = normalizeBuildingTag(raw);
 
-  // If numeric, enforce 001 - 300 range
+  // If numeric, enforce 001 - 100 range
   if (/^\d+$/.test(raw)) {
     const num = parseInt(raw, 10);
     if (num < BUILDING_TAG_MIN || num > BUILDING_TAG_MAX) {
       return {
         isValid: false,
         normalized: raw,
-        error: `Building tag "${raw}" is outside the valid estate range (001–300).`
+        error: `Building tag "${raw}" is outside the valid estate range (001–100).`
       };
     }
     return {
@@ -90,7 +90,7 @@ export function validateBuildingTag(input: string | number | undefined | null): 
   return {
     isValid: false,
     normalized: raw,
-    error: `Invalid building tag format "${raw}". Please enter a valid estate identification number (e.g. 001, 016, 300).`
+    error: `Invalid building tag format "${raw}". Please enter a valid estate identification number (e.g. 001, 016, 100).`
   };
 }
 

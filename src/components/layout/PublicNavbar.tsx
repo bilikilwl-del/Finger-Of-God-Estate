@@ -109,7 +109,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
           <div className="flex items-center gap-3 min-w-0">
             <span className="flex items-center gap-1.5 text-slate-300 min-w-0">
               <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="truncate max-w-[220px] xl:max-w-[340px] 2xl:max-w-none">{estateSettings.estate_address || 'Phase 1, Iyiaba, Asaba, Delta State'}</span>
+              <span className="truncate max-w-[220px] xl:max-w-[340px] 2xl:max-w-none">1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.</span>
             </span>
             <span className="hidden xl:inline-block w-1 h-1 rounded-full bg-slate-700 shrink-0"></span>
             <span className="hidden xl:flex items-center gap-1.5 text-emerald-400 font-semibold shrink-0">
@@ -122,7 +122,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
           <div className="flex items-center gap-3 text-slate-300 shrink-0 text-[11px]">
             <span className="flex items-center gap-1.5">
               <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-              <span>Hotline: <strong className="text-white font-mono">{estateSettings.contact_phone || '08023456789'}</strong></span>
+              <span>Hotline: <strong className="text-white font-mono">07057543935 (Gate &amp; Security Desk)</strong></span>
             </span>
             <span className="w-1 h-1 rounded-full bg-slate-700"></span>
             <button
@@ -273,7 +273,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
                   <div>
-                    <p className="font-bold text-amber-950">Registered Resident (001 - 300)?</p>
+                    <p className="font-bold text-amber-950">Registered Resident (001 - 100)?</p>
                     <p className="text-[11px] text-amber-800">Activate your resident ID for online access</p>
                   </div>
                   <button

@@ -154,7 +154,7 @@ export const EmergencyReportModal: React.FC<EmergencyReportModalProps> = ({
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-500 font-semibold">Estate Security Hotline:</span>
-                <span className="font-mono font-bold text-emerald-700">08023456789 / 08034567890</span>
+                <span className="font-mono font-bold text-emerald-700">07057543935 (Gate &amp; Security Desk)</span>
               </div>
             </div>
 

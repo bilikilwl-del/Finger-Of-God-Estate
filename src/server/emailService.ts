@@ -204,7 +204,7 @@ class EmailService {
           </p>
         </div>
         <div style="background: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-          Finger of God Estate • Main Gate Boulevard, Phase 1, Asaba, Delta State
+          Finger of God Estate • 1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.
         </div>
       </div>
     `;
@@ -264,7 +264,7 @@ class EmailService {
           </p>
         </div>
         <div style="background: #f8fafc; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-          Finger of God Estate • Main Gate Boulevard, Phase 1, Asaba, Delta State
+          Finger of God Estate • 1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.
         </div>
       </div>
     `;

@@ -170,15 +170,15 @@ export default function App() {
   const [estateSettings, setEstateSettings] = useState<EstateSettings>({
     id: 'default',
     estate_name: 'Finger of God Estate',
-    estate_address: 'Phase 1, Iyiaba, Asaba, Delta State, Nigeria',
+    estate_address: '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.',
     estate_state: 'Delta',
     estate_lga: 'Oshimili South',
     monthly_security_levy: 1500,
     monthly_estate_levy: 1000,
     payment_due_day: 1,
     currency: 'NGN',
-    contact_phone: '08023456789',
-    contact_email: 'admin@fingerofgodestate.ng',
+    contact_phone: '07057543935',
+    contact_email: 'support@fingerofgodestate.com',
     sms_sender_name: 'FINGEROFGOD',
     first_payment_month: 'October 2026'
   });

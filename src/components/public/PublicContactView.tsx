@@ -107,11 +107,11 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <a
-                href={`tel:${estateSettings.contact_phone || '08023456789'}`}
+                href="tel:07057543935"
                 className="px-5 py-2.5 rounded-lg bg-[#064E3B] hover:bg-emerald-800 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <Phone className="w-4 h-4" />
-                <span>Call Gate: {estateSettings.contact_phone || '08023456789'}</span>
+                <span>Call Gate: 07057543935</span>
               </a>
               <button
                 onClick={() => {
@@ -150,7 +150,7 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
                   <div>
                     <p className="font-bold text-slate-900">Physical Address</p>
                     <p className="text-slate-600 mt-0.5 leading-relaxed">
-                      {estateSettings.estate_address || 'Phase 1, Iyiaba, Asaba, Delta State, Nigeria'}
+                      1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.
                     </p>
                   </div>
                 </div>
@@ -161,7 +161,7 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
                   </div>
                   <div>
                     <p className="font-bold text-slate-900">Official Email</p>
-                    <p className="text-slate-600 mt-0.5">{estateSettings.contact_email || 'admin@fingerofgodestate.ng'}</p>
+                    <p className="text-slate-600 mt-0.5">support@fingerofgodestate.com</p>
                     <p className="text-[11px] text-slate-500">Response within 24 hours</p>
                   </div>
                 </div>
@@ -188,19 +188,23 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
               <div className="space-y-2.5 divide-y divide-stone-100">
                 <div className="pt-2.5 flex items-center justify-between">
                   <span className="font-medium text-slate-700">Chief Security Officer (CSO)</span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums">0803-000-1122</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">08164259355</span>
                 </div>
                 <div className="pt-2.5 flex items-center justify-between">
                   <span className="font-medium text-slate-700">Road Project Committee</span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums">0802-333-4455</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">09021735272</span>
                 </div>
                 <div className="pt-2.5 flex items-center justify-between">
                   <span className="font-medium text-slate-700">Power &amp; Transformer Desk</span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums">0809-555-6677</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">08037582940</span>
                 </div>
                 <div className="pt-2.5 flex items-center justify-between">
                   <span className="font-medium text-slate-700">Finance &amp; Levy Accounts</span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums">0812-777-8899</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">08036985573</span>
+                </div>
+                <div className="pt-2.5 flex items-center justify-between">
+                  <span className="font-medium text-slate-700">Delta State Unified Vigilante (School Boy Units)</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">08164259355</span>
                 </div>
               </div>
             </div>

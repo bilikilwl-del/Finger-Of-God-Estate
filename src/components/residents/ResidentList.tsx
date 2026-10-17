@@ -72,20 +72,20 @@ export const ResidentList: React.FC<ResidentListProps> = ({
       }
 
       // House/Plot filter
-      if (houseFilter && !r.house_number.toLowerCase().includes(houseFilter.toLowerCase())) {
+      if (houseFilter && !(r.house_number || '').toLowerCase().includes(houseFilter.toLowerCase())) {
         return false;
       }
 
       // Search filter across Resident No, Name, Phone, and House/Plot
       if (!q) return true;
 
-      const matchesResidentNo = r.resident_number.toLowerCase().includes(q);
-      const matchesName = r.full_name.toLowerCase().includes(q);
-      const matchesHouse = r.house_number.toLowerCase().includes(q);
-      const matchesPhone = r.phone_number.includes(q) || 
-        (cleanSearchPhone && normalizeNigerianPhone(r.phone_number).includes(cleanSearchPhone)) ||
+      const matchesResidentNo = (r.resident_number || '').toLowerCase().includes(q);
+      const matchesName = (r.full_name || '').toLowerCase().includes(q);
+      const matchesHouse = (r.house_number || '').toLowerCase().includes(q);
+      const matchesPhone = (r.phone_number || '').includes(q) || 
+        (cleanSearchPhone && normalizeNigerianPhone(r.phone_number || '').includes(cleanSearchPhone)) ||
         (r.additional_phone && (r.additional_phone.includes(q) || (cleanSearchPhone && normalizeNigerianPhone(r.additional_phone).includes(cleanSearchPhone))));
-      const matchesAddress = r.address.toLowerCase().includes(q);
+      const matchesAddress = (r.address || '').toLowerCase().includes(q);
 
       return matchesResidentNo || matchesName || matchesHouse || matchesPhone || matchesAddress;
     });
@@ -364,7 +364,7 @@ export const ResidentList: React.FC<ResidentListProps> = ({
                           onClick={() => onViewResident(resident)}
                           className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left block"
                         >
-                          {resident.full_name}
+                          {resident.full_name || <span className="italic font-normal text-slate-400">Unactivated Profile</span>}
                         </button>
                         {resident.email && (
                           <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
@@ -375,10 +375,14 @@ export const ResidentList: React.FC<ResidentListProps> = ({
 
                       {/* Phone */}
                       <td className="py-3.5 px-4 font-mono text-slate-700 tabular-nums whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="font-semibold text-slate-800">{resident.phone_number}</span>
-                        </div>
+                        {resident.phone_number ? (
+                          <div className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="font-semibold text-slate-800">{resident.phone_number}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
                         {resident.additional_phone && (
                           <span className="text-[10px] text-slate-400 block ml-5">
                             Alt: {resident.additional_phone}
@@ -388,13 +392,19 @@ export const ResidentList: React.FC<ResidentListProps> = ({
 
                       {/* House/Plot */}
                       <td className="py-3.5 px-4 font-medium text-slate-800">
-                        <div className="flex items-center gap-1.5">
-                          <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="font-bold text-slate-900">{resident.house_number}</span>
-                        </div>
-                        <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
-                          {resident.address}
-                        </span>
+                        {resident.house_number ? (
+                          <div className="flex items-center gap-1.5">
+                            <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="font-bold text-slate-900">{resident.house_number}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
+                        {resident.address && (
+                          <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
+                            {resident.address}
+                          </span>
+                        )}
                       </td>
 
                       {/* Account Status */}

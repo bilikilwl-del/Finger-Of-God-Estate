@@ -299,7 +299,7 @@ export const ResidentFormModal: React.FC<ResidentFormModalProps> = ({
               <p className="text-[11px] text-slate-500 mt-1">
                 {isEditing 
                   ? 'Resident numbers cannot be altered after creation to preserve billing history.'
-                  : 'Unique sequential ID. Preserves leading zeros (e.g. 001, 002, 025, 300).'}
+                  : 'Unique sequential ID. Preserves leading zeros (e.g. 001, 002, 025, 100).'}
               </p>
             </div>
 

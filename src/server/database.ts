@@ -48,15 +48,15 @@ export const supabaseAdmin: SupabaseClient = createClient(
 const DEFAULT_ESTATE_SETTINGS = {
   id: '00000000-0000-0000-0000-000000000001',
   estate_name: 'Finger of God Estate',
-  estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+  estate_address: '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.',
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
   monthly_security_levy: 1500,
   monthly_estate_levy: 1000,
   payment_due_day: 1,
   currency: 'NGN',
-  contact_phone: '08023456789',
-  contact_email: 'admin@fingerofgodestate.ng',
+  contact_phone: '07057543935',
+  contact_email: 'support@fingerofgodestate.com',
   sms_sender_name: 'FINGEROFGOD',
   first_payment_month: 'October 2026',
   road_project_target: 35000000
@@ -74,20 +74,20 @@ export function ensureInitialResidents1To100(residentsList: any[]): any[] {
       current.push({
         id: crypto.randomUUID(),
         resident_number: numStr,
-        full_name: `Resident ${numStr}`,
+        full_name: '',
         phone_number: `08000000${numStr}`,
         additional_phone: null,
         email: null,
-        house_number: `Plot ${numStr}`,
-        address: 'Phase 1, Finger of God Estate, Iyiaba, Asaba',
+        house_number: '',
+        address: '',
         state: 'Delta',
         lga: 'Oshimili South',
-        notes: 'Initial estate resident allocation (1-100)',
+        notes: null,
         registration_date: '2026-10-17',
         status: 'Active',
         account_activated: false,
         profile_completed: false,
-        account_status: 'PROFILE UPDATE REQUIRED',
+        account_status: 'NOT ACTIVATED',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -420,14 +420,21 @@ export const serverDb = {
       }
 
       if (allResidents.length > 0) {
-        localDb.residents = allResidents;
+        const sanitized = allResidents.map(r => ({
+          ...r,
+          phone_number: r.phone_number && String(r.phone_number).startsWith('08000000') ? '' : (r.phone_number || '')
+        }));
+        localDb.residents = sanitized;
         saveDbToFile(localDb);
-        return allResidents;
+        return sanitized;
       }
     } catch (err: any) {
       console.warn(`[Supabase Error] getResidents exception: ${err?.message || err}`);
     }
-    return localDb.residents || [];
+    return (localDb.residents || []).map(r => ({
+      ...r,
+      phone_number: r.phone_number && String(r.phone_number).startsWith('08000000') ? '' : (r.phone_number || '')
+    }));
   },
 
   // RESIDENT SESSIONS
@@ -631,7 +638,8 @@ export const serverDb = {
       if (!error && data) {
         return {
           ...data,
-          resident_number: cleanNum
+          resident_number: cleanNum,
+          phone_number: data.phone_number && String(data.phone_number).startsWith('08000000') ? '' : (data.phone_number || '')
         };
       }
 
@@ -646,7 +654,8 @@ export const serverDb = {
         if (!err2 && data2) {
           return {
             ...data2,
-            resident_number: cleanNum
+            resident_number: cleanNum,
+            phone_number: data2.phone_number && String(data2.phone_number).startsWith('08000000') ? '' : (data2.phone_number || '')
           };
         }
       }
@@ -661,7 +670,8 @@ export const serverDb = {
     if (localFound) {
       return {
         ...localFound,
-        resident_number: cleanNum
+        resident_number: cleanNum,
+        phone_number: localFound.phone_number && String(localFound.phone_number).startsWith('08000000') ? '' : (localFound.phone_number || '')
       };
     }
     return null;
@@ -678,10 +688,10 @@ export const serverDb = {
   async saveResident(residentData: any): Promise<any> {
     const cleanNum = String(residentData.resident_number).trim().padStart(3, '0');
     
-    // Enforce 001 - 300 range with leading zero preservation
-    const residentNumRegex = /^(00[1-9]|0[1-9][0-9]|[1-2][0-9]{2}|300)$/;
+    // Enforce 001 - 100 range with leading zero preservation
+    const residentNumRegex = /^(00[1-9]|0[1-9][0-9]|100)$/;
     if (!residentNumRegex.test(cleanNum)) {
-      throw new Error(`Invalid resident number "${cleanNum}". Resident numbers must be between 001 and 300.`);
+      throw new Error(`Invalid resident number "${cleanNum}". Resident numbers must be between 001 and 100.`);
     }
 
     // Check resident number uniqueness constraint
@@ -722,8 +732,8 @@ export const serverDb = {
       phone_number: normPhone || residentData.phone_number,
       additional_phone: normAltPhone || residentData.additional_phone || null,
       email: residentData.email ? String(residentData.email).trim().toLowerCase() : null,
-      house_number: residentData.house_number ? String(residentData.house_number).trim() : 'Phase 1',
-      address: residentData.address ? String(residentData.address).trim() : 'Finger of God Estate, Iyiaba, Asaba',
+      house_number: residentData.house_number !== undefined ? String(residentData.house_number).trim() : '',
+      address: residentData.address !== undefined ? String(residentData.address).trim() : '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.',
       state: residentData.state || 'Delta',
       lga: residentData.lga || 'Oshimili South',
       notes: residentData.notes ? String(residentData.notes).trim() : null,
@@ -1341,6 +1351,13 @@ export const serverDb = {
     }
     const list = await this.getBuildings();
     return list.find(b => b.id === id) || null;
+  },
+
+  async getBuildingByHouseNumber(houseNumber: string): Promise<any | null> {
+    const clean = String(houseNumber || '').trim().toLowerCase();
+    if (!clean) return null;
+    const list = await this.getBuildings();
+    return list.find(b => String(b.house_number || '').trim().toLowerCase() === clean && b.status !== 'ARCHIVED') || null;
   },
 
   async saveBuilding(building: any): Promise<any> {

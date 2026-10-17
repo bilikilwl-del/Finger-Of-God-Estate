@@ -93,13 +93,13 @@ export const BallotModal: React.FC<BallotModalProps> = ({
 
     const cleanNum = estateNumber.trim().padStart(3, '0');
     if (!cleanNum || cleanNum.length !== 3 || cleanNum === '000') {
-      setErrorMessage('Please enter a valid 3-digit Estate Number between 001 and 300.');
+      setErrorMessage('Please enter a valid 3-digit Estate Number between 001 and 100.');
       return;
     }
 
     const numInt = parseInt(cleanNum, 10);
-    if (isNaN(numInt) || numInt < 1 || numInt > 300) {
-      setErrorMessage('Estate Number must be between 001 and 300.');
+    if (isNaN(numInt) || numInt < 1 || numInt > 100) {
+      setErrorMessage('Estate Number must be between 001 and 100.');
       return;
     }
 
@@ -306,14 +306,14 @@ export const BallotModal: React.FC<BallotModalProps> = ({
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block text-emerald-900">Accredited Property Verification</span>
-                    Voting is strictly restricted to verified landlords and registered residents with an assigned Estate Number between <strong>001 and 300</strong>. Each accredited property may cast exactly one vote.
+                    Voting is strictly restricted to verified landlords and registered residents with an assigned Estate Number between <strong>001 and 100</strong>. Each accredited property may cast exactly one vote.
                   </div>
                 </div>
 
                 <form onSubmit={handleInitiateAuth} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                      Your Estate Number (001–300)
+                      Your Estate Number (001–100)
                     </label>
                     <div className="relative">
                       <input

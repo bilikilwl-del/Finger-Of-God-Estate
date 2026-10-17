@@ -140,7 +140,7 @@ export function buildTestMessage(
   residentName: string,
   residentNumber: string
 ): string {
-  return `Dear ${residentName.trim()}, this is a test notification from Finger of God Estate Security Management. Estate security line: 08023456789. Resident No: ${residentNumber}.`;
+  return `Dear ${residentName.trim()}, this is a test notification from Finger of God Estate Security Management. Estate security line: 07057543935. Resident No: ${residentNumber}.`;
 }
 
 /**

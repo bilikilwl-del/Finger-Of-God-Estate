@@ -86,15 +86,15 @@ export type { SupabaseDiagnosticResult, SupabaseDiagnosticDetails } from './supa
 const DEFAULT_ESTATE_SETTINGS: EstateSettings = {
   id: '00000000-0000-0000-0000-000000000001',
   estate_name: 'Finger of God Estate',
-  estate_address: 'Main Gate Boulevard, Phase 1, Finger of God Estate, Iyiaba, Asaba',
+  estate_address: '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.',
   estate_state: 'Delta',
   estate_lga: 'Oshimili South',
   monthly_security_levy: 1500,
   monthly_estate_levy: 1000,
   payment_due_day: 1,
   currency: 'NGN',
-  contact_phone: '08023456789',
-  contact_email: 'admin@fingerofgodestate.ng',
+  contact_phone: '07057543935',
+  contact_email: 'support@fingerofgodestate.com',
   sms_sender_name: 'FINGEROFGOD',
   first_payment_month: 'October 2026'
 };
@@ -135,8 +135,8 @@ const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
     id: 'off-001',
     officer_badge_id: 'FOG-SEC-01',
     full_name: 'Sgt. Audu Momoh',
-    phone_number: '08023456789',
-    email: 'audu.momoh@fingerofgodestate.ng',
+    phone_number: '08164259355',
+    email: 'support@fingerofgodestate.com',
     rank: 'Chief Security Officer',
     shift: 'Morning (06:00 - 14:00)',
     status: 'On Duty',
@@ -1065,7 +1065,22 @@ function getLocalSettings(): EstateSettings {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_ESTATE_SETTINGS));
       return DEFAULT_ESTATE_SETTINGS;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (
+      parsed.contact_phone === '08023456789' ||
+      parsed.contact_email === 'admin@fingerofgodestate.ng' ||
+      parsed.estate_address?.includes('Main Gate Boulevard')
+    ) {
+      const updated = {
+        ...parsed,
+        estate_address: DEFAULT_ESTATE_SETTINGS.estate_address,
+        contact_phone: DEFAULT_ESTATE_SETTINGS.contact_phone,
+        contact_email: DEFAULT_ESTATE_SETTINGS.contact_email
+      };
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
+      return updated;
+    }
+    return parsed;
   } catch {
     return DEFAULT_ESTATE_SETTINGS;
   }
@@ -1206,8 +1221,8 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     created_by: 'admin@fingerofgodestate.ng',
     read_by_residents: ['001'],
     view_count: 230,
-    body: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 08023456789.',
-    content: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 08023456789.',
+    body: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 07057543935.',
+    content: 'FLASH EMERGENCY ADVISORY: The Nigerian Meteorological Agency has issued a red weather alert for heavy downpours within the coastal corridor.\n\nAll residents are advised to:\n1. Keep all storm drains in front of compounds clear of debris.\n2. Avoid parking near heavy trees along Perimeter Road.\n3. Keep emergency contacts handy. Estate Rapid Response Patrol is active on 07057543935.',
     created_at: '2026-09-24T08:00:00.000Z',
     updated_at: '2026-09-24T08:00:00.000Z'
   }
@@ -1218,7 +1233,7 @@ const INITIAL_NOTIFICATIONS_SEED: ResidentNotification[] = [
     id: 'notif-001',
     resident_number: 'ALL',
     title: 'Emergency Flood Alert & High-Intensity Rain Advisory',
-    message: 'Red weather alert in effect. Keep storm drains clear and report blockages to security hotline 08023456789.',
+    message: 'Red weather alert in effect. Keep storm drains clear and report blockages to security hotline 07057543935.',
     category: 'Emergency',
     priority: 'Emergency',
     is_read: false,
@@ -1633,7 +1648,7 @@ export async function authenticatedAdminFetch(url: string, init: RequestInit = {
 }
 
 /**
- * Calculates the next sequential resident number (e.g. 001, 002, 003... up to 300)
+ * Calculates the next sequential resident number (e.g. 001, 002, 003... up to 100)
  */
 export async function getNextSequentialResidentNumber(): Promise<string> {
   // First, check server store
@@ -1651,7 +1666,7 @@ export async function getNextSequentialResidentNumber(): Promise<string> {
             maxNum = parsed;
           }
         });
-        return formatResidentNumber(Math.min(maxNum + 1, 300));
+        return formatResidentNumber(Math.min(maxNum + 1, 100));
       }
     }
   } catch {}
@@ -1674,7 +1689,7 @@ export async function getNextSequentialResidentNumber(): Promise<string> {
             maxNum = parsed;
           }
         });
-        return formatResidentNumber(Math.min(maxNum + 1, 300));
+        return formatResidentNumber(Math.min(maxNum + 1, 100));
       }
     } catch (e: any) {
       if (isTableNotFoundError(e)) {
@@ -1693,7 +1708,7 @@ export async function getNextSequentialResidentNumber(): Promise<string> {
       maxNum = parsed;
     }
   });
-  return formatResidentNumber(Math.min(maxNum + 1, 300));
+  return formatResidentNumber(Math.min(maxNum + 1, 100));
 }
 
 // ==========================================

@@ -502,7 +502,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         <EstateLevyPaymentModal
           isOpen={isPayModalOpen}
           initialBuilding={selectedBuildingForPay}
-          initialDuration={selectedDurationForPay}
+          initialDurationMonths={selectedDurationForPay}
           onClose={() => {
             setIsPayModalOpen(false);
             setSelectedBuildingForPay(null);

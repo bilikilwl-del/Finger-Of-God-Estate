@@ -396,7 +396,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                       <div className="flex items-center gap-4">
                         <span className="flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          Accreditation: Plots 001–300
+                          Accreditation: Plots 001–100
                         </span>
                         <span className="flex items-center gap-1.5">
                           <Lock className="w-3.5 h-3.5 text-emerald-400" />
@@ -455,7 +455,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                   )}
 
                   <div className="text-[10px] text-amber-300/80 bg-amber-950/40 px-2 py-1 rounded border border-amber-500/20">
-                    Accredited plots 001–300 will be enabled to cast secret ballots.
+                    Accredited plots 001–100 will be enabled to cast secret ballots.
                   </div>
                 </div>
               ) : (
@@ -654,7 +654,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                     Official Electoral Guidelines & Constitutional Rules
                   </h3>
                   <div className="text-xs sm:text-sm text-slate-600 space-y-1.5 leading-relaxed">
-                    <p>• <strong>Accredited Voting Body:</strong> Only verified landlords and registered residents with allocated Estate Numbers (001–300) are accredited to vote.</p>
+                    <p>• <strong>Accredited Voting Body:</strong> Only verified landlords and registered residents with allocated Estate Numbers (001–100) are accredited to vote.</p>
                     <p>• <strong>Strict 1 Vote per Accredited Property:</strong> Each property is allotted exactly one vote per election cycle. Once cast, the property record is marked as voted.</p>
                     <p>• <strong>Confidential Secret Ballot:</strong> Voter identities and telephone credentials are cryptographically isolated from ballot choices. Nobody, including the administrators, can inspect individual voter ballots.</p>
                     <p>• <strong>Tie Resolution:</strong> {election?.tie_resolution_rule || 'Run-off assembly within 7 days in accordance with Article 8.'}</p>
@@ -830,7 +830,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
               </div>
               <div className="text-xs">
                 <span className="font-bold text-white block">Accredited Election 2026 is LIVE</span>
-                <span className="text-slate-400">All registered residents 001–300 are entitled to one vote.</span>
+                <span className="text-slate-400">All registered residents 001–100 are entitled to one vote.</span>
               </div>
             </div>
 

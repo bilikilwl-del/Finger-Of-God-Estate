@@ -47,15 +47,15 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. ESTATE SETTINGS
 CREATE TABLE IF NOT EXISTS public.estate_settings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    estate_name TEXT NOT NULL DEFAULT 'Finger of God Estate Security Management',
-    estate_address TEXT NOT NULL DEFAULT 'Main Gate Boulevard, Phase 1, Finger of God Estate',
-    estate_state TEXT NOT NULL DEFAULT 'Lagos',
-    estate_lga TEXT NOT NULL DEFAULT 'Eti-Osa',
+    estate_name TEXT NOT NULL DEFAULT 'Finger of God Estate',
+    estate_address TEXT NOT NULL DEFAULT '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.',
+    estate_state TEXT NOT NULL DEFAULT 'Delta',
+    estate_lga TEXT NOT NULL DEFAULT 'Oshimili South',
     monthly_security_levy NUMERIC(12, 2) NOT NULL DEFAULT 1500.00,
     payment_due_day INTEGER NOT NULL DEFAULT 1 CHECK (payment_due_day >= 1 AND payment_due_day <= 28),
     currency TEXT NOT NULL DEFAULT 'NGN',
-    contact_phone TEXT NOT NULL DEFAULT '08023456789',
-    contact_email TEXT NOT NULL DEFAULT 'admin@fingerofgodestate.ng',
+    contact_phone TEXT NOT NULL DEFAULT '07057543935',
+    contact_email TEXT NOT NULL DEFAULT 'support@fingerofgodestate.com',
     sms_sender_name TEXT NOT NULL DEFAULT 'FINGEROFGOD',
     first_payment_month TEXT NOT NULL DEFAULT 'October 2026',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -211,7 +211,7 @@ CREATE POLICY "Allow anon read estate_settings" ON public.estate_settings FOR SE
 
   const tables = [
     { name: 'estate_settings', stage: 'Production Core', desc: 'Configures estate name, monthly security levy (₦5,000), due day (1st), Delta State / Asaba address, contact email, phone, and SMS sender name.' },
-    { name: 'residents', stage: 'Production Core', desc: 'Permanent resident register (#001–#300 unique numbers), phone, address, account activation, profile completed, Supabase Auth link.' },
+    { name: 'residents', stage: 'Production Core', desc: 'Permanent resident register (#001–#100 unique numbers), phone, address, account activation, profile completed, Supabase Auth link.' },
     { name: 'admin_users', stage: 'Production Auth & RBAC', desc: 'Authorized administrative users with roles: Super Admin, Administrator, Accountant, Security Officer.' },
     { name: 'monthly_payments', stage: 'Financial & Levy', desc: 'Authoritative ₦5,000 monthly security levy obligations starting October 2026 per active resident.' },
     { name: 'payment_transactions', stage: 'Financial & Audit', desc: 'Verified Paystack gateway references, channel, amount, date, resident relationship, and idempotency status.' },

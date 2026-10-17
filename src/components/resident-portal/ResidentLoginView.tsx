@@ -329,11 +329,11 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
         setIsDetailsStepTwo(true);
         setActiveTab('update_details');
-        setUpdateFullName(res.full_name && !res.full_name.startsWith('Resident ') ? res.full_name : '');
-        setUpdatePhoneNumber(res.phone_number || '');
-        setUpdateEmail(res.email || '');
-        setUpdateHouseNumber(res.house_number || `Plot ${cleanNum}`);
-        setUpdateHomeAddress(res.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba');
+        setUpdateFullName('');
+        setUpdatePhoneNumber('');
+        setUpdateEmail('');
+        setUpdateHouseNumber('');
+        setUpdateHomeAddress('');
         setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, and Home Address to activate your account (one-time activation).`);
       } else {
         setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
@@ -543,7 +543,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     const cleanPhone = phoneNumber.trim();
 
     if (!cleanNum || !cleanPhone) {
-      setErrorMessage('Please enter both your estate number (001–300) and registered phone number.');
+      setErrorMessage('Please enter both your estate number (001–100) and registered phone number.');
       return;
     }
 
@@ -724,7 +724,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     const cleanEmail = actEmail.trim().toLowerCase();
 
     if (!cleanNum || !cleanPhone || !cleanEmail) {
-      setErrorMessage('Please enter your Resident Number (001–300), registered phone number, and email address.');
+      setErrorMessage('Please enter your Resident Number (001–100), registered phone number, and email address.');
       return;
     }
 
@@ -849,32 +849,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
     }
   };
 
-  // 7. FAST TEST PROFILE SWITCHER (AUTO-FILL FORM ONLY - NO AUTO LOGIN)
-  const handleQuickSelect = (num: string, phone: string) => {
-    if (activeTab === 'activate') {
-      setActResidentNumber(num);
-      setActPhoneNumber(phone);
-      setActStep('enter_details');
-      setActIsAlreadyActivated(false);
-    } else if (activeTab === 'update_details') {
-      setUpdateResidentNumber(num);
-      handleLookupIdForUpdate(num);
-    } else if (activeTab === 'login') {
-      setActiveTab('login');
-      setOtpStep('enter_details');
-      setEstateNumber(num);
-      setPhoneNumber(phone);
-    } else {
-      setActiveTab('id_email_login');
-      setResidentIdInput(num);
-      if (num === '001') setResidentEmailInput('babatunde.adeleke@fingerofgodestate.ng');
-      else if (num === '002') setResidentEmailInput('chioma.nwachukwu@fingerofgodestate.ng');
-      else if (num === '003') setResidentEmailInput('usman.danladi@fingerofgodestate.ng');
-    }
-    setErrorMessage(null);
-    setSuccessMessage(null);
-  };
-
   const containerContent = (
     <div className="w-full max-w-[480px] sm:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden mx-auto transition-all flex flex-col max-h-[calc(100dvh-16px)] sm:max-h-[calc(100dvh-32px)]">
       {!isModal && (
@@ -919,7 +893,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
           </div>
 
           <div className="text-right flex items-center gap-1.5">
-            <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-semibold">Estate ID 001–300</span>
+            <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-semibold">Estate ID 001–100</span>
             <span className="text-[9px] text-slate-400 hidden sm:inline">• 256-Bit TLS</span>
           </div>
         </div>
@@ -1452,17 +1426,17 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     <span>Resident Verification</span>
                   </div>
                   <p className="text-emerald-800 leading-relaxed text-[11px]">
-                    Enter your 3-digit estate number (001–300) and registered phone number. We'll send a secure one-time verification code to log you in.
+                    Enter your 3-digit estate number (001–100) and registered phone number. We'll send a secure one-time verification code to log you in.
                   </p>
                 </div>
 
-                {/* Estate Number Field (001 – 300) */}
+                {/* Estate Number Field (001 – 100) */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
                       Estate Number
                     </label>
-                    <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">Range: 001 – 300</span>
+                    <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">Range: 001 – 100</span>
                   </div>
                   <div className="relative">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
@@ -1808,14 +1782,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </div>
 
                 <form onSubmit={handleSendActivationOtp} className="space-y-3 sm:space-y-3.5">
-                  {/* STEP 1: Resident Number Field (001–300) */}
+                  {/* STEP 1: Resident Number Field (001–100) */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
                         Step 1: Resident Number
                       </label>
                       <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md">
-                        Format: 001 – 300
+                        Format: 001 – 100
                       </span>
                     </div>
                     <div className="relative">
@@ -2164,14 +2138,14 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
                   <a
-                    href="tel:08023456789"
+                    href="tel:07057543935"
                     className="p-2 rounded-lg bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs text-[11px]"
                   >
                     <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Desk: 0802 345 6789</span>
+                    <span>Desk: 0705 754 3935</span>
                   </a>
                   <a
-                    href="mailto:support@fingerofgodestate.ng"
+                    href="mailto:support@fingerofgodestate.com"
                     className="p-2 rounded-lg bg-white border border-slate-200 font-semibold text-slate-800 hover:text-emerald-700 hover:border-emerald-300 flex items-center gap-2 transition-all shadow-2xs text-[11px]"
                   >
                     <Mail className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -2180,53 +2154,6 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Quick Test Demo Selection */}
-        <div className="pt-2 border-t border-slate-100 space-y-1.5">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-            Instant Test Resident Profiles:
-          </span>
-          <div className="grid grid-cols-3 gap-1.5">
-            <button
-              type="button"
-              onClick={() => handleQuickSelect('001', '08023456789')}
-              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
-              title="Test Profile 001 - Engr. Babatunde"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-emerald-950 text-[11px] sm:text-xs">#001</span>
-                <span className="text-[9px] font-mono text-emerald-700 hidden sm:inline">0802...</span>
-              </div>
-              <span className="font-semibold text-emerald-900 text-[10px] sm:text-[11px] truncate block leading-tight">Engr. Babatunde</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickSelect('002', '08098765432')}
-              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/80 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
-              title="Test Profile 002 - Dr. Chioma"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-emerald-950 text-[11px] sm:text-xs">#002</span>
-                <span className="text-[9px] font-mono text-emerald-700 hidden sm:inline">0809...</span>
-              </div>
-              <span className="font-semibold text-emerald-900 text-[10px] sm:text-[11px] truncate block leading-tight">Dr. Chioma</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickSelect('003', '08123459876')}
-              className="text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer min-h-[40px] flex flex-col justify-center shadow-2xs"
-              title="Test Profile 003 - Alhaji Usman"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-slate-900 text-[11px] sm:text-xs">#003</span>
-                <span className="text-[9px] font-mono text-slate-500 hidden sm:inline">0812...</span>
-              </div>
-              <span className="font-semibold text-slate-800 text-[10px] sm:text-[11px] truncate block leading-tight">Alhaji Usman</span>
-            </button>
           </div>
         </div>
 

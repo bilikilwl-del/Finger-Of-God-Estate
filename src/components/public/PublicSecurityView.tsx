@@ -118,7 +118,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   const handleLookupResident = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lookupNumber.trim()) {
-      setLookupMessage({ text: 'Please enter a valid Resident Number (e.g. 001–300)', type: 'error' });
+      setLookupMessage({ text: 'Please enter a valid Resident Number (e.g. 001–100)', type: 'error' });
       return;
     }
 
@@ -192,21 +192,21 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   const emergencyContacts = [
     {
       title: 'Chief Security Officer (CSO)',
-      phone: estateSettings.contact_phone || '08023456789',
+      phone: '08164259355',
       desc: 'Estate security command, resident coordination, and duty escalation.',
       badge: 'Verified Primary',
       badgeClass: 'text-emerald-800 bg-emerald-50 border border-emerald-200'
     },
     {
-      title: 'Main Gate Duty Desk & Intercom',
-      phone: '08034567890',
+      title: 'Gate Security & Incident Control Desk',
+      phone: '07057543935',
       desc: 'Front entrance gatehouse, access control verification, and on-site patrol dispatch.',
       badge: '24/7 Gatehouse',
       badgeClass: 'text-slate-700 bg-slate-100 border border-slate-200'
     },
     {
       title: 'Delta State Unified Vigilante (School Boy Units)',
-      phone: estateSettings.contact_phone || '08023456789',
+      phone: '08164259355',
       desc: 'Operational vigilante command covering Finger of God Estate and surrounding areas. Coordinated through estate gate command.',
       badge: 'Operational Partner',
       badgeClass: 'text-emerald-800 bg-emerald-50 border border-emerald-200'
@@ -587,7 +587,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
                   Pay by Registered Resident ID
                 </h3>
                 <p className="mt-1 text-xs text-slate-600">
-                  For residents registered in the estate directory paying by assigned resident number (001–300).
+                  For residents registered in the estate directory paying by assigned resident number (001–100).
                 </p>
 
                 <form onSubmit={handleLookupResident} className="mt-5">
@@ -1078,9 +1078,9 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
             <div>
               <h4 className="text-xs font-semibold text-white uppercase tracking-wider mb-3">Security Desk</h4>
               <p className="text-xs leading-relaxed text-slate-400">
-                Gatehouse Command Post<br />
-                Phase 1 Boulevard<br />
-                Hotline: <strong className="text-white">{estateSettings.contact_phone || '08023456789'}</strong>
+                1 Ogbueshi Ugboko Street<br />
+                Finger of God Estate, Iyiaba, Asaba<br />
+                Hotline: <strong className="text-white">07057543935 (Gate &amp; Security Desk)</strong>
               </p>
             </div>
           </div>
