@@ -3341,6 +3341,135 @@ export const dbService = {
     }
   },
 
+  // RESIDENT PORTAL: CHECK RESIDENT ID & COMPLETION STATUS
+  async checkResidentId(residentNumber: string): Promise<{
+    success: boolean;
+    found: boolean;
+    needs_update?: boolean;
+    resident_number?: string;
+    full_name?: string;
+    phone_number?: string;
+    email?: string;
+    house_number?: string;
+    address?: string;
+    masked_email?: string;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch(`/api/resident/check-id?residentNumber=${encodeURIComponent(residentNumber.trim())}`);
+      const data = await res.json();
+      return {
+        success: res.ok && data.found,
+        found: !!data.found,
+        needs_update: data.needs_update,
+        resident_number: data.resident_number,
+        full_name: data.full_name,
+        phone_number: data.phone_number,
+        email: data.email,
+        house_number: data.house_number,
+        address: data.address,
+        masked_email: data.masked_email,
+        message: data.message
+      };
+    } catch {
+      return {
+        success: false,
+        found: false,
+        message: 'Unable to connect to the estate directory. Please check your internet connection.'
+      };
+    }
+  },
+
+  // RESIDENT PORTAL: UPDATE DETAILS & AUTOMATIC LOGIN
+  async updateResidentDetails(details: {
+    residentNumber: string;
+    full_name: string;
+    phone_number: string;
+    email: string;
+    house_number?: string;
+    address?: string;
+  }): Promise<{
+    success: boolean;
+    resident?: Resident;
+    token?: string;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/update-details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(details)
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        residentSessionService.setCurrentResident(data.resident);
+        if (data.token) {
+          residentSessionService.setResidentToken(data.token);
+          residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
+        }
+        return {
+          success: true,
+          resident: data.resident,
+          token: data.token,
+          message: data.message
+        };
+      }
+      return {
+        success: false,
+        message: data.message || 'Failed to update details. Please review your entries and try again.'
+      };
+    } catch {
+      return {
+        success: false,
+        message: 'Network error occurred while saving details. Please try again.'
+      };
+    }
+  },
+
+  // RESIDENT PORTAL: LOGIN WITH RESIDENT ID & EMAIL
+  async loginWithIdAndEmail(residentNumber: string, email: string): Promise<{
+    success: boolean;
+    resident?: Resident;
+    token?: string;
+    needs_update?: boolean;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/login-id-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentNumber: residentNumber.trim(),
+          email: email.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        residentSessionService.setCurrentResident(data.resident);
+        if (data.token) {
+          residentSessionService.setResidentToken(data.token);
+          residentSessionService.setRememberedDevice(data.resident.resident_number, data.token);
+        }
+        return {
+          success: true,
+          resident: data.resident,
+          token: data.token,
+          message: data.message
+        };
+      }
+      return {
+        success: false,
+        needs_update: data.needs_update,
+        message: data.message || 'Login details could not be verified. Please check your Resident ID and Email.'
+      };
+    } catch {
+      return {
+        success: false,
+        message: 'Unable to connect to the estate directory. Please check your internet connection.'
+      };
+    }
+  },
+
   // STAGE 9: VERIFY RESIDENT FOR ACCOUNT ACTIVATION (PRIVACY-SAFE)
   async verifyResidentForActivation(residentNumber: string, identifier: string): Promise<{
     success: boolean;

@@ -44,7 +44,8 @@ import {
   UserPlus,
   Pin,
   Paperclip,
-  Vote
+  Vote,
+  Building2
 } from 'lucide-react';
 import { 
   Resident, 
@@ -59,12 +60,15 @@ import {
   SecurityOfficer,
   ResidentVehicle,
   VehicleType,
-  Announcement
+  Announcement,
+  BuildingEstateLevyReceipt
 } from '../../types/database';
 import { dbService, residentSessionService } from '../../lib/supabase';
 import { formatNaira } from '../../lib/paystack';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 import { ReceiptModal } from '../payments/ReceiptModal';
+import { EstateLevyPaymentModal } from '../payments/EstateLevyPaymentModal';
+import { EstateLevyReceiptModal } from '../payments/EstateLevyReceiptModal';
 import { EstateLogo } from '../common/EstateLogo';
 import { EmergencyReportModal } from '../security/EmergencyReportModal';
 import { IncidentFormModal } from '../security/IncidentFormModal';
@@ -137,6 +141,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [isEstateLevyModalOpen, setIsEstateLevyModalOpen] = useState(false);
+  const [selectedEstateLevyReceipt, setSelectedEstateLevyReceipt] = useState<BuildingEstateLevyReceipt | null>(null);
   const [paymentTargetMonth, setPaymentTargetMonth] = useState<{ month: number; year: number; label: string } | null>(null);
   
   // History Filters
@@ -949,6 +955,69 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                   )}
                 </div>
 
+              </div>
+            </div>
+
+            {/* STATUTORY ESTATE LEVY (₦1,000 PER BUILDING) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-emerald-300 shadow-md transition-all">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-900">
+                      STATUTORY ESTATE LEVY
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">
+                      ₦1,000 / Building • Due 1st of Every Month
+                    </span>
+                  </div>
+
+                  <h2 className="text-2xl sm:text-3xl font-black font-display tracking-tight uppercase text-slate-900">
+                    ESTATE LEVY
+                  </h2>
+
+                  <div className="flex flex-wrap items-center gap-4 pt-1">
+                    <div>
+                      <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
+                        Amount Due
+                      </span>
+                      <span className="text-xl sm:text-2xl font-black font-display text-emerald-800">
+                        ₦1,000.00
+                      </span>
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-300/40" />
+
+                    <div>
+                      <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
+                        Building / Residence
+                      </span>
+                      <span className="text-sm font-bold text-slate-800">
+                        {currentResident.house_number || `Resident #${currentResident.resident_number}`}
+                      </span>
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-300/40" />
+
+                    <div>
+                      <span className="text-xs uppercase font-bold tracking-wider text-slate-500 block">
+                        Billing Basis
+                      </span>
+                      <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Per Building Unit
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full md:w-auto shrink-0">
+                  <button
+                    onClick={() => setIsEstateLevyModalOpen(true)}
+                    className="w-full md:w-auto px-8 py-4 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white font-black text-sm tracking-wider uppercase transition-all shadow-xl flex items-center justify-center gap-2.5 cursor-pointer ring-4 ring-emerald-600/30"
+                  >
+                    <Building2 className="w-5 h-5" />
+                    <span>PAY ESTATE LEVY (₦1,000)</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1998,6 +2067,27 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           onClose={() => setIsReceiptModalOpen(false)}
           receipt={selectedReceipt}
           estateSettings={estateSettings}
+        />
+      )}
+
+      {/* Estate Levy Payment Checkout Modal */}
+      {isEstateLevyModalOpen && (
+        <EstateLevyPaymentModal
+          isOpen={isEstateLevyModalOpen}
+          onClose={() => setIsEstateLevyModalOpen(false)}
+          onPaymentSuccess={(receipt) => {
+            setIsEstateLevyModalOpen(false);
+            setSelectedEstateLevyReceipt(receipt);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Official Estate Levy Receipt Modal */}
+      {selectedEstateLevyReceipt && (
+        <EstateLevyReceiptModal
+          receipt={selectedEstateLevyReceipt}
+          onClose={() => setSelectedEstateLevyReceipt(null)}
         />
       )}
 

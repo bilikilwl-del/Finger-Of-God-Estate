@@ -1898,6 +1898,271 @@ app.post('/api/resident/login', async (req: Request, res: Response) => {
   }
 });
 
+// -------------------------------------------------------------
+// RESIDENT PORTAL: RESIDENT ID LOOKUP & PROFILE COMPLETION CHECK
+// Accepts ID e.g. "001" or "1" (normalizes to 3-digit "001")
+// -------------------------------------------------------------
+app.all('/api/resident/check-id', async (req: Request, res: Response) => {
+  try {
+    const rawNum = req.method === 'GET' 
+      ? (req.query.residentNumber || req.query.resident_number || req.query.id)
+      : (req.body.residentNumber || req.body.resident_number || req.body.id);
+
+    if (!rawNum) {
+      return res.status(400).json({ success: false, found: false, message: 'Resident ID number is required (e.g. 1 or 001).' });
+    }
+
+    const cleanNum = normalizeResidentNumber(String(rawNum));
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) {
+        residentsStore.set(cleanNum, resident);
+      }
+    }
+
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        found: false,
+        message: `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`
+      });
+    }
+
+    // Check if resident has updated details
+    const hasEmail = Boolean(resident.email && resident.email.trim());
+    const isCompleted = Boolean(resident.profile_completed && hasEmail);
+
+    return res.json({
+      success: true,
+      found: true,
+      needs_update: !isCompleted,
+      resident_number: cleanNum,
+      full_name: resident.full_name || `Resident ${cleanNum}`,
+      phone_number: resident.phone_number && !resident.phone_number.startsWith('08000000') ? resident.phone_number : '',
+      email: resident.email || '',
+      house_number: resident.house_number || `Plot ${cleanNum}`,
+      address: resident.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba',
+      masked_email: resident.email ? resident.email.replace(/^(.{2})(.*)(@.*)$/, (_m: string, a: string, b: string, c: string) => `${a}${'•'.repeat(Math.max(b.length, 3))}${c}`) : null,
+      account_status: resident.account_status || (isCompleted ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED')
+    });
+  } catch (err: any) {
+    console.error('Resident check-id error:', err);
+    res.status(500).json({ success: false, message: 'Server error checking resident ID.' });
+  }
+});
+
+// -------------------------------------------------------------
+// RESIDENT PORTAL: RESIDENT UPDATE DETAILS
+// Updates Full Names, Phone Numbers, Email Address and Home Address
+// Automatically saves to database, marks profile complete & generates login session
+// -------------------------------------------------------------
+app.post('/api/resident/update-details', async (req: Request, res: Response) => {
+  try {
+    const { residentNumber, full_name, phone_number, email, house_number, address } = req.body;
+
+    if (!residentNumber) {
+      return res.status(400).json({ success: false, message: 'Resident ID number is required.' });
+    }
+
+    const cleanNum = normalizeResidentNumber(String(residentNumber));
+    if (!isValidResidentNumber(cleanNum)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Resident ID. Estate resident IDs are between 001 and 100.'
+      });
+    }
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
+
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: `Resident ID #${cleanNum} not found in the estate directory.`
+      });
+    }
+
+    if (!full_name || String(full_name).trim().length < 2) {
+      return res.status(400).json({ success: false, message: 'Please enter your Full Name (at least 2 characters).' });
+    }
+
+    if (!phone_number) {
+      return res.status(400).json({ success: false, message: 'Please enter your Phone Number.' });
+    }
+
+    const phoneVal = validateNigerianPhone(String(phone_number).trim());
+    if (!phoneVal.isValid) {
+      return res.status(400).json({ success: false, message: phoneVal.error || 'Please enter a valid Nigerian phone number.' });
+    }
+
+    if (!email || !String(email).trim().includes('@')) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid Email Address.' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    // Check if email is already taken by another resident
+    const allResidents = await serverDb.getResidents();
+    const emailConflict = allResidents.find((r: any) => 
+      String(r.resident_number).trim().padStart(3, '0') !== cleanNum &&
+      r.email &&
+      r.email.trim().toLowerCase() === cleanEmail
+    );
+    if (emailConflict) {
+      return res.status(400).json({
+        success: false,
+        message: `This email is already associated with Resident #${emailConflict.resident_number}. Please provide your unique email address.`
+      });
+    }
+
+    // Apply updates
+    resident.full_name = String(full_name).trim();
+    resident.phone_number = phoneVal.normalized;
+    resident.email = cleanEmail;
+    if (house_number && String(house_number).trim()) {
+      resident.house_number = String(house_number).trim();
+    }
+    if (address && String(address).trim()) {
+      resident.address = String(address).trim();
+    }
+    resident.profile_completed = true;
+    resident.account_activated = true;
+    resident.account_status = 'ACTIVE';
+    resident.updated_at = new Date().toISOString();
+
+    // Save to persistent storage (Supabase + localDb)
+    await serverDb.saveResident(resident);
+    residentsStore.set(cleanNum, resident);
+
+    // Create session token so resident is logged in immediately
+    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
+
+    return res.json({
+      success: true,
+      message: `Profile details for Resident #${cleanNum} have been saved successfully!`,
+      token: sessionToken,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: true,
+        profile_completed: true,
+        account_status: 'ACTIVE',
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
+        status: resident.status || 'Active',
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Resident update details error:', err);
+    res.status(500).json({ success: false, message: 'Server error updating resident details.' });
+  }
+});
+
+// -------------------------------------------------------------
+// RESIDENT PORTAL: LOGIN WITH RESIDENT ID NUMBER & EMAIL ADDRESS
+// Seamless login for registered/updated residents
+// -------------------------------------------------------------
+app.post('/api/resident/login-id-email', async (req: Request, res: Response) => {
+  try {
+    const { residentNumber, email } = req.body;
+
+    if (!residentNumber || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both Resident ID Number (001–100) and Email Address are required.'
+      });
+    }
+
+    const cleanNum = normalizeResidentNumber(String(residentNumber));
+    const cleanEmail = String(email).trim().toLowerCase();
+
+    let resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
+    if (!resident) {
+      resident = await serverDb.getResidentByNumber(cleanNum);
+      if (resident) residentsStore.set(cleanNum, resident);
+    }
+
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: `Resident ID #${cleanNum} not found in the estate directory (valid IDs: 001 - 100).`
+      });
+    }
+
+    if (resident.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: 'This resident account is currently inactive. Please contact estate administration.'
+      });
+    }
+
+    // If resident has not updated details yet
+    if (!resident.email || !resident.profile_completed) {
+      return res.status(400).json({
+        success: false,
+        needs_update: true,
+        resident_number: cleanNum,
+        message: `Resident #${cleanNum} needs to update profile details before logging in.`
+      });
+    }
+
+    // Verify email match
+    if (resident.email.trim().toLowerCase() !== cleanEmail) {
+      return res.status(401).json({
+        success: false,
+        message: `The email address "${cleanEmail}" does not match our records for Resident #${cleanNum}.`
+      });
+    }
+
+    // Generate session token
+    const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
+    residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
+
+    return res.json({
+      success: true,
+      message: `Welcome back, ${resident.full_name}!`,
+      token: sessionToken,
+      resident: {
+        id: resident.id,
+        auth_user_id: resident.auth_user_id || null,
+        account_activated: true,
+        profile_completed: true,
+        account_status: 'ACTIVE',
+        resident_number: resident.resident_number,
+        full_name: resident.full_name,
+        phone_number: resident.phone_number,
+        additional_phone: resident.additional_phone || null,
+        email: resident.email,
+        house_number: resident.house_number,
+        address: resident.address,
+        state: resident.state || 'Delta',
+        lga: resident.lga || 'Oshimili South',
+        status: resident.status,
+        registration_date: resident.registration_date
+      }
+    });
+  } catch (err: any) {
+    console.error('Resident login-id-email error:', err);
+    res.status(500).json({ success: false, message: 'Server error during resident sign-in.' });
+  }
+});
+
 // EMAIL DISPATCH HELPER (Brevo / Resend / System Log)
 async function dispatchEmail(
   toEmail: string,

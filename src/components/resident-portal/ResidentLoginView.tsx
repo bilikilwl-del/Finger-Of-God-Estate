@@ -17,10 +17,13 @@ import {
   Building,
   Info,
   ExternalLink,
-  Laptop
+  Laptop,
+  User,
+  Home
 } from 'lucide-react';
 import { dbService, authService, residentSessionService } from '../../lib/supabase';
 import { Resident, EstateSettings } from '../../types/database';
+import { normalizeResidentNumber } from '../../lib/residentUtils';
 import { EstateLogo } from '../common/EstateLogo';
 import { SEOHead } from '../common/SEOHead';
 
@@ -30,7 +33,7 @@ interface ResidentLoginViewProps {
   estateSettings?: EstateSettings;
   isModal?: boolean;
   onCloseModal?: () => void;
-  initialTab?: 'login' | 'activate' | 'forgot' | 'password_login';
+  initialTab?: 'id_email_login' | 'update_details' | 'login' | 'activate' | 'forgot' | 'password_login';
 }
 
 export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
@@ -39,20 +42,22 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   estateSettings,
   isModal = false,
   onCloseModal,
-  initialTab = 'login'
+  initialTab = 'id_email_login'
 }) => {
-  // Navigation Tabs: 'login' (OTP) | 'password_login' (Email+Password) | 'activate' | 'forgot'
-  const [activeTab, setActiveTab] = useState<'login' | 'password_login' | 'activate' | 'forgot'>('login');
+  // Navigation Tabs: 'id_email_login' | 'update_details' | 'login' (OTP) | 'password_login' | 'activate' | 'forgot'
+  const [activeTab, setActiveTab] = useState<'id_email_login' | 'update_details' | 'login' | 'password_login' | 'activate' | 'forgot'>('id_email_login');
 
   useEffect(() => {
     if (initialTab === 'password_login') {
       setActiveTab('password_login');
-    } else if (initialTab === 'activate') {
-      setActiveTab('activate');
+    } else if (initialTab === 'activate' || initialTab === 'update_details') {
+      setActiveTab('update_details');
     } else if (initialTab === 'forgot') {
       setActiveTab('forgot');
+    } else if (initialTab === 'login') {
+      setActiveTab('id_email_login');
     } else {
-      setActiveTab('login');
+      setActiveTab('id_email_login');
     }
   }, [initialTab]);
 
@@ -118,6 +123,19 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
   // Support / Help Modal or Drawer
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // ID + Email Login State (Primary)
+  const [residentIdInput, setResidentIdInput] = useState('');
+  const [residentEmailInput, setResidentEmailInput] = useState('');
+
+  // Update Resident Details State (Full Names, Phone Numbers, Email Address, Home Address)
+  const [updateResidentNumber, setUpdateResidentNumber] = useState('');
+  const [updateFullName, setUpdateFullName] = useState('');
+  const [updatePhoneNumber, setUpdatePhoneNumber] = useState('');
+  const [updateEmail, setUpdateEmail] = useState('');
+  const [updateHomeAddress, setUpdateHomeAddress] = useState('');
+  const [updateHouseNumber, setUpdateHouseNumber] = useState('');
+  const [isDetailsStepTwo, setIsDetailsStepTwo] = useState(false);
 
   // Common UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -223,6 +241,145 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !otpCode[index] && index > 0) {
       otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  // CHECK RESIDENT ID & LOAD UPDATE FORM
+  const handleLookupIdForUpdate = async (idInput: string) => {
+    const raw = idInput.trim();
+    if (!raw) {
+      setErrorMessage('Please enter your Resident ID number (e.g. 1 or 001).');
+      return;
+    }
+    const cleanNum = normalizeResidentNumber(raw);
+    setUpdateResidentNumber(cleanNum);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+
+    try {
+      const res = await dbService.checkResidentId(cleanNum);
+      if (res.found) {
+        setIsDetailsStepTwo(true);
+        setActiveTab('update_details');
+        setUpdateFullName(res.full_name && !res.full_name.startsWith('Resident ') ? res.full_name : '');
+        setUpdatePhoneNumber(res.phone_number || '');
+        setUpdateEmail(res.email || '');
+        setUpdateHouseNumber(res.house_number || `Plot ${cleanNum}`);
+        setUpdateHomeAddress(res.address || 'Phase 1, Finger of God Estate, Iyiaba, Asaba');
+        if (res.needs_update) {
+          setSuccessMessage(`Resident #${cleanNum} found! Please update your Full Names, Phone Numbers, Email Address, and Home Address below.`);
+        } else {
+          setSuccessMessage(`Update details for Resident #${cleanNum}.`);
+        }
+      } else {
+        setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
+      }
+    } catch {
+      setErrorMessage('Unable to connect to the estate directory. Please check your network.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // SUBMIT LOGIN WITH RESIDENT ID & EMAIL
+  const handleIdEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const rawId = residentIdInput.trim();
+    const rawEmail = residentEmailInput.trim().toLowerCase();
+
+    if (!rawId) {
+      setErrorMessage('Please enter your Resident ID number (e.g. 1 or 001).');
+      return;
+    }
+
+    const cleanNum = normalizeResidentNumber(rawId);
+
+    // If user didn't enter email, or clicks to update
+    if (!rawEmail) {
+      await handleLookupIdForUpdate(cleanNum);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await dbService.loginWithIdAndEmail(cleanNum, rawEmail);
+      if (res.success && res.resident) {
+        setSuccessMessage(`Welcome back, ${res.resident.full_name}! Opening resident portal...`);
+        setTimeout(() => {
+          onSuccess(res.resident!);
+        }, 300);
+      } else if (res.needs_update) {
+        // Needs update first!
+        await handleLookupIdForUpdate(cleanNum);
+      } else {
+        setErrorMessage(res.message || 'Those login credentials could not be verified. Please check your Resident ID and Email.');
+      }
+    } catch {
+      setErrorMessage('Unable to connect to the server. Please check your connection.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // SUBMIT UPDATE DETAILS (Full Names, Phone Numbers, Email Address, Home Address)
+  const handleSaveResidentDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanNum = normalizeResidentNumber(updateResidentNumber);
+    if (!cleanNum) {
+      setErrorMessage('Resident ID is required.');
+      return;
+    }
+
+    if (!updateFullName.trim() || updateFullName.trim().length < 2) {
+      setErrorMessage('Please enter your Full Names (at least 2 characters).');
+      return;
+    }
+
+    if (!updatePhoneNumber.trim()) {
+      setErrorMessage('Please enter your Phone Number.');
+      return;
+    }
+
+    if (!updateEmail.trim() || !updateEmail.includes('@')) {
+      setErrorMessage('Please enter a valid Email Address.');
+      return;
+    }
+
+    if (!updateHomeAddress.trim()) {
+      setErrorMessage('Please enter your Home Address.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await dbService.updateResidentDetails({
+        residentNumber: cleanNum,
+        full_name: updateFullName.trim(),
+        phone_number: updatePhoneNumber.trim(),
+        email: updateEmail.trim().toLowerCase(),
+        house_number: updateHouseNumber.trim() || `Plot ${cleanNum}`,
+        address: updateHomeAddress.trim()
+      });
+
+      if (res.success && res.resident) {
+        setSuccessMessage(`Details updated successfully! Welcome, ${res.resident.full_name}. You can now log in anytime using your Resident ID and Email.`);
+        setTimeout(() => {
+          onSuccess(res.resident!);
+        }, 500);
+      } else {
+        setErrorMessage(res.message || 'Failed to update details. Please review your entries and try again.');
+      }
+    } catch {
+      setErrorMessage('Network error occurred while saving details. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -554,11 +711,20 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
       setActPhoneNumber(phone);
       setActStep('enter_details');
       setActIsAlreadyActivated(false);
-    } else {
+    } else if (activeTab === 'update_details') {
+      setUpdateResidentNumber(num);
+      handleLookupIdForUpdate(num);
+    } else if (activeTab === 'login') {
       setActiveTab('login');
       setOtpStep('enter_details');
       setEstateNumber(num);
       setPhoneNumber(phone);
+    } else {
+      setActiveTab('id_email_login');
+      setResidentIdInput(num);
+      if (num === '001') setResidentEmailInput('babatunde.adeleke@fingerofgodestate.ng');
+      else if (num === '002') setResidentEmailInput('chioma.nwachukwu@fingerofgodestate.ng');
+      else if (num === '003') setResidentEmailInput('usman.danladi@fingerofgodestate.ng');
     }
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -614,18 +780,17 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         </div>
       </div>
 
-      {/* Tabs Switcher: Resident Login vs Account Activation (Fixed under header) */}
+      {/* Tabs Switcher: Resident Login vs Update Details */}
       <div className="flex-shrink-0 grid grid-cols-2 border-b border-slate-200 bg-slate-50/95 text-xs font-bold">
         <button
           type="button"
           onClick={() => {
-            setActiveTab('login');
-            setOtpStep('enter_details');
+            setActiveTab('id_email_login');
             setErrorMessage(null);
             setSuccessMessage(null);
           }}
           className={`py-2.5 sm:py-3 px-3 sm:px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-1.5 sm:gap-2 min-h-[40px] ${
-            activeTab === 'login' || activeTab === 'password_login'
+            activeTab === 'id_email_login' || activeTab === 'login' || activeTab === 'password_login'
               ? 'bg-white text-emerald-800 border-emerald-700 shadow-2xs font-extrabold'
               : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100/70'
           }`}
@@ -637,19 +802,18 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         <button
           type="button"
           onClick={() => {
-            setActiveTab('activate');
-            setActStep('enter_details');
+            setActiveTab('update_details');
             setErrorMessage(null);
             setSuccessMessage(null);
           }}
           className={`py-2.5 sm:py-3 px-3 sm:px-4 text-center transition-colors cursor-pointer border-b-2 flex items-center justify-center gap-1.5 sm:gap-2 min-h-[40px] ${
-            activeTab === 'activate'
+            activeTab === 'update_details' || activeTab === 'activate'
               ? 'bg-white text-emerald-800 border-emerald-700 shadow-2xs font-extrabold'
               : 'text-slate-600 border-transparent hover:text-slate-900 hover:bg-slate-100/70'
           }`}
         >
           <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="truncate">Activate Account</span>
+          <span className="truncate">Update Details</span>
         </button>
       </div>
 
@@ -688,6 +852,361 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
               <p className="font-bold">Confirmed</p>
               <p className="mt-0.5 leading-relaxed">{successMessage}</p>
             </div>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 0: RESIDENT ID & EMAIL LOGIN (PRIMARY FLOW) */}
+        {/* ============================================================ */}
+        {activeTab === 'id_email_login' && (
+          <form onSubmit={handleIdEmailLogin} className="space-y-3 sm:space-y-3.5">
+            <div className="p-2.5 sm:p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-950">
+              <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>Resident Portal Sign-In</span>
+              </div>
+              <p className="text-emerald-800 leading-relaxed text-[11px]">
+                Enter your Resident ID number (001–100 or 1–100) and Email Address to access your account to pay for estate levy and security levy.
+              </p>
+            </div>
+
+            {/* Resident ID Number (001 or 1) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Resident ID Number
+                </label>
+                <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-emerald-800">
+                  Estate IDs 001 – 100
+                </span>
+              </div>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
+                  #
+                </div>
+                <input
+                  type="text"
+                  value={residentIdInput}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+                    setResidentIdInput(val);
+                  }}
+                  placeholder="e.g. 001 or 1"
+                  maxLength={3}
+                  required
+                  disabled={isLoading || lockoutTimer > 0}
+                  className="w-full pl-8 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                Enter your resident number (e.g. 1 or 001).
+              </p>
+            </div>
+
+            {/* Email Address */}
+            <div>
+              <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Registered Email Address
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="email"
+                  value={residentEmailInput}
+                  onChange={(e) => setResidentEmailInput(e.target.value)}
+                  placeholder="e.g. resident@example.com"
+                  disabled={isLoading || lockoutTimer > 0}
+                  className="w-full pl-9 pr-3.5 py-2 sm:py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all shadow-2xs"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                If you have not set up your email yet, click "Update Details" below to complete your profile.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-1 flex flex-col gap-2">
+              <button
+                type="submit"
+                disabled={isLoading || lockoutTimer > 0}
+                className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[42px] sm:min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                    <span>Signing In...</span>
+                  </span>
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>LOG IN TO RESIDENT PORTAL</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* First Time / Update Details Prompt */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="font-bold text-slate-800 block text-[11px] sm:text-xs">First time logging in?</span>
+                <span className="text-[10px] sm:text-[11px] text-slate-500">Update your Full Name, Phone, Email and Address.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (residentIdInput.trim()) {
+                    handleLookupIdForUpdate(residentIdInput);
+                  } else {
+                    setActiveTab('update_details');
+                    setIsDetailsStepTwo(false);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs transition-colors cursor-pointer shrink-0"
+              >
+                Update Details &rarr;
+              </button>
+            </div>
+
+            {/* Other Login Methods */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+              <span className="text-[11px] text-slate-500">Other login options:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('login');
+                    setOtpStep('enter_details');
+                  }}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  Phone OTP
+                </button>
+                <span className="text-slate-300">•</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('password_login')}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  Password
+                </button>
+                <span className="text-slate-300">•</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('activate')}
+                  className="text-[11px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                >
+                  Activate
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 0.5: UPDATE RESIDENT DETAILS (001 OR 1) */}
+        {/* ============================================================ */}
+        {activeTab === 'update_details' && (
+          <div className="space-y-3.5">
+            {!isDetailsStepTwo ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleLookupIdForUpdate(updateResidentNumber);
+                }}
+                className="space-y-3.5"
+              >
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950">
+                  <p className="font-bold text-emerald-900 text-sm mb-1">Enter Your Resident ID Number</p>
+                  <p className="text-emerald-800 leading-relaxed text-[11px]">
+                    Estate residents (1–100): enter your resident ID number (e.g. <strong>001</strong> or <strong>1</strong>) to update your Full Names, Phone Numbers, Email Address, and Home Address.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Resident ID Number (001 – 100)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
+                      #
+                    </div>
+                    <input
+                      type="text"
+                      value={updateResidentNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+                        setUpdateResidentNumber(val);
+                      }}
+                      placeholder="e.g. 001 or 1"
+                      maxLength={3}
+                      required
+                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50/80 border border-slate-300 rounded-xl font-mono text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Enter 1, 24, 001, etc.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('id_email_login')}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer order-2 sm:order-1"
+                  >
+                    &larr; Back to Login
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <RotateCw className="w-4 h-4 animate-spin" />
+                        <span>Finding Resident ID...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span>CONTINUE TO UPDATE DETAILS</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleSaveResidentDetails} className="space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Update Resident Details</h3>
+                    <p className="text-[11px] text-slate-500">Update your details to enable ID &amp; Email login.</p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 rounded-lg font-mono font-bold text-xs border border-emerald-200">
+                    Resident #{updateResidentNumber}
+                  </span>
+                </div>
+
+                {/* Full Names */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Full Names *
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={updateFullName}
+                      onChange={(e) => setUpdateFullName(e.target.value)}
+                      placeholder="e.g. Chief Emeka Okafor"
+                      required
+                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Phone Numbers */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Phone Numbers *
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="tel"
+                      value={updatePhoneNumber}
+                      onChange={(e) => setUpdatePhoneNumber(e.target.value)}
+                      placeholder="e.g. 0803 123 4567"
+                      required
+                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Email Address *
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={updateEmail}
+                      onChange={(e) => setUpdateEmail(e.target.value)}
+                      placeholder="e.g. resident@example.com"
+                      required
+                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Used with your Resident ID #{updateResidentNumber} to log into your account.</p>
+                </div>
+
+                {/* House / Plot Number */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    House / Plot Number
+                  </label>
+                  <div className="relative">
+                    <Building className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={updateHouseNumber}
+                      onChange={(e) => setUpdateHouseNumber(e.target.value)}
+                      placeholder={`e.g. Plot ${updateResidentNumber}`}
+                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Home Address */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Home Address *
+                  </label>
+                  <div className="relative">
+                    <Home className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <textarea
+                      value={updateHomeAddress}
+                      onChange={(e) => setUpdateHomeAddress(e.target.value)}
+                      placeholder="e.g. Road 2, Phase 1, Finger of God Estate, Iyiaba, Asaba"
+                      rows={2}
+                      required
+                      className="w-full pl-9 pr-3.5 py-2 bg-slate-50/80 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Submit / Back Buttons */}
+                <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailsStepTwo(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer order-2 sm:order-1"
+                  >
+                    &larr; Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <RotateCw className="w-4 h-4 animate-spin" />
+                        <span>Saving Details...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>SAVE DETAILS &amp; ACCESS ACCOUNT</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 

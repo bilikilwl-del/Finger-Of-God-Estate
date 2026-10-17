@@ -62,7 +62,41 @@ const DEFAULT_ESTATE_SETTINGS = {
   road_project_target: 35000000
 };
 
-const DEFAULT_RESIDENTS: any[] = [];
+export function ensureInitialResidents1To100(residentsList: any[]): any[] {
+  const current = Array.isArray(residentsList) ? [...residentsList] : [];
+  for (let i = 1; i <= 100; i++) {
+    const numStr = String(i).padStart(3, '0');
+    const existing = current.find(r => 
+      String(r.resident_number).trim().padStart(3, '0') === numStr ||
+      String(r.resident_number).trim() === String(i)
+    );
+    if (!existing) {
+      current.push({
+        id: crypto.randomUUID(),
+        resident_number: numStr,
+        full_name: `Resident ${numStr}`,
+        phone_number: `08000000${numStr}`,
+        additional_phone: null,
+        email: null,
+        house_number: `Plot ${numStr}`,
+        address: 'Phase 1, Finger of God Estate, Iyiaba, Asaba',
+        state: 'Delta',
+        lga: 'Oshimili South',
+        notes: 'Initial estate resident allocation (1-100)',
+        registration_date: '2026-10-17',
+        status: 'Active',
+        account_activated: false,
+        profile_completed: false,
+        account_status: 'PROFILE UPDATE REQUIRED',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    }
+  }
+  return current;
+}
+
+const DEFAULT_RESIDENTS: any[] = ensureInitialResidents1To100([]);
 
 export interface PersistentOtpChallenge {
   id?: string;
@@ -122,7 +156,7 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
       const parsed = JSON.parse(data);
       return {
         estate_settings: parsed.estate_settings || DEFAULT_ESTATE_SETTINGS,
-        residents: Array.isArray(parsed.residents) ? parsed.residents : [],
+        residents: ensureInitialResidents1To100(Array.isArray(parsed.residents) ? parsed.residents : []),
         otp_challenges: Array.isArray(parsed.otp_challenges) ? parsed.otp_challenges : [],
         profiles: parsed.profiles || [
           {
@@ -667,6 +701,7 @@ export const serverDb = {
     if (normPhone) {
       const existingPhone = localDb.residents.find(r => {
         if (r.id === residentData.id) return false;
+        if (r.phone_number && String(r.phone_number).startsWith('08000000')) return false;
         const rPhone = normalizeNigerianPhone(r.phone_number);
         const rAlt = r.additional_phone ? normalizeNigerianPhone(r.additional_phone) : null;
         return arePhoneNumbersEqual(normPhone, rPhone) || (rAlt && arePhoneNumbersEqual(normPhone, rAlt));
