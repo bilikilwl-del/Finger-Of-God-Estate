@@ -135,17 +135,16 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
             <span className="w-1 h-1 rounded-full bg-slate-700"></span>
             <button
               onClick={() => onOpenResidentLogin('activate')}
-              className="text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer flex items-center gap-1"
+              className="text-emerald-300 hover:text-white font-semibold transition-colors cursor-pointer flex items-center gap-1"
             >
-              <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-              <span>Activate Resident ID</span>
+              <span>Activate Account</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* 2. Main Header Navigation Bar (Compact & Full-Width Compatible) */}
-      <header className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs w-full">
+      <header className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-slate-200/90 w-full">
         <div className="max-w-[1440px] mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16 sm:h-18 gap-2">
             {/* Logo */}
@@ -164,28 +163,26 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               />
             </div>
 
-            {/* Desktop Navigation Menu (Fluid & Compact for Full Width) */}
+            {/* Desktop Navigation Menu */}
             <nav className="hidden xl:flex items-center gap-0.5 2xl:gap-1">
               {publicNavItems.map((item) => {
-                const Icon = item.icon;
                 const isActive = currentTab === item.tab || (item.tab === 'public_announcements' && currentTab === 'announcement_detail');
                 return (
                   <button
                     key={item.tab}
                     onClick={() => handleItemClick(item.tab)}
-                    className={`px-2 2xl:px-2.5 py-1.5 text-[11.5px] 2xl:text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 2xl:gap-1.5 whitespace-nowrap ${
+                    className={`px-2.5 2xl:px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                       isActive
-                        ? 'bg-emerald-700 text-white shadow-xs'
-                        : 'text-slate-700 hover:text-emerald-800 hover:bg-slate-100/90'
+                        ? 'bg-emerald-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                     }`}
                   >
-                    <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                     <span>{item.label}</span>
                     {item.count !== undefined && item.count > 0 && (
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                        isActive ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800 animate-pulse'
+                      <span className={`font-mono text-[10px] font-bold ${
+                        isActive ? 'text-emerald-200' : 'text-emerald-800'
                       }`}>
-                        {item.count}
+                        ({item.count})
                       </span>
                     )}
                   </button>
@@ -198,28 +195,27 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               {currentResident ? (
                 <button
                   onClick={() => handleItemClick('resident_portal')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 font-bold text-xs hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 font-semibold text-xs hover:bg-emerald-100 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title={`Signed in as ${currentResident.full_name}`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span className="truncate max-w-[90px]">{currentResident.full_name.split(' ')[0]}</span>
-                  <span className="text-[10px] px-1 py-0.5 bg-emerald-200 text-emerald-950 rounded font-mono font-bold">
+                  <span className="text-[11px] text-emerald-800 font-mono font-bold">
                     #{currentResident.resident_number}
                   </span>
                 </button>
               ) : (
                 <button
                   onClick={() => onOpenResidentLogin('login')}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors cursor-pointer border border-slate-300"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs transition-colors cursor-pointer border border-slate-300 whitespace-nowrap shrink-0"
                 >
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-800" />
                   <span>Login</span>
                 </button>
               )}
 
               <button
                 onClick={() => handleItemClick('estate_levy')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-all shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-900 hover:bg-emerald-800 text-white font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>Pay Levy</span>
@@ -230,7 +226,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
             <div className="flex xl:hidden items-center gap-1.5">
               <button
                 onClick={() => handleItemClick('estate_levy')}
-                className="px-2.5 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                className="px-2.5 py-1.5 bg-emerald-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1 whitespace-nowrap"
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 <span>Pay</span>
@@ -239,9 +235,8 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
               {currentResident && (
                 <button
                   onClick={() => handleItemClick('resident_portal')}
-                  className="px-2 py-1.5 bg-emerald-100 text-emerald-900 rounded-lg text-xs font-bold flex items-center gap-1"
+                  className="px-2 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs font-mono font-bold flex items-center gap-1"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                   <span>#{currentResident.resident_number}</span>
                 </button>
               )}

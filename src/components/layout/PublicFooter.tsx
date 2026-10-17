@@ -65,15 +65,14 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
 
           {/* Col 2: Security & Levy */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <h4 className="text-xs font-semibold text-slate-200 mb-3.5">
               Security & Levies
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('security_public')}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Security Department</span>
@@ -82,7 +81,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               <li>
                 <button
                   onClick={() => handleNav('estate_levy')}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Monthly Security Levy</span>
@@ -91,7 +90,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               <li>
                 <button
                   onClick={() => handleNav('resident_portal')}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Resident Portal & Dashboard</span>
@@ -100,7 +99,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               <li>
                 <button
                   onClick={() => handleNav('verify_receipt')}
-                  className="text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Verify Stamped Receipt</span>
@@ -111,15 +110,14 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
 
           {/* Col 3: Community Projects */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            <h4 className="text-xs font-semibold text-slate-200 mb-3.5">
               Estate Projects
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('road_project')}
-                  className="text-slate-400 hover:text-amber-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Road Paving Project</span>
@@ -130,15 +128,14 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
 
           {/* Col 4: Community & Support */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 mb-3.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            <h4 className="text-xs font-semibold text-slate-200 mb-3.5">
               Community Info
             </h4>
             <ul className="space-y-2.5 text-xs">
               <li>
                 <button
                   onClick={() => handleNav('public_announcements')}
-                  className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Official Announcements</span>
@@ -147,7 +144,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               <li>
                 <button
                   onClick={() => handleNav('documents')}
-                  className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Estate Bylaws & Documents</span>
@@ -156,7 +153,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               <li>
                 <button
                   onClick={() => handleNav('contact')}
-                  className="text-slate-400 hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-slate-600" />
                   <span>Contact & Support Desk</span>
@@ -170,7 +167,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <ChevronRight className="w-3 h-3 text-emerald-500" />
-                  <span>💬 Live Support Chat</span>
+                  <span>Live Support Chat</span>
                 </button>
               </li>
               <li>
