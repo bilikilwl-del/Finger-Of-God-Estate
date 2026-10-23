@@ -98,7 +98,27 @@ export const EstateLevyReceiptModal: React.FC<EstateLevyReceiptModalProps> = ({
 
           {/* Details Table */}
           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
+            {receipt.resident_number && (
+              <div className="flex justify-between items-center px-4 py-3 bg-emerald-50/70">
+                <span className="text-slate-600 font-semibold flex items-center gap-2">
+                  <User className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Resident ID Number:</span>
+                </span>
+                <span className="font-mono font-black text-emerald-900 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded">
+                  #{String(receipt.resident_number).trim().padStart(3, '0')}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center px-4 py-3 bg-white">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>Resident / Payer Name:</span>
+              </span>
+              <span className="font-bold text-slate-900">{receipt.payer_name}</span>
+            </div>
+
+            <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
               <span className="text-slate-500 font-medium flex items-center gap-2">
                 <Home className="w-3.5 h-3.5 text-slate-400" />
                 <span>Building / House Number:</span>
@@ -109,7 +129,7 @@ export const EstateLevyReceiptModal: React.FC<EstateLevyReceiptModalProps> = ({
             </div>
 
             {receipt.building_name && (
-              <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
+              <div className="flex justify-between items-center px-4 py-3 bg-white">
                 <span className="text-slate-500 font-medium flex items-center gap-2">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" />
                   <span>Building Description:</span>
@@ -118,13 +138,19 @@ export const EstateLevyReceiptModal: React.FC<EstateLevyReceiptModalProps> = ({
               </div>
             )}
 
-            <div className="flex justify-between items-center px-4 py-3 bg-white">
-              <span className="text-slate-500 font-medium flex items-center gap-2">
-                <User className="w-3.5 h-3.5 text-slate-400" />
-                <span>Payer Name:</span>
-              </span>
-              <span className="font-bold text-slate-900">{receipt.payer_name}</span>
-            </div>
+            {receipt.payer_phone && (
+              <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
+                <span className="text-slate-500 font-medium">Resident Phone:</span>
+                <span className="font-mono font-semibold text-slate-800">{receipt.payer_phone}</span>
+              </div>
+            )}
+
+            {receipt.payer_email && (
+              <div className="flex justify-between items-center px-4 py-3 bg-white">
+                <span className="text-slate-500 font-medium">Email Address:</span>
+                <span className="font-medium text-slate-700">{receipt.payer_email}</span>
+              </div>
+            )}
 
             <div className="flex justify-between items-center px-4 py-3 bg-slate-50/50">
               <span className="text-slate-500 font-medium flex items-center gap-2">

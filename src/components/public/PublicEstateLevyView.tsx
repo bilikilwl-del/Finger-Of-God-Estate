@@ -9,7 +9,13 @@ import {
   Building,
   FileCheck2,
   Lock,
-  Clock
+  Clock,
+  UserCheck,
+  LogIn,
+  User,
+  Home,
+  Phone,
+  Mail
 } from 'lucide-react';
 import {
   EstateSettings,
@@ -23,6 +29,7 @@ import { SEOHead } from '../common/SEOHead';
 import { EstateLevyPaymentModal } from '../payments/EstateLevyPaymentModal';
 import { EstateLevyReceiptModal } from '../payments/EstateLevyReceiptModal';
 import { estateLevyService, EstateLevyLookupResult, EstateLevyBuildingItem } from '../../services/estateLevyService';
+import { residentSessionService } from '../../lib/supabase';
 
 interface PublicEstateLevyViewProps {
   estateSettings: EstateSettings;
@@ -37,12 +44,15 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   onNavigate,
   onOpenResidentLogin
 }) => {
+  const activeResident = currentResident || residentSessionService.getCurrentResident();
+
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [selectedBuildingForPay, setSelectedBuildingForPay] = useState<any | null>(null);
   const [selectedDurationForPay, setSelectedDurationForPay] = useState<1 | 12>(1);
+  const [pendingPayAfterLogin, setPendingPayAfterLogin] = useState<{ building?: any; duration: 1 | 12 } | null>(null);
 
   // Search / Lookup state
-  const [searchBuildingTag, setSearchBuildingTag] = useState(currentResident?.house_number || '');
+  const [searchBuildingTag, setSearchBuildingTag] = useState(activeResident?.house_number || '');
   const [lookupResult, setLookupResult] = useState<EstateLevyLookupResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -71,6 +81,21 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   useEffect(() => {
     loadBuildings();
   }, [selectedMonth]);
+
+  // When a resident logs in, sync their house number and resume any pending payment intent
+  useEffect(() => {
+    if (activeResident) {
+      if (activeResident.house_number) {
+        setSearchBuildingTag(activeResident.house_number);
+      }
+      if (pendingPayAfterLogin) {
+        setSelectedBuildingForPay(pendingPayAfterLogin.building || null);
+        setSelectedDurationForPay(pendingPayAfterLogin.duration);
+        setPendingPayAfterLogin(null);
+        setIsPayModalOpen(true);
+      }
+    }
+  }, [activeResident, pendingPayAfterLogin]);
 
   const loadBuildings = async () => {
     setLoadingList(true);
@@ -124,10 +149,19 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   };
 
   const handleOpenPayment = (building?: any, duration: 1 | 12 = 1) => {
+    if (!activeResident) {
+      setPendingPayAfterLogin({ building: building || null, duration });
+      onOpenResidentLogin();
+      return;
+    }
     setSelectedBuildingForPay(building || null);
     setSelectedDurationForPay(duration);
     setIsPayModalOpen(true);
   };
+
+  const formattedResidentId = activeResident
+    ? `#${String(activeResident.resident_number).trim().padStart(3, '0')}`
+    : null;
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-slate-900 font-sans flex flex-col">
@@ -142,7 +176,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
       <PublicNavbar
         currentTab="estate_levy"
         estateSettings={estateSettings}
-        currentResident={currentResident}
+        currentResident={activeResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
       />
@@ -165,27 +199,117 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
               Building Estate Levy
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-1.5 max-w-3xl leading-relaxed">
-              Pay your building estate levy online for 1 Month (₦1,000) or 12 Months (₦12,000), track your building clearance status, and download verified digital receipts.
+              Log in with your Resident ID Number (#001–#100) to pay your building estate levy online for 1 Month (₦1,000) or 12 Months (₦12,000) so your Full Name, Resident ID, and House Number appear on your payment and official receipt.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              onClick={() => handleOpenPayment(undefined, 1)}
-              className="px-4 py-2.5 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <CreditCard className="w-4 h-4" />
-              <span>Pay 1 Month (₦1,000)</span>
-            </button>
-            <button
-              onClick={() => handleOpenPayment(undefined, 12)}
-              className="px-4 py-2.5 bg-white hover:bg-stone-100 text-slate-900 border border-stone-300 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              <Calendar className="w-4 h-4 text-[#064E3B]" />
-              <span>Pay 12 Months (₦12,000)</span>
-            </button>
+            {!activeResident ? (
+              <button
+                onClick={() => handleOpenPayment(undefined, 1)}
+                className="px-4 py-2.5 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Login with Resident ID to Pay</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleOpenPayment(undefined, 1)}
+                  className="px-4 py-2.5 bg-[#064E3B] hover:bg-emerald-900 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay 1 Month (₦1,000)</span>
+                </button>
+                <button
+                  onClick={() => handleOpenPayment(undefined, 12)}
+                  className="px-4 py-2.5 bg-white hover:bg-stone-100 text-slate-900 border border-stone-300 font-semibold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Calendar className="w-4 h-4 text-[#064E3B]" />
+                  <span>Pay 12 Months (₦12,000)</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* 1B. Resident Identity / Login Prompt Banner */}
+        {activeResident ? (
+          <div className="bg-emerald-950 text-white rounded-2xl p-5 sm:p-6 border border-emerald-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold uppercase tracking-wider">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Logged-In Resident Account</span>
+                </span>
+                <span className="px-3 py-1 rounded-md bg-white text-emerald-950 font-mono text-xs font-black">
+                  Resident ID: {formattedResidentId}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5 pt-1 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Full Name</span>
+                  <span className="font-bold text-sm text-white block">{activeResident.full_name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">House / Building Number</span>
+                  <span className="font-mono font-bold text-sm text-emerald-200 block">
+                    {activeResident.house_number || `Plot ${activeResident.resident_number}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Phone Number</span>
+                  <span className="font-mono text-emerald-100 block">{activeResident.phone_number || 'On File'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Email Address</span>
+                  <span className="text-emerald-100 truncate block">{activeResident.email || `resident${activeResident.resident_number}@fingerofgodestate.org`}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0 border-t lg:border-t-0 border-emerald-800/80 pt-3 lg:pt-0">
+              <button
+                onClick={() => handleOpenPayment(undefined, 1)}
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-xs"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>Pay 1 Month (₦1,000)</span>
+              </button>
+              <button
+                onClick={() => handleOpenPayment(undefined, 12)}
+                className="px-4 py-2.5 bg-emerald-900 hover:bg-emerald-800 text-white border border-emerald-700 font-bold text-xs rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Calendar className="w-4 h-4 text-emerald-300" />
+                <span>Pay 12 Months (₦12,000)</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border-2 border-emerald-800/20 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-[#064E3B] flex items-center justify-center shrink-0 mt-0.5">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                  Login Required Before Making Estate Levy Payment
+                </h2>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                  To make an Estate Levy payment, please log in with your <strong>Resident ID Number (#001–#100)</strong> and password first. Your <strong>Full Name, Resident ID Number, Building/House Number, and Phone Number</strong> will automatically appear on your checkout and official receipt.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleOpenPayment(undefined, 1)}
+              className="px-5 py-3 bg-[#064E3B] hover:bg-emerald-900 text-white font-bold text-xs rounded-xl transition-colors inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-xs"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Login to Make Payment</span>
+            </button>
+          </div>
+        )}
 
         {/* 2. Professional Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -502,7 +626,9 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         <EstateLevyPaymentModal
           isOpen={isPayModalOpen}
           initialBuilding={selectedBuildingForPay}
+          preselectedResident={activeResident}
           initialDurationMonths={selectedDurationForPay}
+          onRequestLogin={onOpenResidentLogin}
           onClose={() => {
             setIsPayModalOpen(false);
             setSelectedBuildingForPay(null);

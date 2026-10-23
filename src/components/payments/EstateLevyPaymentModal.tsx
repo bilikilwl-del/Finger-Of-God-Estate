@@ -7,10 +7,17 @@ import {
   AlertCircle,
   Calendar,
   Lock,
-  ChevronRight
+  UserCheck,
+  Hash,
+  User,
+  Home,
+  Phone,
+  Mail,
+  LogIn
 } from 'lucide-react';
 import { Building, BuildingEstateLevyReceipt, Resident } from '../../types/database';
 import { estateLevyService } from '../../services/estateLevyService';
+import { residentSessionService } from '../../lib/supabase';
 import { getPaystackConfig, loadPaystackInlineScript, PaystackConfig } from '../../lib/paystack';
 
 interface EstateLevyPaymentModalProps {
@@ -20,6 +27,7 @@ interface EstateLevyPaymentModalProps {
   preselectedResident?: Resident | null;
   initialDurationMonths?: 1 | 12;
   onPaymentSuccess?: (receipt: BuildingEstateLevyReceipt) => void;
+  onRequestLogin?: () => void;
 }
 
 export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
@@ -28,8 +36,11 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
   initialBuilding,
   preselectedResident,
   initialDurationMonths = 1,
-  onPaymentSuccess
+  onPaymentSuccess,
+  onRequestLogin
 }) => {
+  const activeResident = preselectedResident || residentSessionService.getCurrentResident();
+
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loadingBuildings, setLoadingBuildings] = useState(false);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>(initialBuilding?.id || '');
@@ -40,7 +51,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
   const currentMonthStr = new Date().toISOString().slice(0, 7);
   const [billingMonth, setBillingMonth] = useState<string>(currentMonthStr);
 
-  // Payer Details
+  // Payer Details (pre-populated from logged-in resident)
   const [payerName, setPayerName] = useState('');
   const [payerEmail, setPayerEmail] = useState('');
   const [payerPhone, setPayerPhone] = useState('');
@@ -59,20 +70,18 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
       loadBuildings();
       setErrorMsg('');
       setStep('DETAILS');
-      if (preselectedResident) {
-        setPayerName(preselectedResident.full_name || '');
-        setPayerEmail(preselectedResident.email || '');
+      if (activeResident) {
+        const cleanNum = String(activeResident.resident_number).trim().padStart(3, '0');
+        setPayerName(activeResident.full_name || `Resident #${cleanNum}`);
+        setPayerEmail(activeResident.email || `resident${cleanNum}@fingerofgodestate.org`);
         setPayerPhone(
-          preselectedResident.phone_number && !preselectedResident.phone_number.startsWith('08000000')
-            ? preselectedResident.phone_number
+          activeResident.phone_number && !activeResident.phone_number.startsWith('08000000')
+            ? activeResident.phone_number
             : ''
         );
       }
       if (initialBuilding) {
         setSelectedBuildingId(initialBuilding.id);
-        if (initialBuilding.landlord_name && !preselectedResident) {
-          setPayerName(initialBuilding.landlord_name);
-        }
       }
     }
   }, [isOpen, initialBuilding, preselectedResident, initialDurationMonths]);
@@ -83,23 +92,28 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
       const res = await estateLevyService.getBuildings();
       let list: Building[] = res.success && Array.isArray(res.data) ? (res.data as any) : [];
 
-      if (preselectedResident) {
-        const resHouse = (preselectedResident.house_number || `Plot ${preselectedResident.resident_number}`).trim();
+      if (activeResident) {
+        const cleanNum = String(activeResident.resident_number).trim().padStart(3, '0');
+        const resHouse = (activeResident.house_number || `Plot ${cleanNum}`).trim();
         const existingMatch = list.find(
-          b => b.house_number.trim().toLowerCase() === resHouse.toLowerCase()
+          b =>
+            b.house_number.trim().toLowerCase() === resHouse.toLowerCase() ||
+            b.house_number.trim().toLowerCase().replace(/^plot\s*/i, '') === resHouse.toLowerCase().replace(/^plot\s*/i, '')
         );
-        if (existingMatch) {
+        if (initialBuilding) {
+          setSelectedBuildingId(initialBuilding.id);
+        } else if (existingMatch) {
           setSelectedBuildingId(existingMatch.id);
         } else {
-          const virtualId = `res_bldg_${preselectedResident.resident_number}`;
+          const virtualId = `res_bldg_${cleanNum}`;
           const virtualBuilding: Building = {
             id: virtualId,
             house_number: resHouse,
-            building_name: `Resident #${preselectedResident.resident_number} Residence`,
+            building_name: `Resident #${cleanNum} (${activeResident.full_name})`,
             total_flats_count: 1,
-            landlord_name: preselectedResident.full_name,
-            landlord_phone: preselectedResident.phone_number,
-            landlord_email: preselectedResident.email,
+            landlord_name: activeResident.full_name,
+            landlord_phone: activeResident.phone_number,
+            landlord_email: activeResident.email,
             status: 'ACTIVE',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -142,6 +156,10 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
 
   const handleInitiatePayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeResident) {
+      setErrorMsg('Please log in with your Resident ID Number and password before making an Estate Levy payment.');
+      return;
+    }
     if (!selectedBuildingId) {
       setErrorMsg('Please select the building you are paying for.');
       return;
@@ -157,12 +175,14 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
     try {
       const res = await estateLevyService.initializePayment({
         building_id: selectedBuildingId,
-        house_number: selectedBuilding?.house_number,
+        house_number: selectedBuilding?.house_number || activeResident.house_number,
         billing_month: billingMonth,
         duration_months: durationMonths,
+        resident_id: activeResident.id,
+        resident_number: activeResident.resident_number,
         payer_name: payerName.trim(),
         payer_email: payerEmail.trim(),
-        payer_phone: payerPhone.trim() || undefined
+        payer_phone: payerPhone.trim() || activeResident.phone_number || undefined
       });
 
       if (!res.success || !res.reference) {
@@ -218,9 +238,13 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
 
   if (!isOpen) return null;
 
+  const formattedResidentId = activeResident
+    ? `#${String(activeResident.resident_number).trim().padStart(3, '0')}`
+    : null;
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
         <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -228,7 +252,14 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
               <CreditCard className="w-5 h-5" />
             </span>
             <div>
-              <h3 className="font-bold text-sm sm:text-base">Pay Estate Levy</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm sm:text-base">Pay Estate Levy</h3>
+                {formattedResidentId && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-mono text-[11px] font-bold">
+                    ID {formattedResidentId}
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-300">₦1,000 per building / month (1 Month or 12 Months)</p>
             </div>
           </div>
@@ -249,12 +280,81 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
             </div>
           )}
 
-          {step === 'DETAILS' && (
+          {/* Require Resident Login if not authenticated */}
+          {!activeResident ? (
+            <div className="py-6 px-3 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+                <Lock className="w-7 h-7" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-base font-black text-slate-900">Resident Login Required Before Payment</h4>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
+                  Please log in with your <strong>Resident ID Number (#001–#100)</strong> and password before making an Estate Levy payment. Once logged in, your <strong>Full Name, Resident ID Number, Building/House Number, and Contact Details</strong> will automatically appear on your payment and official receipt.
+                </p>
+              </div>
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center">
+                {onRequestLogin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onRequestLogin();
+                    }}
+                    className="px-5 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs sm:text-sm inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Login with Resident ID to Pay</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : step === 'DETAILS' ? (
             <form onSubmit={handleInitiatePayment} className="space-y-4">
+              {/* Verified Logged-in Resident Identity Banner */}
+              <div className="p-3.5 rounded-xl bg-emerald-950 text-white border border-emerald-800 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-emerald-800/80 pb-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Verified Resident Account</span>
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-mono text-xs font-black">
+                    Resident ID: {formattedResidentId}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Full Name</span>
+                    <span className="font-bold text-white truncate block">{activeResident.full_name}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">House / Plot Number</span>
+                    <span className="font-mono font-bold text-emerald-200 block">
+                      {selectedBuilding?.house_number || activeResident.house_number || `Plot ${activeResident.resident_number}`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Phone Number</span>
+                    <span className="font-mono text-emerald-100 block">{payerPhone || activeResident.phone_number || 'On File'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-emerald-400/80 block">Account Status</span>
+                    <span className="font-semibold text-emerald-300 block">Resident • {activeResident.status || 'Active'}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Select Building */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">
-                  1. Select Building
+                  1. Building / House Number
                 </label>
                 {loadingBuildings ? (
                   <div className="p-3 text-center text-xs text-slate-400">Loading estate buildings...</div>
@@ -262,7 +362,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   <select
                     value={selectedBuildingId}
                     onChange={e => setSelectedBuildingId(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                    className="w-full px-3 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white font-semibold text-slate-900"
                     required
                   >
                     <option value="">-- Choose Your Building / House Number --</option>
@@ -274,7 +374,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   </select>
                 )}
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Billing unit: Per building. Distinct flats or multiple residents within this building are covered under this single charge.
+                  Automatically matched to your registered residence ({activeResident.house_number}). You may also select another estate building if paying on its behalf.
                 </p>
               </div>
 
@@ -349,7 +449,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                    Amount Due (Authoritative)
+                    Amount Due • Resident {formattedResidentId}
                   </span>
                   <span className="text-xs text-slate-600">
                     1 Building × ₦1,000 × {durationMonths} {durationMonths === 12 ? 'Months (1 Year)' : 'Month'}
@@ -362,45 +462,60 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                 </div>
               </div>
 
-              {/* Payer Information */}
+              {/* Payer Information (Pre-filled from Resident Profile) */}
               <div className="space-y-3 pt-1 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  4. Payer Information
-                </label>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Payer Name *</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Chief John Okafor"
-                    value={payerName}
-                    onChange={e => setPayerName(e.target.value)}
-                    className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-emerald-500"
-                    required
-                  />
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    4. Resident Details on Receipt
+                  </label>
+                  <span className="text-[11px] font-semibold text-emerald-700">Auto-filled from your account</span>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address (for Verified Receipt) *</label>
-                  <input
-                    type="email"
-                    placeholder="e.g. payer@example.com"
-                    value={payerEmail}
-                    onChange={e => setPayerEmail(e.target.value)}
-                    className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-emerald-500"
-                    required
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Resident ID Number</label>
+                    <input
+                      type="text"
+                      value={formattedResidentId || ''}
+                      readOnly
+                      className="w-full text-xs sm:text-sm border border-slate-200 bg-slate-100 text-slate-800 font-mono font-bold rounded-xl px-3 py-2.5 cursor-not-allowed"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Resident Full Name *</label>
+                    <input
+                      type="text"
+                      value={payerName}
+                      readOnly
+                      className="w-full text-xs sm:text-sm border border-slate-200 bg-slate-100 text-slate-900 font-bold rounded-xl px-3 py-2.5 cursor-not-allowed"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number (Optional)</label>
-                  <input
-                    type="tel"
-                    placeholder="08012345678"
-                    value={payerPhone}
-                    onChange={e => setPayerPhone(e.target.value)}
-                    className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2.5"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Email Address (for Receipt) *</label>
+                    <input
+                      type="email"
+                      placeholder="e.g. payer@example.com"
+                      value={payerEmail}
+                      onChange={e => setPayerEmail(e.target.value)}
+                      className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Phone Number</label>
+                    <input
+                      type="tel"
+                      placeholder="08012345678"
+                      value={payerPhone}
+                      onChange={e => setPayerPhone(e.target.value)}
+                      className="w-full text-xs sm:text-sm border border-slate-300 rounded-xl px-3 py-2"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -410,7 +525,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   <span>Secure Paystack Checkout</span>
                 </p>
                 <p className="leading-relaxed">
-                  Secure online checkout through Paystack, using the payment channels enabled for this account. A verified receipt will be available once payment has been confirmed.
+                  Your Resident ID (<strong>{formattedResidentId}</strong>), Full Name (<strong>{payerName}</strong>), and Building (<strong>{selectedBuilding?.house_number || activeResident.house_number}</strong>) will be stamped on your verified Estate Levy receipt.
                 </p>
               </div>
 
@@ -427,7 +542,7 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                 </span>
               </button>
             </form>
-          )}
+          ) : null}
 
           {step === 'SUCCESS' && verifiedReceipt && (
             <div className="text-center py-4 space-y-4">
@@ -438,7 +553,9 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
               <div>
                 <h4 className="text-lg font-bold text-slate-900">Payment Confirmed</h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Estate levy of ₦{Number(verifiedReceipt.amount_paid || totalAmount).toLocaleString()} successfully recorded for building {verifiedReceipt.building_house_number}.
+                  Estate levy of ₦{Number(verifiedReceipt.amount_paid || totalAmount).toLocaleString()} successfully recorded for{' '}
+                  <strong>{verifiedReceipt.payer_name}</strong> (Resident ID:{' '}
+                  <strong>#{verifiedReceipt.resident_number || activeResident?.resident_number}</strong>).
                 </p>
               </div>
 
@@ -448,9 +565,25 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
                   <span className="font-mono font-bold text-slate-900">{verifiedReceipt.receipt_number}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Building:</span>
+                  <span className="text-slate-500">Resident ID Number:</span>
+                  <span className="font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    #{verifiedReceipt.resident_number || activeResident?.resident_number}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Resident Full Name:</span>
+                  <span className="font-bold text-slate-900">{verifiedReceipt.payer_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Building / House No:</span>
                   <span className="font-semibold text-slate-800">{verifiedReceipt.building_house_number}</span>
                 </div>
+                {(verifiedReceipt.payer_phone || payerPhone) && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Phone Number:</span>
+                    <span className="font-mono text-slate-800">{verifiedReceipt.payer_phone || payerPhone}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Period Covered:</span>
                   <span className="font-semibold text-slate-800">{verifiedReceipt.billing_month_label || verifiedReceipt.billing_month}</span>

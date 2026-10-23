@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
-import { serverDb } from './database.ts';
+import { serverDb, supabaseAdmin } from './database.ts';
 
 export const estateLevyRouter = express.Router();
 
@@ -17,6 +17,48 @@ function getEstatePaystackSecret(): string | null {
 function isPaystackLiveMode(): boolean {
   const sec = getEstatePaystackSecret();
   return Boolean(sec && sec.startsWith('sk_live_'));
+}
+
+// Helper: Resolve authenticated resident from Authorization Bearer token or verified resident number
+async function resolveAuthenticatedResident(req: Request): Promise<any | null> {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const cleanToken = authHeader.replace('Bearer ', '').trim();
+    if (cleanToken) {
+      // 1. Check persistent resident session store
+      const localSession = serverDb.getResidentSession(cleanToken);
+      if (localSession) {
+        const MAX_SESSION_AGE = 30 * 24 * 60 * 60 * 1000;
+        if (Date.now() - localSession.created_at <= MAX_SESSION_AGE) {
+          const authResidentNumber = String(localSession.resident_number).trim().padStart(3, '0');
+          const resRecord = await serverDb.getResidentByNumber(authResidentNumber);
+          if (resRecord) return resRecord;
+        }
+      } else if (cleanToken.startsWith('eyJ')) {
+        // 2. Validate with Supabase Auth JWT
+        try {
+          const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(cleanToken);
+          if (!userErr && user) {
+            let resolvedRecord = await serverDb.getResidentByAuthId(user.id);
+            if (!resolvedRecord && user.user_metadata?.resident_number) {
+              const metaNum = String(user.user_metadata.resident_number).trim().padStart(3, '0');
+              resolvedRecord = await serverDb.getResidentByNumber(metaNum);
+            }
+            if (resolvedRecord) return resolvedRecord;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // Fallback: If resident_number was passed by a logged-in session in the request body
+  const bodyResNum = req.body?.resident_number ? String(req.body.resident_number).trim().replace(/^#/, '').padStart(3, '0') : null;
+  if (bodyResNum) {
+    const resRecord = await serverDb.getResidentByNumber(bodyResNum);
+    if (resRecord) return resRecord;
+  }
+
+  return null;
 }
 
 // -------------------------------------------------------------
@@ -154,6 +196,16 @@ estateLevyRouter.get('/lookup', async (req: Request, res: Response) => {
 // POST /api/estate-levy/initialize-payment
 estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response) => {
   try {
+    const authenticatedResident = await resolveAuthenticatedResident(req);
+
+    if (!authenticatedResident) {
+      return res.status(401).json({
+        success: false,
+        requiresLogin: true,
+        message: 'Resident login required. Please log in with your Resident ID Number and password before making an Estate Levy payment so your Resident ID, Full Name, and House Number appear on your payment and official receipt.'
+      });
+    }
+
     const {
       building_id,
       house_number,
@@ -164,11 +216,20 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       payer_phone
     } = req.body;
 
-    if (!building_id && !house_number) {
+    const resolvedResidentId = authenticatedResident.id;
+    const resolvedResidentNumber = String(authenticatedResident.resident_number).trim().padStart(3, '0');
+    const resolvedPayerName = String(authenticatedResident.full_name || payer_name || `Resident #${resolvedResidentNumber}`).trim();
+    const resolvedPayerEmail = String(
+      payer_email || authenticatedResident.email || `resident${resolvedResidentNumber}@fingerofgodestate.org`
+    ).trim().toLowerCase();
+    const resolvedPayerPhone = String(payer_phone || authenticatedResident.phone_number || '').trim() || null;
+    const resolvedHouseNumber = String(house_number || authenticatedResident.house_number || `Plot ${resolvedResidentNumber}`).trim();
+
+    if (!building_id && !resolvedHouseNumber) {
       return res.status(400).json({ success: false, message: 'Building selection or house number is required for estate levy payment.' });
     }
 
-    if (!payer_name || !payer_email) {
+    if (!resolvedPayerName || !resolvedPayerEmail) {
       return res.status(400).json({ success: false, message: 'Payer name and valid email address are required.' });
     }
 
@@ -187,21 +248,22 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
     }
 
     let building = building_id ? await serverDb.getBuildingById(building_id) : null;
-    if (!building && house_number) {
-      building = await serverDb.getBuildingByHouseNumber(String(house_number).trim());
+    if (!building && resolvedHouseNumber) {
+      building = await serverDb.getBuildingByHouseNumber(resolvedHouseNumber);
     }
-    // If resident is paying from Resident Portal and building record doesn't exist yet, create it automatically
-    if (!building && (house_number || (building_id && String(building_id).startsWith('res_bldg_')))) {
-      const targetHouse = house_number ? String(house_number).trim() : `Plot ${String(building_id).replace('res_bldg_', '')}`;
+    // If resident is paying and building record doesn't exist yet, create it automatically
+    if (!building && (resolvedHouseNumber || (building_id && String(building_id).startsWith('res_bldg_')))) {
+      const targetHouse = resolvedHouseNumber || `Plot ${String(building_id).replace('res_bldg_', '')}`;
       building = await serverDb.getBuildingByHouseNumber(targetHouse);
       if (!building) {
         building = await serverDb.saveBuilding({
           house_number: targetHouse,
-          building_name: `${targetHouse} Residence`,
+          building_name: `${targetHouse} (${resolvedPayerName})`,
           total_flats_count: 1,
-          landlord_name: String(payer_name).trim(),
-          landlord_phone: payer_phone ? String(payer_phone).trim() : null,
-          landlord_email: String(payer_email).trim().toLowerCase(),
+          landlord_name: resolvedPayerName,
+          landlord_phone: resolvedPayerPhone,
+          landlord_email: resolvedPayerEmail,
+          landlord_resident_id: resolvedResidentId,
           status: 'ACTIVE'
         });
       }
@@ -255,11 +317,11 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       }
     }
 
-    // Unique reference: EST-LEVY-YYYYMM-[1M|12M]-[BUILDING]-[RANDOM]
+    // Unique reference: EST-LEVY-YYYYMM-[1M|12M]-[RESIDENT]-[BUILDING]-[RANDOM]
     const monthTag = cleanMonth.replace('-', '');
-    const cleanHouse = String(building.house_number).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
+    const cleanHouse = String(building.house_number).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
     const randomHex = crypto.randomBytes(3).toString('hex').toUpperCase();
-    const reference = `EST-LEVY-${monthTag}-${durationMonths}M-${cleanHouse}-${randomHex}`;
+    const reference = `EST-LEVY-${monthTag}-${durationMonths}M-R${resolvedResidentNumber}-${cleanHouse}-${randomHex}`;
 
     // Lock obligation
     const lockExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -276,16 +338,18 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       });
     }
 
-    // Save pending transaction record
+    // Save pending transaction record with resident identity fields
     await serverDb.saveBuildingEstateLevyTransaction({
       building_id: building.id,
       building_house_number: building.house_number,
+      resident_id: resolvedResidentId,
+      resident_number: resolvedResidentNumber,
       billing_month: cleanMonth,
       amount: totalAmountNaira,
       currency: 'NGN',
-      payer_name: payer_name.trim(),
-      payer_email: payer_email.trim(),
-      payer_phone: payer_phone?.trim() || null,
+      payer_name: resolvedPayerName,
+      payer_email: resolvedPayerEmail,
+      payer_phone: resolvedPayerPhone,
       paystack_reference: reference,
       payment_status: 'PENDING'
     });
@@ -305,7 +369,7 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          email: payer_email.trim(),
+          email: resolvedPayerEmail,
           amount: amountKobo,
           reference: reference,
           callback_url: callbackUrl,
@@ -313,14 +377,34 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
           metadata: {
             payment_type: 'monthly_estate_levy',
             billing_category: 'estate_levy',
+            resident_id: resolvedResidentId,
+            resident_number: resolvedResidentNumber,
             building_id: building.id,
             building_house_number: building.house_number,
             billing_month: cleanMonth,
             duration_months: durationMonths,
             rate: RATE_PER_BUILDING,
             total_amount: totalAmountNaira,
-            payer_name: payer_name.trim(),
-            estate: 'Finger of God Estate'
+            payer_name: resolvedPayerName,
+            payer_phone: resolvedPayerPhone,
+            estate: 'Finger of God Estate',
+            custom_fields: [
+              {
+                display_name: 'Resident ID Number',
+                variable_name: 'resident_number',
+                value: `#${resolvedResidentNumber}`
+              },
+              {
+                display_name: 'Resident Full Name',
+                variable_name: 'resident_name',
+                value: resolvedPayerName
+              },
+              {
+                display_name: 'Building / House Number',
+                variable_name: 'house_number',
+                value: building.house_number
+              }
+            ]
           }
         })
       });
@@ -336,6 +420,8 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
           duration_months: durationMonths,
           currency: 'NGN',
           building_house_number: building.house_number,
+          resident_number: resolvedResidentNumber,
+          payer_name: resolvedPayerName,
           billing_month: cleanMonth,
           mode: isLive ? 'live' : 'test',
           is_simulation: false
@@ -359,6 +445,8 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       duration_months: durationMonths,
       currency: 'NGN',
       building_house_number: building.house_number,
+      resident_number: resolvedResidentNumber,
+      payer_name: resolvedPayerName,
       billing_month: cleanMonth,
       mode: 'test',
       is_simulation: true
@@ -592,7 +680,11 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
         building_house_number: transaction.building_house_number,
         building_name: building?.building_name || null,
         landlord_name: building?.landlord_name || null,
+        resident_id: transaction.resident_id || null,
+        resident_number: transaction.resident_number || null,
         payer_name: transaction.payer_name,
+        payer_email: transaction.payer_email || null,
+        payer_phone: transaction.payer_phone || null,
         billing_month: transaction.billing_month,
         billing_month_label: monthLabel,
         amount_paid: paidNaira,
@@ -744,7 +836,11 @@ export async function processVerifiedEstateLevyPaystackEvent(data: any): Promise
     building_house_number: transaction.building_house_number,
     building_name: building?.building_name || null,
     landlord_name: building?.landlord_name || null,
+    resident_id: transaction.resident_id || null,
+    resident_number: transaction.resident_number || null,
     payer_name: transaction.payer_name,
+    payer_email: transaction.payer_email || null,
+    payer_phone: transaction.payer_phone || null,
     billing_month: transaction.billing_month,
     billing_month_label: monthLabel,
     amount_paid: expectedAmountNaira,

@@ -593,8 +593,8 @@ export default function App() {
           onSuccess={(res) => {
             setCurrentResident(res);
             residentSessionService.setCurrentResident(res);
-            showToast(`Welcome, ${res.full_name}!`, 'success');
-            navigateTo('resident_portal');
+            setIsResidentLoginOpen(false);
+            showToast(`Logged in as ${res.full_name} (Resident #${res.resident_number}). Your details are now pre-filled for Estate Levy payment.`, 'success');
           }}
         />
       </div>

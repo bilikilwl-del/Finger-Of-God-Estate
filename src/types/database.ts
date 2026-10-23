@@ -1356,6 +1356,8 @@ export interface BuildingEstateLevyTransaction {
   id: string;
   building_id: string;
   building_house_number: string;
+  resident_id?: string | null;
+  resident_number?: string | null;
   billing_month: string; // YYYY-MM
   amount: number; // ₦1,000.00
   currency: string; // 'NGN'
@@ -1380,7 +1382,11 @@ export interface BuildingEstateLevyReceipt {
   building_house_number: string;
   building_name?: string | null;
   landlord_name?: string | null;
+  resident_id?: string | null;
+  resident_number?: string | null;
   payer_name: string;
+  payer_email?: string | null;
+  payer_phone?: string | null;
   billing_month: string; // YYYY-MM
   billing_month_label: string; // e.g. "October 2026"
   amount_paid: number; // ₦1,000.00

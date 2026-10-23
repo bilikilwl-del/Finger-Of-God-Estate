@@ -3,6 +3,7 @@ import {
   BuildingEstateLevyTransaction,
   BuildingEstateLevyReceipt
 } from '../types/database';
+import { residentSessionService } from '../lib/supabase';
 
 export interface EstateLevyBuildingItem {
   id: string;
@@ -75,11 +76,14 @@ export const estateLevyService = {
     house_number?: string;
     billing_month: string;
     duration_months?: 1 | 12;
+    resident_id?: string;
+    resident_number?: string;
     payer_name: string;
     payer_email: string;
     payer_phone?: string;
   }): Promise<{
     success: boolean;
+    requiresLogin?: boolean;
     authorization_url?: string;
     access_code?: string;
     reference?: string;
@@ -87,15 +91,22 @@ export const estateLevyService = {
     duration_months?: 1 | 12;
     currency?: string;
     building_house_number?: string;
+    resident_number?: string;
+    payer_name?: string;
     billing_month?: string;
     is_simulation?: boolean;
     alreadyPaid?: boolean;
     message?: string;
     receipt?: BuildingEstateLevyReceipt;
   }> {
+    const token = residentSessionService.getResidentToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const res = await fetch('/api/estate-levy/initialize-payment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(params)
     });
     return res.json();
