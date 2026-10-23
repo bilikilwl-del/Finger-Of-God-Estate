@@ -499,6 +499,7 @@ export default function App() {
         <PublicSecurityView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigateHome={() => navigateTo('home')}
           onNavigateToRoadProject={() => navigateTo('road_project')}
           onNavigateToAnnouncements={() => navigateTo('public_announcements')}
@@ -544,6 +545,8 @@ export default function App() {
         {renderToast()}
         <PublicRoadProjectView
           estateSettings={estateSettings}
+          currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigateHome={() => navigateTo('home')}
           onNavigateToSecurity={() => navigateTo('security_public')}
           onNavigateToAnnouncements={() => navigateTo('public_announcements')}
@@ -583,6 +586,7 @@ export default function App() {
         <PublicEstateLevyView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigate={(tab) => {
             if (tab === 'resident_portal') {
               const active = currentResident || residentSessionService.getCurrentResident();
@@ -720,6 +724,8 @@ export default function App() {
         {renderToast()}
         <PublicAnnouncementsView
           estateSettings={estateSettings}
+          currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onSelectAnnouncement={(slug) => {
             setSelectedNoticeSlug(slug);
             navigateTo('announcement_detail', slug);
@@ -796,6 +802,7 @@ export default function App() {
         <PublicDocumentsView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigate={(tab) => {
             if (tab === 'resident_portal') {
               const active = currentResident || residentSessionService.getCurrentResident();
@@ -831,6 +838,7 @@ export default function App() {
         <PublicContactView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigate={(tab) => {
             if (tab === 'resident_portal') {
               const active = currentResident || residentSessionService.getCurrentResident();
@@ -866,6 +874,7 @@ export default function App() {
         <PublicResidentsView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigate={(tab) => {
             if (tab === 'resident_portal') {
               const active = currentResident || residentSessionService.getCurrentResident();
@@ -924,6 +933,7 @@ export default function App() {
         <PublicElectionView
           estateSettings={estateSettings}
           currentResident={currentResident}
+          onLogoutResident={handleResidentLogout}
           onNavigate={navigateTo}
           onOpenResidentLogin={handleOpenResidentLogin}
         />

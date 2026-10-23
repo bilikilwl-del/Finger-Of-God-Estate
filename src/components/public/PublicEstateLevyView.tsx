@@ -34,6 +34,7 @@ import { residentSessionService } from '../../lib/supabase';
 interface PublicEstateLevyViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
 }
@@ -41,6 +42,7 @@ interface PublicEstateLevyViewProps {
 export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
   estateSettings,
   currentResident,
+  onLogoutResident,
   onNavigate,
   onOpenResidentLogin
 }) => {
@@ -179,6 +181,7 @@ export const PublicEstateLevyView: React.FC<PublicEstateLevyViewProps> = ({
         currentResident={activeResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">

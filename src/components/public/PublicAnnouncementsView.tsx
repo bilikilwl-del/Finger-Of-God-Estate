@@ -7,7 +7,7 @@ import {
   ArrowLeft,
   FileText
 } from 'lucide-react';
-import { Announcement, AnnouncementCategory, EstateSettings } from '../../types/database';
+import { Announcement, AnnouncementCategory, EstateSettings, Resident } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { PublicNavbar } from '../layout/PublicNavbar';
 import { PublicFooter } from '../layout/PublicFooter';
@@ -15,6 +15,8 @@ import { SEOHead } from '../common/SEOHead';
 
 interface PublicAnnouncementsViewProps {
   estateSettings: EstateSettings;
+  currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onSelectAnnouncement: (slug: string) => void;
   onNavigateHome: () => void;
   onNavigateToSecurity?: () => void;
@@ -36,6 +38,8 @@ const CATEGORIES: { label: string; value: AnnouncementCategory | 'ALL' }[] = [
 
 export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = ({
   estateSettings,
+  currentResident,
+  onLogoutResident,
   onSelectAnnouncement,
   onNavigateHome,
   onNavigateToSecurity,
@@ -87,8 +91,10 @@ export const PublicAnnouncementsView: React.FC<PublicAnnouncementsViewProps> = (
       <PublicNavbar
         currentTab="public_announcements"
         estateSettings={estateSettings}
+        currentResident={currentResident}
         onNavigate={handleNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
       />
 
       {/* Main Content Area */}

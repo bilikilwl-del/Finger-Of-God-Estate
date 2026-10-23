@@ -35,6 +35,7 @@ import { BallotModal } from './BallotModal';
 interface PublicElectionViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
 }
@@ -42,6 +43,7 @@ interface PublicElectionViewProps {
 export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
   estateSettings,
   currentResident,
+  onLogoutResident,
   onNavigate,
   onOpenResidentLogin
 }) => {
@@ -311,6 +313,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
       />
 
       {/* Hero Header */}

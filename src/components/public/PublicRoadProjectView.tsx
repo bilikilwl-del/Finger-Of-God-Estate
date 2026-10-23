@@ -45,7 +45,8 @@ import {
   RoadProjectSummary,
   RoadProjectMilestone,
   RoadTransactionType,
-  RoadProjectCategory
+  RoadProjectCategory,
+  Resident
 } from '../../types/database';
 import { dbService } from '../../lib/supabase';
 import { EstateLogo } from '../common/EstateLogo';
@@ -56,6 +57,8 @@ import { useRoadProjectStream } from '../../hooks/useRoadProjectStream';
 
 interface PublicRoadProjectViewProps {
   estateSettings: EstateSettings;
+  currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onNavigateHome: () => void;
   onNavigateToSecurity: () => void;
   onNavigateToAnnouncements: () => void;
@@ -67,6 +70,8 @@ interface PublicRoadProjectViewProps {
 
 export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
   estateSettings,
+  currentResident,
+  onLogoutResident,
   onNavigateHome,
   onNavigateToSecurity,
   onNavigateToAnnouncements,
@@ -274,6 +279,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
       <PublicNavbar
         currentTab="road_project"
         estateSettings={estateSettings}
+        currentResident={currentResident}
         onNavigate={(tab) => {
           if (tab === 'home') onNavigateHome();
           else if (tab === 'security_public') onNavigateToSecurity();
@@ -284,6 +290,7 @@ export const PublicRoadProjectView: React.FC<PublicRoadProjectViewProps> = ({
           else onNavigateHome();
         }}
         onOpenResidentLogin={onOpenResidentLogin || (() => {})}
+        onLogoutResident={onLogoutResident}
       />
 
       {/* 1. HERO SECTION & PAGE TITLE */}

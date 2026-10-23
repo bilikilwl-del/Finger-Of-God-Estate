@@ -33,6 +33,7 @@ import { FlatSecurityPaymentModal } from '../payments/FlatSecurityPaymentModal';
 interface PublicSecurityViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onNavigateHome: () => void;
   onNavigateToRoadProject: () => void;
   onNavigateToAnnouncements: () => void;
@@ -46,6 +47,7 @@ interface PublicSecurityViewProps {
 export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
   estateSettings,
   currentResident,
+  onLogoutResident,
   onNavigateHome,
   onNavigateToRoadProject,
   onNavigateToAnnouncements,
@@ -293,6 +295,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
       <PublicNavbar
         currentTab="security_public"
         estateSettings={estateSettings}
+        currentResident={currentResident}
         onNavigate={(tab) => {
           if (tab === 'home') onNavigateHome();
           else if (tab === 'road_project') onNavigateToRoadProject();
@@ -303,6 +306,7 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
           else onNavigateHome();
         }}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
       />
 
       {/* Breadcrumb Navigation */}

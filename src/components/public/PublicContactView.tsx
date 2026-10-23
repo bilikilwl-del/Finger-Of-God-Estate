@@ -18,6 +18,7 @@ import { SEOHead } from '../common/SEOHead';
 interface PublicContactViewProps {
   estateSettings: EstateSettings;
   currentResident?: Resident | null;
+  onLogoutResident?: () => void;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: () => void;
 }
@@ -25,6 +26,7 @@ interface PublicContactViewProps {
 export const PublicContactView: React.FC<PublicContactViewProps> = ({
   estateSettings,
   currentResident,
+  onLogoutResident,
   onNavigate,
   onOpenResidentLogin
 }) => {
@@ -67,6 +69,7 @@ export const PublicContactView: React.FC<PublicContactViewProps> = ({
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
