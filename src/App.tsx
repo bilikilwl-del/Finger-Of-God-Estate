@@ -307,9 +307,7 @@ export default function App() {
             setAdminUser(null);
             localStorage.removeItem('fog_admin_token');
             localStorage.removeItem('estate_admin_token');
-            residentSessionService.setResidentToken(null);
-            residentSessionService.setCurrentResident(null);
-            setCurrentResident(null);
+            // Do not clear resident session here as resident OTP auth is independent of Supabase Auth
           }
         });
         authSubscription = authListener?.subscription || null;
@@ -320,6 +318,13 @@ export default function App() {
       authSubscription?.unsubscribe();
     };
   }, []);
+
+  const handleResidentLogout = () => {
+    residentSessionService.logoutResident();
+    setCurrentResident(null);
+    showToast('Signed out of resident portal', 'info');
+    navigateTo('home');
+  };
 
   const handleOpenResidentLogin = (initialTab: 'login' | 'activate' = 'login') => {
     setResidentLoginInitialTab(initialTab);
@@ -466,6 +471,7 @@ export default function App() {
             navigateTo('announcement_detail', slug);
           }}
           onOpenResidentLogin={handleOpenResidentLogin}
+          onLogoutResident={handleResidentLogout}
         />
         <ResidentLoginModal
           isOpen={isResidentLoginOpen}

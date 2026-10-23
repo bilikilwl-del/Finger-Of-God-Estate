@@ -44,6 +44,7 @@ interface PublicHomeViewProps {
   onNavigate: (tab: NavigationTab) => void;
   onNavigateToAnnouncementDetail: (slug: string) => void;
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
+  onLogoutResident?: () => void;
 }
 
 // Curated high-resolution photography assets using authentic estate road photograph & verified residential imagery
@@ -99,7 +100,8 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
   currentResident,
   onNavigate,
   onNavigateToAnnouncementDetail,
-  onOpenResidentLogin
+  onOpenResidentLogin,
+  onLogoutResident
 }) => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
@@ -236,6 +238,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         currentResident={currentResident}
         onNavigate={onNavigate}
         onOpenResidentLogin={onOpenResidentLogin}
+        onLogoutResident={onLogoutResident}
         unreadAnnouncementsCount={announcements.length}
       />
 

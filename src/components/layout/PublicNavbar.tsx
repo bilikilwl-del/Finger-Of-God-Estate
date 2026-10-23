@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield,
   Coins,
@@ -15,10 +15,14 @@ import {
   Users,
   Vote,
   Compass,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  LogOut,
+  User
 } from 'lucide-react';
 import { NavigationTab, EstateSettings, Resident } from '../../types/database';
 import { EstateLogo } from '../common/EstateLogo';
+import { residentSessionService } from '../../lib/supabase';
 
 export interface PublicNavbarProps {
   currentTab: NavigationTab;
@@ -27,6 +31,7 @@ export interface PublicNavbarProps {
   adminUser?: any | null;
   onNavigate: (tab: NavigationTab) => void;
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
+  onLogoutResident?: () => void;
   unreadAnnouncementsCount?: number;
 }
 
@@ -36,10 +41,13 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
   currentResident,
   onNavigate,
   onOpenResidentLogin,
+  onLogoutResident,
   unreadAnnouncementsCount = 0
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Monitor scroll position for dynamic transparency over the homepage hero section
   useEffect(() => {
@@ -51,7 +59,29 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const isHeroTransparent = currentTab === 'home' && !isScrolled;
+
+  const handleLogout = () => {
+    setUserMenuOpen(false);
+    setMobileMenuOpen(false);
+    if (onLogoutResident) {
+      onLogoutResident();
+    } else {
+      residentSessionService.logoutResident();
+      window.location.reload();
+    }
+  };
 
   // Curated Navigation Items aligning with official estate sections
   const publicNavItems = [
@@ -100,6 +130,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
 
   const handleItemClick = (tab: NavigationTab | 'about') => {
     setMobileMenuOpen(false);
+    setUserMenuOpen(false);
 
     if (tab === 'about') {
       if (currentTab === 'home') {
@@ -257,20 +288,67 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
             {/* Desktop Action CTAs */}
             <div className="hidden xl:flex items-center gap-2.5 shrink-0">
               {currentResident ? (
-                <button
-                  onClick={() => handleItemClick('resident_portal')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    isHeroTransparent
-                      ? 'bg-emerald-900/60 border border-emerald-500/50 text-white hover:bg-emerald-800'
-                      : 'bg-emerald-50 border border-emerald-200 text-emerald-950 hover:bg-emerald-100'
-                  }`}
-                  title={`Signed in as ${currentResident.full_name}`}
-                >
-                  <span className="truncate max-w-[90px]">{currentResident.full_name.split(' ')[0]}</span>
-                  <span className="text-[11px] font-mono font-bold">
-                    #{currentResident.resident_number}
-                  </span>
-                </button>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 border ${
+                      isHeroTransparent
+                        ? 'bg-emerald-900/80 border-emerald-500/60 text-white hover:bg-emerald-800'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-950 hover:bg-emerald-100'
+                    }`}
+                    title={`Signed in as ${currentResident.full_name}`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="truncate max-w-[100px]">{currentResident.full_name.split(' ')[0]}</span>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-emerald-200/50 rounded text-emerald-900">
+                      #{currentResident.resident_number}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                  </button>
+
+                  {/* Account Dropdown Menu */}
+                  {userMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50 text-slate-900 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="px-4 py-2.5 border-b border-slate-100 bg-slate-50/70">
+                        <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
+                          Signed In Resident
+                        </p>
+                        <p className="text-xs font-bold text-slate-900 truncate">{currentResident.full_name}</p>
+                        <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                          Resident #{currentResident.resident_number} • {currentResident.house_number || `Plot #${currentResident.resident_number}`}
+                        </p>
+                      </div>
+
+                      <div className="py-1">
+                        <button
+                          onClick={() => handleItemClick('resident_portal')}
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Resident Dashboard</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleItemClick('estate_levy')}
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-2.5 cursor-pointer"
+                        >
+                          <CreditCard className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Pay Security Levies</span>
+                        </button>
+                      </div>
+
+                      <div className="border-t border-slate-100 my-1" />
+
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-500 shrink-0" />
+                        <span>Sign Out of Account</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={() => onOpenResidentLogin('login')}
@@ -312,17 +390,31 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
                 <span>Pay</span>
               </button>
 
-              <button
-                onClick={() => onOpenResidentLogin('login')}
-                className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
-                  isHeroTransparent
-                    ? 'bg-white/15 text-white border border-white/25'
-                    : 'bg-slate-100 text-slate-800 border border-slate-200'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Login</span>
-              </button>
+              {currentResident ? (
+                <button
+                  onClick={() => handleItemClick('resident_portal')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
+                    isHeroTransparent
+                      ? 'bg-emerald-900/90 text-white border border-emerald-500/50'
+                      : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>My Account</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onOpenResidentLogin('login')}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
+                    isHeroTransparent
+                      ? 'bg-white/15 text-white border border-white/25'
+                      : 'bg-slate-100 text-slate-800 border border-slate-200'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Login</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -344,22 +436,34 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
           <div className="xl:hidden border-t border-slate-200 bg-white text-slate-900 shadow-2xl animate-in slide-in-from-top-2 duration-200 w-full">
             <div className="max-w-full px-4 py-4 space-y-3 max-h-[85vh] overflow-y-auto">
               {currentResident ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
-                      Signed In Resident
-                    </p>
-                    <p className="text-xs font-bold text-emerald-950">{currentResident.full_name}</p>
-                    <p className="text-[11px] text-emerald-800 font-mono">
-                      Resident #{currentResident.resident_number} • {currentResident.house_number}
-                    </p>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
+                        Signed In Resident
+                      </p>
+                      <p className="text-xs font-bold text-emerald-950">{currentResident.full_name}</p>
+                      <p className="text-[11px] text-emerald-800 font-mono">
+                        Resident #{currentResident.resident_number} • {currentResident.house_number || `Plot #${currentResident.resident_number}`}
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleItemClick('resident_portal')}
-                    className="px-2.5 py-1 bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer"
-                  >
-                    Dashboard
-                  </button>
+                  <div className="flex items-center gap-2 pt-1 border-t border-emerald-200/60">
+                    <button
+                      onClick={() => handleItemClick('resident_portal')}
+                      className="flex-1 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold rounded-lg cursor-pointer text-center flex items-center justify-center gap-1.5"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Resident Dashboard</span>
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1"
+                    >
+                      <LogOut className="w-3 h-3 text-rose-600" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
@@ -372,7 +476,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
                       setMobileMenuOpen(false);
                       onOpenResidentLogin('activate');
                     }}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs cursor-pointer"
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs cursor-pointer whitespace-nowrap"
                   >
                     Activate
                   </button>
@@ -429,7 +533,7 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
                   <span>Explore the Estate</span>
                 </button>
 
-                {!currentResident && (
+                {!currentResident ? (
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false);
@@ -438,7 +542,15 @@ export const PublicNavbar: React.FC<PublicNavbarProps> = ({
                     className="w-full py-2.5 rounded-xl bg-[#0F382A] hover:bg-[#134E39] text-white font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
                     <UserCheck className="w-4 h-4 text-emerald-300" />
-                    <span>Enter Resident Login</span>
+                    <span>Enter Resident Portal</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleLogout}
+                    className="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-600" />
+                    <span>Sign Out of Resident Account</span>
                   </button>
                 )}
 
