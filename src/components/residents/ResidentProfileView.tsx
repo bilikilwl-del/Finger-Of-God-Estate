@@ -339,7 +339,7 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
                     </span>
                   </div>
                   <p className="text-xs font-bold text-emerald-950">
-                    October 2026 Security Levy Paid ({formatNaira(currentPayment.amount_paid || 5000)})
+                    October 2026 Security Levy Paid ({formatNaira(currentPayment.amount_paid || 1500)})
                   </p>
                   <p className="text-[11px] text-emerald-700 font-mono">
                     Ref: {currentPayment.paystack_reference} • Paid: {currentPayment.paid_at ? new Date(currentPayment.paid_at).toLocaleDateString('en-NG') : 'Confirmed'}

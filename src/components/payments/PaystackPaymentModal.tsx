@@ -22,6 +22,7 @@ import { dbService, residentSessionService } from '../../lib/supabase';
 import { 
   initializePayment, 
   verifyPayment, 
+  cancelPaymentOnServer,
   formatNaira, 
   loadPaystackInlineScript, 
   getPaystackConfig,
@@ -246,6 +247,9 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
             handleTriggerServerVerification(response.reference || ref);
           },
           onClose: () => {
+            if (ref) {
+              cancelPaymentOnServer(ref, 'CANCELLED', 'Payment cancelled by user in checkout modal.');
+            }
             setStep('verify_resident');
             setErrorMessage('Payment cancelled. Transaction was not completed.');
           }
@@ -301,6 +305,10 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   };
 
   const handleTestPaymentFailed = (reason: string) => {
+    if (currentReference) {
+      const isCancelled = reason.toLowerCase().includes('cancel');
+      cancelPaymentOnServer(currentReference, isCancelled ? 'CANCELLED' : 'FAILED', reason);
+    }
     setIsTestModalOpen(false);
     setStep('failed');
     setErrorMessage(reason);
@@ -720,6 +728,9 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         <PaystackTestModal
           isOpen={isTestModalOpen}
           onClose={() => {
+            if (currentReference) {
+              cancelPaymentOnServer(currentReference, 'CANCELLED', 'Payment cancelled by user.');
+            }
             setIsTestModalOpen(false);
             setStep('verify_resident');
             setErrorMessage('Payment cancelled by user.');

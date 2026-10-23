@@ -95,7 +95,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               subtitle="OFFICIAL SECURITY & LEVY CLEARANCE SEAL • ASABA"
             />
             <p className="text-xs font-medium text-slate-600 max-w-md mx-auto pt-1">
-              {estateSettings?.estate_address || 'Phase 1, Security Gate Boulevard, Asaba, Delta State'}
+              {estateSettings?.estate_address || '1 Ogbueshi Ugboko Street, Finger of God Estate, Iyiaba, Asaba, Delta State.'}
             </p>
             <div className="pt-2">
               <span className="inline-block px-4 py-1 rounded-full bg-slate-900 text-white text-xs font-black tracking-widest uppercase">
@@ -180,11 +180,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           <div className="p-5 rounded-2xl bg-emerald-900 text-white flex items-center justify-between shadow-sm">
             <div>
               <span className="text-xs uppercase tracking-widest font-bold text-emerald-300 block">Total Amount Paid</span>
-              <span className="text-xs text-emerald-200 font-medium">Five Thousand Naira Only</span>
+              <span className="text-xs text-emerald-200 font-medium">
+                {Number(receipt.amount_paid || 1500) === 18000
+                  ? 'Eighteen Thousand Naira Only'
+                  : Number(receipt.amount_paid || 1500) === 1500
+                  ? 'One Thousand Five Hundred Naira Only'
+                  : `${formatNaira(receipt.amount_paid || 1500)} Only`}
+              </span>
             </div>
             <div className="text-right">
               <span className="text-2xl sm:text-3xl font-black font-display tracking-tight text-white">
-                {formatNaira(receipt.amount_paid || 5000)}
+                {formatNaira(receipt.amount_paid || 1500)}
               </span>
             </div>
           </div>

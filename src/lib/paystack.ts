@@ -225,15 +225,31 @@ export async function initializePayment(params: {
  * Trigger server-side transaction verification with Paystack using PAYSTACK_SECRET_KEY.
  * NEVER trust client status alone.
  */
-export async function verifyPayment(reference: string): Promise<VerifyPaymentResponse> {
+export async function verifyPayment(reference: string, simulatedOutcome?: 'SUCCESS' | 'FAILED' | 'CANCELLED'): Promise<VerifyPaymentResponse> {
   const res = await fetch('/api/paystack/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reference })
+    body: JSON.stringify({ reference, simulatedOutcome })
   });
 
   const data = await res.json();
   return data;
+}
+
+/**
+ * Notify server that a pending checkout was cancelled or failed on the client
+ */
+export async function cancelPaymentOnServer(reference: string, reason: 'CANCELLED' | 'FAILED' = 'CANCELLED', failureReason?: string): Promise<void> {
+  if (!reference) return;
+  try {
+    await fetch('/api/paystack/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference, reason, failureReason })
+    });
+  } catch (err) {
+    console.warn('Could not notify server of cancelled payment:', err);
+  }
 }
 
 /**

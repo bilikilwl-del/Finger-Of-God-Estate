@@ -428,7 +428,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
         resident_number: currentResident.resident_number,
         resident_name: currentResident.full_name,
         house_number: currentResident.house_number,
-        amount_paid: payment.amount_paid || 5000,
+        amount_paid: payment.amount_paid || 1500,
         currency: 'NGN',
         period_covered: payment.period_label,
         payment_date: payment.paid_at || new Date().toISOString(),
@@ -1156,7 +1156,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         </div>
                         <div className="text-right">
                           <span className="text-slate-500 block">Amount</span>
-                          <span className="font-black text-slate-900">{formatNaira(rcp.amount_paid || 5000)}</span>
+                          <span className="font-black text-slate-900">{formatNaira(rcp.amount_paid || 1500)}</span>
                         </div>
                       </div>
 

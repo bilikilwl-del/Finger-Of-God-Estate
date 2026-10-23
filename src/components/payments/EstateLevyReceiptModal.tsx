@@ -161,7 +161,11 @@ export const EstateLevyReceiptModal: React.FC<EstateLevyReceiptModalProps> = ({
               <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
                 Amount Paid (Per Building)
               </span>
-              <span className="text-xs text-slate-300 font-medium">One Thousand Naira Only</span>
+              <span className="text-xs text-slate-300 font-medium">
+                {Number(receipt.amount_paid || 1000) === 12000
+                  ? 'Twelve Thousand Naira Only'
+                  : 'One Thousand Naira Only'}
+              </span>
             </div>
             <div className="text-right">
               <span className="text-2xl font-black font-mono text-emerald-400">

@@ -237,6 +237,24 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
       });
     }
 
+    if (
+      currentOb &&
+      currentOb.status !== 'PAID' &&
+      currentOb.locked_by_reference &&
+      currentOb.lock_expires_at &&
+      new Date(currentOb.lock_expires_at).getTime() > Date.now()
+    ) {
+      const lockedTx = await serverDb.getBuildingEstateLevyTransactionByRef(currentOb.locked_by_reference);
+      if (!lockedTx || lockedTx.payment_status === 'PENDING') {
+        return res.status(409).json({
+          success: false,
+          locked: true,
+          active_reference: currentOb.locked_by_reference,
+          message: `A payment session (${currentOb.locked_by_reference}) is currently active for building "${building.house_number}". Please complete or cancel the open checkout window before starting a new one.`
+        });
+      }
+    }
+
     // Unique reference: EST-LEVY-YYYYMM-[1M|12M]-[BUILDING]-[RANDOM]
     const monthTag = cleanMonth.replace('-', '');
     const cleanHouse = String(building.house_number).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase();
@@ -354,10 +372,57 @@ estateLevyRouter.post('/initialize-payment', async (req: Request, res: Response)
 // -------------------------------------------------------------
 // 4. VERIFY ESTATE LEVY PAYMENT (GATEWAY AUTHORITATIVE CONFIRMATION)
 // -------------------------------------------------------------
+// POST /api/estate-levy/cancel-payment
+estateLevyRouter.post('/cancel-payment', async (req: Request, res: Response) => {
+  try {
+    const { reference, status: requestedStatus, reason } = req.body;
+    if (!reference || typeof reference !== 'string') {
+      return res.status(400).json({ success: false, message: 'Transaction reference is required.' });
+    }
+
+    const cleanRef = reference.trim();
+    const transaction = await serverDb.getBuildingEstateLevyTransactionByRef(cleanRef);
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction record not found.' });
+    }
+
+    if (transaction.payment_status === 'SUCCESSFUL') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel an already verified payment.' });
+    }
+
+    const finalStatus = requestedStatus === 'FAILED' ? 'FAILED' : 'ABANDONED';
+    const updatedTx = await serverDb.updateBuildingEstateLevyTransaction(transaction.id, {
+      payment_status: finalStatus,
+      gateway_response: reason || (finalStatus === 'FAILED' ? 'Payment declined or failed at checkout' : 'Checkout cancelled by user')
+    });
+
+    // Release obligation lock if held by this reference
+    const obligations = await serverDb.getBuildingEstateLevyObligations({
+      buildingId: transaction.building_id,
+      billingMonth: transaction.billing_month
+    });
+    if (obligations.length > 0 && obligations[0].locked_by_reference === cleanRef && obligations[0].status !== 'PAID') {
+      await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
+        locked_by_reference: null,
+        lock_expires_at: null
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Transaction marked as ${finalStatus} and building lock released.`,
+      transaction: updatedTx
+    });
+  } catch (error: any) {
+    console.error('Error cancelling estate levy payment:', error);
+    return res.status(500).json({ success: false, message: 'Server error cancelling payment.' });
+  }
+});
+
 // POST /api/estate-levy/verify-payment
 estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => {
   try {
-    const { reference } = req.body;
+    const { reference, simulatedOutcome, failureReason } = req.body;
     if (!reference || typeof reference !== 'string') {
       return res.status(400).json({ success: false, verified: false, message: 'Transaction reference is required.' });
     }
@@ -374,9 +439,38 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
       return res.json({
         success: true,
         verified: true,
+        already_verified: true,
         message: 'Payment already verified.',
         transaction,
         receipt
+      });
+    }
+
+    const releaseObligationLock = async () => {
+      const obligations = await serverDb.getBuildingEstateLevyObligations({
+        buildingId: transaction.building_id,
+        billingMonth: transaction.billing_month
+      });
+      if (obligations.length > 0 && obligations[0].locked_by_reference === cleanRef && obligations[0].status !== 'PAID') {
+        await serverDb.updateBuildingEstateLevyObligation(obligations[0].id, {
+          locked_by_reference: null,
+          lock_expires_at: null
+        });
+      }
+    };
+
+    if (simulatedOutcome === 'FAILED' || simulatedOutcome === 'CANCELLED' || simulatedOutcome === 'ABANDONED') {
+      const failStatus = simulatedOutcome === 'FAILED' ? 'FAILED' : 'ABANDONED';
+      await serverDb.updateBuildingEstateLevyTransaction(transaction.id, {
+        payment_status: failStatus,
+        gateway_response: failureReason || (failStatus === 'FAILED' ? 'Simulated payment failure' : 'Checkout cancelled by user')
+      });
+      await releaseObligationLock();
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        status: failStatus,
+        message: failureReason || `Payment ${failStatus.toLowerCase()}. No receipt generated.`
       });
     }
 
@@ -391,7 +485,11 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
     let gatewayResponse = 'Approved';
     let paidAmountKobo = expectedKobo;
 
-    if (secretKey) {
+    // In test mode with sk_test_ key and simulated test reference, allow test checkout verification if explicitly flagged
+    const isTestKey = secretKey && secretKey.startsWith('sk_test_');
+    const isSimulatedTestSuccess = isTestKey && req.body.simulatedOutcome === 'SUCCESS';
+
+    if (secretKey && !isSimulatedTestSuccess) {
       const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(cleanRef)}`, {
         headers: {
           'Authorization': `Bearer ${secretKey}`,
@@ -405,6 +503,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
           payment_status: 'FAILED',
           gateway_response: pData.message || 'Verification rejected by Paystack'
         });
+        await releaseObligationLock();
         return res.status(400).json({
           success: false,
           verified: false,
@@ -421,6 +520,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
           payment_status: failureStatus,
           gateway_response: txData.gateway_response || txData.status
         });
+        await releaseObligationLock();
         return res.status(400).json({
           success: false,
           verified: false,
@@ -445,6 +545,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
           payment_status: 'FAILED',
           gateway_response: `Amount mismatch: expected ${expectedKobo} kobo, received ${txData.amount} kobo`
         });
+        await releaseObligationLock();
         return res.status(400).json({
           success: false,
           verified: false,
@@ -458,7 +559,7 @@ estateLevyRouter.post('/verify-payment', async (req: Request, res: Response) => 
       gatewayResponse = txData.gateway_response || 'Approved';
       paidAmountKobo = txData.amount;
     } else {
-      // Sandbox simulation mode (development / mock verification)
+      // Sandbox simulation mode (development / test key simulation)
       verifiedStatus = true;
     }
 

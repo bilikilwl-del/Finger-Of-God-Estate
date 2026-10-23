@@ -462,107 +462,42 @@ export async function initializeResidentsStore(): Promise<void> {
         residentSessionsStore.set(s.token, { resident_number: s.resident_number, created_at: s.created_at });
       }
     }
+
+    // Synchronize persisted monthly payments, payment transactions, and receipts
+    const [dbPayments, dbTransactions, dbReceipts] = await Promise.all([
+      serverDb.getPayments(),
+      serverDb.getTransactions(),
+      serverDb.getReceipts()
+    ]);
+
+    paymentsStore.clear();
+    for (const p of dbPayments || []) {
+      if (p && p.resident_number && p.period_month && p.period_year) {
+        const key = `${p.resident_number}_${p.period_month}_${p.period_year}`;
+        paymentsStore.set(key, p);
+      }
+    }
+
+    transactionsStore.clear();
+    for (const t of dbTransactions || []) {
+      const ref = t?.transaction_reference || t?.paystack_reference;
+      if (ref) {
+        transactionsStore.set(ref, t);
+      }
+    }
+
+    receiptsStore.clear();
+    for (const r of dbReceipts || []) {
+      if (r) {
+        if (r.receipt_number) receiptsStore.set(r.receipt_number, r);
+        if (r.paystack_reference) receiptsStore.set(r.paystack_reference, r);
+        if (r.id) receiptsStore.set(r.id, r);
+      }
+    }
   } catch (err) {
     console.error('[ResidentStore] Error initializing residents from database:', err);
   }
 }
-
-// Seed Verified Initial Payments, Transactions & Official Digital Receipts
-const initialPayment001: ServerPaymentRecord = {
-  id: 'pay-001',
-  resident_id: 'res-001',
-  resident_number: '001',
-  resident_name: 'Engr. Babatunde Adeleke',
-  house_number: 'Plot 4A, Hibiscus Crescent',
-  period_month: 10,
-  period_year: 2026,
-  period_label: 'October 2026',
-  amount_due: 5000,
-  amount_paid: 5000,
-  status: 'PAID',
-  due_date: '2026-10-01',
-  paid_at: '2026-09-20T10:30:00Z',
-  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-  created_at: '2026-09-20T10:28:15Z',
-  updated_at: '2026-09-20T10:30:00Z'
-};
-paymentsStore.set('001_10_2026', initialPayment001);
-paymentsStore.set('001-10-2026', initialPayment001);
-
-const initialTx001: ServerTransactionRecord = {
-  id: 'tx-001',
-  payment_id: 'pay-001',
-  resident_id: 'res-001',
-  resident_number: '001',
-  resident_name: 'Engr. Babatunde Adeleke',
-  house_number: 'Plot 4A, Hibiscus Crescent',
-  period_month: 10,
-  period_year: 2026,
-  period_label: 'October 2026',
-  transaction_reference: 'FOGES-202610-001-A7C8E9F1',
-  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-  paystack_transaction_id: '394857201',
-  amount_due: 5000,
-  amount_paid: 5000,
-  currency: 'NGN',
-  payment_method: 'Paystack',
-  status: 'PAID',
-  payment_channel: 'card',
-  payment_date: '2026-09-20T10:30:00Z',
-  gateway_response: 'Approved',
-  customer_email: 'babatunde.adeleke@gmail.com',
-  created_at: '2026-09-20T10:28:15Z',
-  updated_at: '2026-09-20T10:30:00Z'
-};
-transactionsStore.set('FOGES-202610-001-A7C8E9F1', initialTx001);
-
-const initialReceipt001: ServerReceiptRecord = {
-  id: 'rcp-srv-001',
-  receipt_number: 'FOGES-REC-202610-001-A7C8E9',
-  transaction_id: 'tx-001',
-  payment_id: 'pay-001',
-  resident_id: 'res-001',
-  resident_number: '001',
-  resident_name: 'Engr. Babatunde Adeleke',
-  house_number: 'Plot 4A, Hibiscus Crescent',
-  amount_paid: 5000,
-  currency: 'NGN',
-  period_covered: 'October 2026',
-  payment_date: '2026-09-20T10:30:00Z',
-  paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-  status: 'PAID',
-  issued_at: '2026-09-20T10:30:05Z'
-};
-receiptsStore.set('FOGES-REC-202610-001-A7C8E9', initialReceipt001);
-receiptsStore.set('RCP-202610-001-A7C8E9', initialReceipt001);
-receiptsStore.set('FOGES-202610-001-A7C8E9F1', initialReceipt001);
-receiptsStore.set(initialReceipt001.id, initialReceipt001);
-
-// Seed unpaids for Resident 002, 003, 004 if resident exists
-['002', '003', '004'].forEach(num => {
-  const r = residentsStore.get(num);
-  if (!r) return;
-  const p: ServerPaymentRecord = {
-    id: `pay-${num}-10-2026`,
-    resident_id: r.id,
-    resident_number: num,
-    resident_name: r.full_name,
-    house_number: r.house_number,
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    amount_due: 5000,
-    amount_paid: 0,
-    status: 'UNPAID',
-    due_date: '2026-10-01',
-    paid_at: null,
-    paystack_reference: null,
-    created_at: '2026-09-01T08:00:00Z',
-    updated_at: '2026-09-01T08:00:00Z'
-  };
-  paymentsStore.set(`${num}_10_2026`, p);
-  paymentsStore.set(`${num}-10-2026`, p);
-});
 
 // Helper for URL slug generation
 function slugify(text: string): string {
@@ -580,6 +515,21 @@ function slugify(text: string): string {
 // Seed Initial Estate Announcements
 const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
   {
+    id: 'ann-gm-2026-10-24',
+    title: 'Notice of General Meeting — Saturday, 24th October 2026',
+    slug: 'notice-of-general-meeting-24th-october-2026',
+    category: 'MEETING',
+    priority: 'URGENT',
+    status: 'PUBLISHED',
+    publish_at: '2026-10-22T08:00:00.000Z',
+    expires_at: null,
+    author_name: 'Executive Committee (EXCO) Secretariat',
+    body: "All landlords, homeowners, and residents of Finger of God Estate are hereby notified of the Statutory General Meeting scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nAgenda Highlights:\n1. Presentation of the October 2026 Security Levy & Estate Infrastructure Financial Report.\n2. Progress review on the Estate Road Modernization & Drainage Rehabilitation Project.\n3. Gate Access Control, 24/7 Armed Patrol Operations, and Resident Slot Verification.\n4. General Welfare, Environmental Sanitation, and Open Floor Deliberations.\n\nAttendance is mandatory for all households. Please be punctual as deliberations commence strictly at 07:00 AM.",
+    content: "All landlords, homeowners, and residents of Finger of God Estate are hereby notified of the Statutory General Meeting scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nAgenda Highlights:\n1. Presentation of the October 2026 Security Levy & Estate Infrastructure Financial Report.\n2. Progress review on the Estate Road Modernization & Drainage Rehabilitation Project.\n3. Gate Access Control, 24/7 Armed Patrol Operations, and Resident Slot Verification.\n4. General Welfare, Environmental Sanitation, and Open Floor Deliberations.\n\nAttendance is mandatory for all households. Please be punctual as deliberations commence strictly at 07:00 AM.",
+    created_at: '2026-10-22T08:00:00.000Z',
+    updated_at: '2026-10-22T08:00:00.000Z'
+  },
+  {
     id: 'ann-001',
     title: 'Updated Estate Security Protocols & RFID Gate Automation',
     slug: 'updated-estate-security-protocols-rfid-gate-automation',
@@ -590,6 +540,7 @@ const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
     expires_at: null,
     author_name: 'Estate Security EXCO',
     body: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols. All residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
+    content: 'The Executive Committee (EXCO) of Finger of God Estate wishes to notify all residents that starting October 1, 2026, the main estate access gates will operate under enhanced 24/7 RFID scanning and armed patrol protocols. All residents are advised to ensure their vehicle security decals are up to date and that visitors are registered with the central security desk via their resident numbers. Prompt payment of the monthly security levy ensures continuous funding for armed response teams and perimeter surveillance.',
     created_at: '2026-09-15T08:00:00.000Z',
     updated_at: '2026-09-15T08:00:00.000Z'
   },
@@ -604,6 +555,7 @@ const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
     expires_at: null,
     author_name: 'Finance Committee',
     body: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦1,500, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
+    content: 'We are pleased to announce the full rollout of our automated security levy payment and receipting portal powered by Paystack. The monthly security levy is ₦1,500, payable on or before the 1st of every month starting from October 2026. Residents can now pay online using debit cards, bank transfer, or USSD, and obtain verified digital receipts with unique cryptographic verification codes instantly. Please visit the "Pay Security Levy" section or your resident portal to complete your payment.',
     created_at: '2026-09-20T09:00:00.000Z',
     updated_at: '2026-09-20T09:00:00.000Z'
   },
@@ -617,7 +569,8 @@ const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
     publish_at: '2026-09-22T10:00:00.000Z',
     expires_at: null,
     author_name: 'Estate Secretariat',
-    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request). Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.',
+    body: "All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate General Meeting & Townhall scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church. Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.",
+    content: "All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate General Meeting & Townhall scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church. Key agenda items include: 1. Review of Q3 security reports and CCTV camera expansions. 2. Financial stewardship report and levy collection status. 3. Traffic management within estate boulevards. Your active participation is invaluable in building a safer community.",
     created_at: '2026-09-22T10:00:00.000Z',
     updated_at: '2026-09-22T10:00:00.000Z'
   },
@@ -632,6 +585,7 @@ const INITIAL_ANNOUNCEMENTS: ServerAnnouncementRecord[] = [
     expires_at: null,
     author_name: 'Facilities & Works Committee',
     body: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily. Residents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
+    content: 'The Estate Facilities Management team will be carrying out scheduled de-silting of drainage channels and replacement of solar streetlight batteries along Palm Avenue, Hibiscus Crescent, and Boulevard West from October 5 to October 8, 2026 between 9:00 AM and 4:00 PM daily. Residents along these corridors are requested not to park vehicles directly over drainage slabs during these operational hours.',
     created_at: '2026-09-23T11:00:00.000Z',
     updated_at: '2026-09-23T11:00:00.000Z'
   }
@@ -780,10 +734,19 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
 
     // Authoritative Server-side Authentication & Resolution
     let resident: ServerResidentRecord | null = null;
+    let isAuthenticatedOwnerOrAdmin = false;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7).trim();
-      resident = await resolveResidentFromToken(token);
+      const resolvedResident = await resolveResidentFromToken(token);
+      if (resolvedResident) {
+        if (!residentNum || resolvedResident.resident_number === residentNum) {
+          resident = resolvedResident;
+          isAuthenticatedOwnerOrAdmin = true;
+        }
+      } else if ((await verifyAdminToken(token)).valid) {
+        isAuthenticatedOwnerOrAdmin = true;
+      }
     }
 
     // Gracefully fallback to resident number lookup if token is missing, expired, or for public lookup
@@ -817,18 +780,29 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
 
     const settings = await serverDb.getSettings();
 
+    const maskPhone = (phone?: string | null) => {
+      if (!phone || phone.length < 7) return '';
+      return `${phone.slice(0, 4)}****${phone.slice(-3)}`;
+    };
+    const maskEmail = (email?: string | null) => {
+      if (!email || !email.includes('@')) return null;
+      const [local, domain] = email.split('@');
+      return `${local.slice(0, 2)}***@${domain}`;
+    };
+
     return res.json({
       success: true,
       resident: {
         id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
+        auth_user_id: isAuthenticatedOwnerOrAdmin ? (resident.auth_user_id || null) : null,
         resident_number: resident.resident_number,
         full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        email: resident.email,
+        phone_number: isAuthenticatedOwnerOrAdmin ? resident.phone_number : maskPhone(resident.phone_number),
+        email: isAuthenticatedOwnerOrAdmin ? resident.email : maskEmail(resident.email),
         house_number: resident.house_number,
         status: resident.status,
-        account_status: resident.account_status || 'ACTIVE'
+        account_activated: !!resident.account_activated,
+        account_status: resident.account_status || (resident.account_activated ? 'ACTIVE' : 'NOT ACTIVATED')
       },
       payment: payment ? {
         ...payment,
@@ -1101,16 +1075,83 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 3. SERVER-SIDE PAYMENT VERIFICATION (CRITICAL SECURITY)
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// 2.5. CANCEL OR MARK FAILED PAYMENT ATTEMPT
+// -------------------------------------------------------------
+app.post('/api/paystack/cancel', async (req: Request, res: Response) => {
+  try {
+    const { reference, status: requestedStatus, reason } = req.body;
+    if (!reference || typeof reference !== 'string') {
+      return res.status(400).json({ success: false, message: 'Valid payment reference is required.' });
+    }
+
+    const cleanRef = reference.trim();
+    let transaction = transactionsStore.get(cleanRef);
+    if (!transaction) {
+      const allTxs = await serverDb.getTransactions();
+      transaction = allTxs.find((t: any) => t.transaction_reference === cleanRef || t.paystack_reference === cleanRef);
+    }
+
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Payment attempt record not found for this reference.' });
+    }
+
+    if (transaction.status === 'PAID') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel an already verified payment.' });
+    }
+
+    const finalStatus = requestedStatus === 'FAILED' ? 'FAILED' : 'CANCELLED';
+    const now = new Date().toISOString();
+    transaction.status = finalStatus as any;
+    transaction.gateway_response = reason || (finalStatus === 'FAILED' ? 'Payment declined or failed at checkout' : 'Payment cancelled by resident');
+    transaction.updated_at = now;
+    transactionsStore.set(cleanRef, transaction);
+    await serverDb.saveTransaction(transaction);
+
+    const paymentKey = `${transaction.resident_number}_${transaction.period_month}_${transaction.period_year}`;
+    const payment = paymentsStore.get(paymentKey);
+    if (payment && payment.status !== 'PAID') {
+      payment.status = 'UNPAID';
+      payment.updated_at = now;
+      paymentsStore.set(paymentKey, payment);
+      await serverDb.savePayment(payment);
+    }
+
+    return res.json({
+      success: true,
+      status: finalStatus,
+      message: `Transaction marked as ${finalStatus}.`,
+      transaction,
+      payment: payment || null
+    });
+  } catch (error: any) {
+    console.error('Server cancel payment error:', error);
+    return res.status(500).json({ success: false, message: 'Server error cancelling payment.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 3. SERVER-SIDE PAYMENT VERIFICATION (CRITICAL SECURITY)
+// -------------------------------------------------------------
 app.post('/api/paystack/verify', async (req: Request, res: Response) => {
   try {
-    const { reference } = req.body;
+    const { reference, simulatedOutcome, failureReason } = req.body;
 
     if (!reference || typeof reference !== 'string') {
       return res.status(400).json({ success: false, verified: false, message: 'Valid payment reference is required.' });
     }
 
     const cleanRef = reference.trim();
-    const transaction = transactionsStore.get(cleanRef);
+    let transaction = transactionsStore.get(cleanRef);
+
+    if (!transaction) {
+      const dbTxs = await serverDb.getTransactions();
+      const foundTx = dbTxs.find((t: any) => t.transaction_reference === cleanRef || t.paystack_reference === cleanRef);
+      if (foundTx) {
+        transaction = foundTx;
+        transactionsStore.set(cleanRef, foundTx);
+      }
+    }
 
     if (!transaction) {
       return res.status(404).json({
@@ -1124,15 +1165,33 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
     const payment = paymentsStore.get(paymentKey);
 
     // If already verified and marked PAID, return existing receipt (idempotent)
-    if (payment && payment.status === 'PAID') {
-      const existingReceipt = receiptsStore.get(cleanRef);
+    if ((payment && payment.status === 'PAID') || transaction.status === 'PAID') {
+      const existingReceipt = receiptsStore.get(cleanRef) || await serverDb.getReceiptByNumber(cleanRef);
       return res.json({
         success: true,
         verified: true,
+        already_verified: true,
         message: 'Payment verified successfully.',
         payment,
         transaction,
         receipt: existingReceipt
+      });
+    }
+
+    if (simulatedOutcome === 'FAILED' || simulatedOutcome === 'CANCELLED') {
+      const now = new Date().toISOString();
+      const failStatus = simulatedOutcome === 'CANCELLED' ? 'CANCELLED' : 'FAILED';
+      transaction.status = failStatus as any;
+      transaction.gateway_response = failureReason || (failStatus === 'CANCELLED' ? 'Checkout cancelled by resident' : 'Simulated payment failure');
+      transaction.updated_at = now;
+      transactionsStore.set(cleanRef, transaction);
+      await serverDb.saveTransaction(transaction);
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        status: failStatus,
+        message: transaction.gateway_response,
+        transaction
       });
     }
 
@@ -1143,16 +1202,18 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
     }
     const secretKey = accountConfig.secretKey;
     const isConfigured = accountConfig.isConfigured;
+    const isTestKey = secretKey && secretKey.startsWith('sk_test_');
+    const isSimulatedTestSuccess = isTestKey && simulatedOutcome === 'SUCCESS';
 
     let verifiedStatus = false;
     let paystackTxId = `sim_${Date.now()}`;
     let paystackChannel = 'card';
     let gatewayResponse = 'Approved';
-    let paidAmountKobo = 150000;
+    let paidAmountKobo = (transaction.amount_due || 1500) * 100;
 
     // REAL SERVER-SIDE PAYSTACK VERIFICATION
-    if (isConfigured) {
-      const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${cleanRef}`, {
+    if (isConfigured && !isSimulatedTestSuccess) {
+      const paystackRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(cleanRef)}`, {
         headers: {
           'Authorization': `Bearer ${secretKey}`,
           'Content-Type': 'application/json'
@@ -1164,6 +1225,9 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       if (!paystackRes.ok || !paystackData.status) {
         transaction.status = 'FAILED';
         transaction.gateway_response = paystackData.message || 'Verification failed with Paystack';
+        transaction.updated_at = new Date().toISOString();
+        transactionsStore.set(cleanRef, transaction);
+        await serverDb.saveTransaction(transaction);
         return res.status(400).json({
           success: false,
           verified: false,
@@ -1176,8 +1240,11 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       // STRICT RULES VALIDATION:
       // 1. Transaction status must be 'success'
       if (pData.status !== 'success') {
-        transaction.status = 'FAILED';
-        transaction.gateway_response = pData.gateway_response || 'Paystack reported non-success status';
+        transaction.status = (pData.status === 'abandoned' ? 'CANCELLED' : 'FAILED') as any;
+        transaction.gateway_response = pData.gateway_response || `Paystack reported status: ${pData.status}`;
+        transaction.updated_at = new Date().toISOString();
+        transactionsStore.set(cleanRef, transaction);
+        await serverDb.saveTransaction(transaction);
         return res.status(400).json({
           success: false,
           verified: false,
@@ -1188,6 +1255,10 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       // 2. Reference must match exactly
       if (pData.reference !== cleanRef) {
         transaction.status = 'FAILED';
+        transaction.gateway_response = 'Reference mismatch';
+        transaction.updated_at = new Date().toISOString();
+        transactionsStore.set(cleanRef, transaction);
+        await serverDb.saveTransaction(transaction);
         return res.status(400).json({
           success: false,
           verified: false,
@@ -1198,6 +1269,10 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       // 3. Currency must be NGN
       if (pData.currency !== 'NGN') {
         transaction.status = 'FAILED';
+        transaction.gateway_response = `Unexpected currency: ${pData.currency}`;
+        transaction.updated_at = new Date().toISOString();
+        transactionsStore.set(cleanRef, transaction);
+        await serverDb.saveTransaction(transaction);
         return res.status(400).json({
           success: false,
           verified: false,
@@ -1211,6 +1286,9 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         console.warn(`[SECURITY WARNING] Amount discrepancy for ${cleanRef}. Expected: ${expectedKobo}, Got: ${pData.amount}`);
         transaction.status = 'FAILED';
         transaction.gateway_response = `Amount discrepancy: received ${pData.amount} kobo instead of ${expectedKobo} kobo`;
+        transaction.updated_at = new Date().toISOString();
+        transactionsStore.set(cleanRef, transaction);
+        await serverDb.saveTransaction(transaction);
         return res.status(400).json({
           success: false,
           verified: false,
@@ -1250,6 +1328,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       await serverDb.saveTransaction(transaction);
 
       // Update Monthly Payment Record(s) (1 month or 12 consecutive months)
+      let firstSavedPayment: ServerPaymentRecord | undefined = payment;
       for (let i = 0; i < monthsCount; i++) {
         const dt = new Date(transaction.period_year, transaction.period_month - 1 + i, 1);
         const m = dt.getMonth() + 1;
@@ -1277,6 +1356,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         };
         paymentsStore.set(key, recToSave);
         await serverDb.savePayment(recToSave);
+        if (i === 0) firstSavedPayment = recToSave;
       }
 
       // Generate Digital Receipt Record
@@ -1286,7 +1366,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         id: crypto.randomUUID(),
         receipt_number: receiptNum,
         transaction_id: transaction.id,
-        payment_id: payment?.id || transaction.payment_id,
+        payment_id: firstSavedPayment?.id || transaction.payment_id,
         resident_id: transaction.resident_id,
         resident_number: transaction.resident_number,
         resident_name: transaction.resident_name,
@@ -1304,11 +1384,28 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       receiptsStore.set(receiptRecord.id, receiptRecord);
       await serverDb.saveReceipt(receiptRecord);
 
+      // Dispatch email receipt asynchronously if resident has an email
+      const residentRec = residentsStore.get(transaction.resident_number);
+      const targetEmail = residentRec?.email || transaction.customer_email;
+      if (targetEmail && !targetEmail.endsWith('@fingerofgodestate.com')) {
+        emailService.sendPaymentReceipt({
+          recipientEmail: targetEmail,
+          recipientName: transaction.resident_name || `Resident #${transaction.resident_number}`,
+          residentNumber: transaction.resident_number,
+          houseNumber: transaction.house_number || 'Phase 1',
+          receiptNumber: receiptNum,
+          amountPaid: amountNaira,
+          periodCovered: transaction.period_label,
+          paymentDate: new Date(now).toLocaleDateString('en-NG', { dateStyle: 'medium' }),
+          paystackReference: cleanRef
+        }).catch(err => console.warn('[Email Receipt Dispatch Notice]', err));
+      }
+
       return res.json({
         success: true,
         verified: true,
         message: 'Payment successfully verified and confirmed.',
-        payment,
+        payment: firstSavedPayment || payment,
         transaction,
         receipt: receiptRecord
       });
@@ -1459,6 +1556,10 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
         if (Number(data.amount) === expectedKobo && data.currency === 'NGN') {
           const now = new Date().toISOString();
           const amountNaira = data.amount / 100;
+          const settings = await serverDb.getSettings();
+          const monthlyRate = settings.monthly_security_levy || 1500;
+          const isTwelveMonths = reference.includes('-12M-') || Math.round(amountNaira / monthlyRate) === 12;
+          const monthsCount = isTwelveMonths ? 12 : 1;
 
           transaction.status = 'PAID';
           transaction.amount_paid = amountNaira;
@@ -1470,14 +1571,33 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
           transactionsStore.set(reference, transaction);
           await serverDb.saveTransaction(transaction);
 
-          if (payment) {
-            payment.status = 'PAID';
-            payment.amount_paid = amountNaira;
-            payment.paid_at = data.paid_at || now;
-            payment.paystack_reference = reference;
-            payment.updated_at = now;
-            paymentsStore.set(paymentKey, payment);
-            await serverDb.savePayment(payment);
+          for (let i = 0; i < monthsCount; i++) {
+            const dt = new Date(transaction.period_year, transaction.period_month - 1 + i, 1);
+            const m = dt.getMonth() + 1;
+            const y = dt.getFullYear();
+            const mLabel = `${dt.toLocaleString('default', { month: 'long' })} ${y}`;
+            const key = `${transaction.resident_number}_${m}_${y}`;
+            const existingRec = paymentsStore.get(key);
+            const recToSave: ServerPaymentRecord = {
+              id: existingRec?.id || (i === 0 && payment ? payment.id : crypto.randomUUID()),
+              resident_id: transaction.resident_id,
+              resident_number: transaction.resident_number,
+              resident_name: transaction.resident_name,
+              house_number: transaction.house_number,
+              period_month: m,
+              period_year: y,
+              period_label: mLabel,
+              amount_due: monthlyRate,
+              amount_paid: monthlyRate,
+              status: 'PAID',
+              due_date: `${y}-${String(m).padStart(2, '0')}-01`,
+              paid_at: data.paid_at || now,
+              paystack_reference: reference,
+              created_at: existingRec?.created_at || now,
+              updated_at: now
+            };
+            paymentsStore.set(key, recToSave);
+            await serverDb.savePayment(recToSave);
           }
 
           if (!receiptsStore.has(reference)) {
@@ -1577,6 +1697,7 @@ app.post('/api/resident/auth', async (req: Request, res: Response) => {
 
     const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
     residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
 
     return res.json({
       success: true,
@@ -1800,6 +1921,7 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
 
     const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
     residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
+    serverDb.saveResidentSession(sessionToken, cleanNum);
 
     return res.json({
       success: true,
@@ -3299,7 +3421,7 @@ app.post('/api/admin/residents', requireAdminAuth, async (req: Request, res: Res
         period_month: 10,
         period_year: 2026,
         period_label: 'October 2026',
-        amount_due: 5000,
+        amount_due: 1500,
         amount_paid: 0,
         status: 'UNPAID' as const,
         due_date: '2026-10-01',
@@ -3724,8 +3846,9 @@ app.post('/api/resident/logout', (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
+      const token = authHeader.slice(7).trim();
       residentSessionsStore.delete(token);
+      serverDb.deleteResidentSession(token);
     }
     return res.json({ success: true, message: 'Signed out successfully.' });
   } catch (err: any) {
@@ -3762,7 +3885,7 @@ app.get('/api/receipts/verify/:receiptNumber', async (req: Request, res: Respons
       }
     }
 
-    // Try persistent store
+    // Try persistent store (Security Levy receipts)
     if (!found) {
       const dbReceipt = await serverDb.getReceiptByNumber(cleanNum);
       if (dbReceipt) {
@@ -3770,9 +3893,68 @@ app.get('/api/receipts/verify/:receiptNumber', async (req: Request, res: Respons
       }
     }
 
+    // Also check Building Estate Levy Receipts (ELR-...)
+    if (!found) {
+      const estateLevyReceipts = await serverDb.getBuildingEstateLevyReceipts();
+      const matchedEstateRcp = estateLevyReceipts.find((r: any) =>
+        String(r.receipt_number || '').toUpperCase() === cleanNum ||
+        String(r.paystack_reference || '').toUpperCase() === cleanNum
+      );
+      if (matchedEstateRcp && matchedEstateRcp.status === 'PAID') {
+        found = {
+          id: matchedEstateRcp.receipt_number,
+          receipt_number: matchedEstateRcp.receipt_number,
+          transaction_id: matchedEstateRcp.transaction_id,
+          payment_id: matchedEstateRcp.building_id,
+          resident_id: matchedEstateRcp.building_id,
+          resident_number: matchedEstateRcp.building_house_number,
+          resident_name: matchedEstateRcp.payer_name || matchedEstateRcp.landlord_name || 'Building Payer',
+          house_number: matchedEstateRcp.building_house_number,
+          amount_paid: Number(matchedEstateRcp.amount_paid || 1000),
+          currency: matchedEstateRcp.currency || 'NGN',
+          period_covered: `${matchedEstateRcp.billing_month_label || matchedEstateRcp.billing_month} (Estate Levy)`,
+          payment_date: matchedEstateRcp.payment_date,
+          paystack_reference: matchedEstateRcp.paystack_reference,
+          status: 'PAID',
+          issued_at: matchedEstateRcp.issued_at
+        };
+      }
+    }
+
+    // Also check Verified Road Modernization Project Contributions (RCP-RD-PSTK-... or FOG-RD-PAY-...)
+    if (!found) {
+      const roadTxs = await serverDb.getRoadTransactions();
+      const matchedRoadTx = roadTxs.find((t: any) =>
+        t.status === 'VERIFIED' && (
+          String(t.receipt_or_invoice_ref || '').toUpperCase() === cleanNum ||
+          String(t.reference || '').toUpperCase() === cleanNum ||
+          String(t.paystack_reference || '').toUpperCase() === cleanNum
+        )
+      );
+      if (matchedRoadTx) {
+        found = {
+          id: matchedRoadTx.id,
+          receipt_number: matchedRoadTx.receipt_or_invoice_ref || matchedRoadTx.reference,
+          transaction_id: matchedRoadTx.id,
+          payment_id: matchedRoadTx.id,
+          resident_id: matchedRoadTx.resident_id || 'road-contrib',
+          resident_number: matchedRoadTx.resident_number || matchedRoadTx.building_number || 'Public',
+          resident_name: matchedRoadTx.contributor_display_name || matchedRoadTx.payer_or_vendor || 'Contributor',
+          house_number: matchedRoadTx.building_number || matchedRoadTx.resident_number || 'Road Project',
+          amount_paid: Number(matchedRoadTx.amount || 0),
+          currency: matchedRoadTx.currency || 'NGN',
+          period_covered: 'Road Modernization Project Contribution',
+          payment_date: matchedRoadTx.paid_at || matchedRoadTx.verified_at || matchedRoadTx.date,
+          paystack_reference: matchedRoadTx.paystack_reference || matchedRoadTx.reference,
+          status: 'PAID',
+          issued_at: matchedRoadTx.verified_at || matchedRoadTx.created_at || matchedRoadTx.date
+        };
+      }
+    }
+
     if (found && found.status === 'PAID') {
       // Mask full name for privacy on public verification page
-      const parts = found.resident_name.split(' ');
+      const parts = String(found.resident_name || 'Resident').split(' ');
       const maskedName = parts.map((part, index) => {
         if (index === 0 && /^(engr|dr|mr|mrs|ms|chief|alhaji|pastor|barr)\.?$/i.test(part)) {
           return part;
@@ -3816,7 +3998,7 @@ app.get('/api/receipts/verify/:receiptNumber', async (req: Request, res: Respons
 });
 
 // ADMIN ALL RECEIPTS RETRIEVAL & MULTI-FIELD SEARCH
-app.get('/api/payments/receipts', (req: Request, res: Response) => {
+app.get('/api/payments/receipts', requireAdminAuth, (req: Request, res: Response) => {
   try {
     const query = String(req.query.query || '').trim().toLowerCase();
     const uniqueReceipts = Array.from(new Set(Array.from(receiptsStore.values())));
@@ -3857,14 +4039,14 @@ app.get('/api/payments/receipt/:refOrNum', (req: Request, res: Response) => {
   return res.status(404).json({ success: false, message: 'Receipt not found.' });
 });
 
-app.get('/api/payments/transactions', (_req: Request, res: Response) => {
+app.get('/api/payments/transactions', requireAdminAuth, (_req: Request, res: Response) => {
   const list = Array.from(transactionsStore.values()).sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   res.json({ success: true, transactions: list });
 });
 
-app.get('/api/payments/all', (_req: Request, res: Response) => {
+app.get('/api/payments/all', requireAdminAuth, (_req: Request, res: Response) => {
   const list = Array.from(paymentsStore.values());
   res.json({ success: true, payments: list });
 });
@@ -4027,7 +4209,7 @@ app.get('/api/admin/paid-residents', requireAdminAuth, (req: Request, res: Respo
           resident_name: resident.full_name,
           house_number: resident.house_number,
           phone_number: resident.phone_number,
-          amount_paid: p.amount_paid || 5000,
+          amount_paid: p.amount_paid || 1500,
           payment_date: p.paid_at || p.created_at,
           payment_reference: ref,
           receipt_number: recNum,
@@ -4509,65 +4691,8 @@ interface ServerSmsLogRecord {
 }
 
 const smsLogsStore = new Map<string, ServerSmsLogRecord>();
-let lastSuccessfulSmsTimestamp: string | null = '2026-10-06T09:00:00Z';
+let lastSuccessfulSmsTimestamp: string | null = null;
 let lastFailedSmsTimestamp: string | null = null;
-
-// Pre-seed SMS history for immediate testability and verification
-const INITIAL_SERVER_SMS: ServerSmsLogRecord[] = [
-  {
-    id: 'sms-srv-1',
-    resident_id: 'res-002',
-    resident_number: '002',
-    phone_number: '08098765432',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'REMINDER_1',
-    message: 'Dear Dr. Chioma Nwachukwu, your Finger of God Estate security levy of ₦5,000 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 002.',
-    provider: 'termii',
-    provider_message_id: 'tm-msg-9834102',
-    delivery_status: 'SENT',
-    sent_at: '2026-10-06T09:00:00Z',
-    error_message: null,
-    created_at: '2026-10-06T09:00:00Z'
-  },
-  {
-    id: 'sms-srv-2',
-    resident_id: 'res-003',
-    resident_number: '003',
-    phone_number: '08123459876',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'REMINDER_1',
-    message: 'Dear Alhaji Usman Danladi, your Finger of God Estate security levy of ₦5,000 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 003.',
-    provider: 'termii',
-    provider_message_id: 'tm-msg-9834103',
-    delivery_status: 'SENT',
-    sent_at: '2026-10-06T09:00:00Z',
-    error_message: null,
-    created_at: '2026-10-06T09:00:00Z'
-  },
-  {
-    id: 'sms-srv-3',
-    resident_id: 'res-001',
-    resident_number: '001',
-    phone_number: '07057543935',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'TEST',
-    message: 'Dear Engr. Babatunde Adeleke, this is a test notification from Finger of God Estate Security Management. Estate security line: 07057543935. Resident No: 001.',
-    provider: 'termii',
-    provider_message_id: 'tm-msg-test-01',
-    delivery_status: 'SENT',
-    sent_at: '2026-09-24T10:00:00Z',
-    error_message: null,
-    created_at: '2026-09-24T10:00:00Z'
-  }
-];
-
-INITIAL_SERVER_SMS.forEach(s => smsLogsStore.set(s.id, s));
 
 // Helper: Read SMS provider configurations from server environment
 function getSmsProvider(): 'smslive247' | 'termii' {
@@ -4820,16 +4945,11 @@ async function runAutomatedSmsJob(targetMonth?: number, targetYear?: number): Pr
 
   console.log(`[SMS Scheduler] Evaluating Africa/Lagos SMS reminders for ${periodLabel}. Current Lagos Day: ${lagosTime.day}`);
 
-  // Fetch all active residents from in-memory store or fallback list
-  // The system preserves 001, 002, 003, etc.
-  const allResidents = [
-    { id: 'res-001', resident_number: '001', full_name: 'Engr. Babatunde Adeleke', phone_number: '08023456789', status: 'Active' },
-    { id: 'res-002', resident_number: '002', full_name: 'Dr. Chioma Nwachukwu', phone_number: '08098765432', status: 'Active' },
-    { id: 'res-003', resident_number: '003', full_name: 'Alhaji Usman Danladi', phone_number: '08123459876', status: 'Active' },
-    { id: 'res-004', resident_number: '004', full_name: 'Mrs. Folashade Balogun', phone_number: '07033445566', status: 'Inactive' }
-  ];
-
-  const activeResidents = allResidents.filter(r => r.status === 'Active');
+  // Fetch all active, activated residents with valid phone numbers from in-memory store
+  const allResidents = Array.from(residentsStore.values());
+  const activeResidents = allResidents.filter(
+    r => r.status === 'Active' && r.account_activated && r.phone_number && !r.phone_number.startsWith('08000000')
+  );
 
   let processed = 0;
   let sent = 0;
@@ -6214,47 +6334,6 @@ const serverIncidentsStore = new Map<string, ServerIncidentRecord>();
 const serverVisitorsStore = new Map<string, any>();
 const serverGateLogsStore: any[] = [];
 const serverSecurityAlertsStore = new Map<string, any>();
-
-// Seed initial server incidents
-serverIncidentsStore.set('inc-001', {
-  id: 'inc-001',
-  incident_number: 'FOG-INC-2026-0001',
-  incident_type: 'Suspicious activity',
-  priority: 'High',
-  status: 'Investigating',
-  date: '2026-09-23',
-  time: '21:45',
-  location: 'Hibiscus Crescent, near Plot 4A',
-  house_number: 'Plot 4A',
-  phase: 'Phase 1',
-  description: 'An unidentified dark sedan was observed idling with headlights off for over 35 minutes along the perimeter curve.',
-  people_involved: 'Two occupants observed inside vehicle',
-  vehicle_details: 'Dark Grey Toyota Camry (No visible front plate)',
-  reporter_type: 'Resident',
-  reported_by: 'Engr. Babatunde Adeleke',
-  reporter_phone: '08034567890',
-  reporter_resident_number: '001',
-  is_emergency: false,
-  assigned_officer_id: 'off-002',
-  assigned_officer_name: 'Inspector Chinedu Okoro',
-  assigned_officer_phone: '08034567891',
-  investigation_notes: 'Patrol officer dispatched to confirm vehicle identity.',
-  actions_taken: 'Driver credentials logged at gate.',
-  evidence: [],
-  timeline: [
-    {
-      id: 'tl-001',
-      incident_id: 'inc-001',
-      timestamp: '2026-09-23T21:45:00Z',
-      title: 'Incident Report Created',
-      description: 'Report logged by resident.',
-      performed_by: 'Engr. Babatunde Adeleke',
-      action_type: 'REPORT_CREATED'
-    }
-  ],
-  created_at: '2026-09-23T21:45:00Z',
-  updated_at: '2026-09-23T22:00:00Z'
-});
 
 // GET /api/security/incidents
 app.get('/api/security/incidents', (_req: Request, res: Response) => {

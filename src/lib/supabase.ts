@@ -185,132 +185,7 @@ const INITIAL_OFFICERS_SEED: SecurityOfficer[] = [
   }
 ];
 
-const INITIAL_INCIDENTS_SEED: Incident[] = [
-  {
-    id: 'inc-001',
-    incident_number: 'FOG-INC-2026-0001',
-    incident_type: 'Suspicious activity',
-    priority: 'High',
-    status: 'Investigating',
-    date: '2026-09-23',
-    time: '21:45',
-    location: 'Hibiscus Crescent, near Plot 4A',
-    house_number: 'Plot 4A',
-    phase: 'Phase 1',
-    description: 'An unidentified dark sedan was observed idling with headlights off for over 35 minutes along the perimeter curve.',
-    people_involved: 'Two occupants observed inside vehicle',
-    vehicle_details: 'Dark Grey Toyota Camry (No visible front plate)',
-    additional_notes: 'Patrol unit dispatched for driver verification and perimeter check.',
-    reporter_type: 'Resident',
-    reported_by: 'Engr. Babatunde Adeleke',
-    reporter_phone: '08034567890',
-    reporter_resident_number: '001',
-    is_emergency: false,
-    assigned_officer_id: 'off-002',
-    assigned_officer_name: 'Inspector Chinedu Okoro',
-    assigned_officer_phone: '08034567891',
-    investigation_notes: 'Officer Chinedu arrived on site at 21:52. Vehicle was questioned; driver was visiting Plot 8 resident.',
-    actions_taken: 'Driver credentials logged at gate register. Host resident confirmed appointment.',
-    resolution_summary: null,
-    evidence: [
-      {
-        id: 'ev-001',
-        incident_id: 'inc-001',
-        file_name: 'Perimeter_CCTV_Frame_2148.jpg',
-        file_type: 'image',
-        url: 'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?auto=format&fit=crop&w=600&q=80',
-        uploaded_by: 'Inspector Chinedu Okoro',
-        uploaded_at: '2026-09-23T22:05:00Z'
-      }
-    ],
-    timeline: [
-      {
-        id: 'tl-001',
-        incident_id: 'inc-001',
-        timestamp: '2026-09-23T21:45:00Z',
-        title: 'Incident Report Submitted',
-        description: 'Resident #001 reported suspicious idling vehicle on Hibiscus Crescent.',
-        performed_by: 'Engr. Babatunde Adeleke',
-        performed_by_role: 'Resident',
-        action_type: 'REPORT_CREATED'
-      },
-      {
-        id: 'tl-002',
-        incident_id: 'inc-001',
-        timestamp: '2026-09-23T21:47:00Z',
-        title: 'Incident Acknowledged',
-        description: 'Command desk verified location coordinates.',
-        performed_by: 'Sgt. Audu Momoh',
-        performed_by_role: 'Chief Security Officer',
-        action_type: 'ACKNOWLEDGED'
-      },
-      {
-        id: 'tl-003',
-        incident_id: 'inc-001',
-        timestamp: '2026-09-23T21:50:00Z',
-        title: 'Officer Dispatched & Assigned',
-        description: 'Inspector Chinedu Okoro assigned as lead patrol investigator.',
-        performed_by: 'Sgt. Audu Momoh',
-        performed_by_role: 'Chief Security Officer',
-        action_type: 'OFFICER_ASSIGNED'
-      }
-    ],
-    created_at: '2026-09-23T21:45:00Z',
-    updated_at: '2026-09-23T22:05:00Z'
-  },
-  {
-    id: 'inc-002',
-    incident_number: 'FOG-INC-2026-0002',
-    incident_type: 'Power/electrical emergency',
-    priority: 'Medium',
-    status: 'Resolved',
-    date: '2026-09-22',
-    time: '18:15',
-    location: 'Palm View Boulevard Transformer Pillar',
-    house_number: 'House 12',
-    phase: 'Phase 1',
-    description: 'Low-hanging power distribution cable sparking after heavy rainstorm wind.',
-    people_involved: null,
-    vehicle_details: null,
-    additional_notes: 'Power isolation requested from facility electrical engineer.',
-    reporter_type: 'Resident',
-    reported_by: 'Dr. Chioma Nwachukwu',
-    reporter_phone: '08098765432',
-    reporter_resident_number: '002',
-    is_emergency: false,
-    assigned_officer_id: 'off-001',
-    assigned_officer_name: 'Sgt. Audu Momoh',
-    assigned_officer_phone: '08023456789',
-    investigation_notes: 'Transformer breaker isolated at 18:22. Maintenance contractor re-tensioned cable.',
-    actions_taken: 'Area cordoned off with security cones. Power safely restored.',
-    resolution_summary: 'Cable re-anchored, electrical junction box secured and power certified safe by estate engineering.',
-    resolved_at: '2026-09-22T20:10:00Z',
-    closed_at: '2026-09-22T20:15:00Z',
-    evidence: [],
-    timeline: [
-      {
-        id: 'tl-101',
-        incident_id: 'inc-002',
-        timestamp: '2026-09-22T18:15:00Z',
-        title: 'Report Created',
-        description: 'Sparking cable reported on Palm View Boulevard.',
-        performed_by: 'Dr. Chioma Nwachukwu',
-        action_type: 'REPORT_CREATED'
-      },
-      {
-        id: 'tl-102',
-        incident_id: 'inc-002',
-        timestamp: '2026-09-22T20:10:00Z',
-        title: 'Incident Resolved & Area Cleared',
-        description: 'Electrical engineers certified repair. Danger cones removed.',
-        performed_by: 'Sgt. Audu Momoh',
-        action_type: 'RESOLVED'
-      }
-    ],
-    created_at: '2026-09-22T18:15:00Z',
-    updated_at: '2026-09-22T20:15:00Z'
-  }
-];
+const INITIAL_INCIDENTS_SEED: Incident[] = [];
 
 const INITIAL_ALERTS_SEED: SecurityAlert[] = [
   {
@@ -329,82 +204,9 @@ const INITIAL_ALERTS_SEED: SecurityAlert[] = [
   }
 ];
 
-const INITIAL_VISITORS_SEED: VisitorPass[] = [
-  {
-    id: 'vis-001',
-    pass_code: 'FOG-VIS-9812',
-    visitor_name: 'Pastor Emmanuel Eze',
-    visitor_phone: '08039988776',
-    vehicle_number: 'KJA-542-AA',
-    vehicle_description: 'Black Toyota Highlander',
-    purpose_of_visit: 'Personal / Family Visit',
-    resident_id: 'res-001',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    house_number: 'Plot 4A',
-    resident_phone: '08034567890',
-    expected_arrival: new Date(Date.now() + 7200000).toISOString(),
-    status: 'Expected',
-    qr_code_data: 'FOG-VIS-9812-RES001',
-    notes: 'Guest arriving with family members',
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'vis-002',
-    pass_code: 'FOG-VIS-4219',
-    visitor_name: 'Engr. Samuel Bassey (Technician)',
-    visitor_phone: '08123344556',
-    vehicle_number: 'EPE-109-BD',
-    vehicle_description: 'White Hiace Van',
-    purpose_of_visit: 'Contractor / Repair Work',
-    resident_id: 'res-002',
-    resident_number: '002',
-    resident_name: 'Dr. Chioma Nwachukwu',
-    house_number: 'House 12',
-    resident_phone: '08098765432',
-    expected_arrival: new Date(Date.now() - 3600000).toISOString(),
-    entry_time: new Date(Date.now() - 1800000).toISOString(),
-    status: 'Arrived',
-    checked_in_by: 'Guard Sunday Eze',
-    qr_code_data: 'FOG-VIS-4219-RES002',
-    notes: 'Carrying air conditioning tools',
-    created_at: new Date(Date.now() - 7200000).toISOString()
-  }
-];
+const INITIAL_VISITORS_SEED: VisitorPass[] = [];
 
-const INITIAL_GATE_LOGS_SEED: GateLogEntry[] = [
-  {
-    id: 'gl-001',
-    log_number: 'GL-20260924-001',
-    movement_type: 'Entry',
-    entity_type: 'Visitor',
-    name: 'Engr. Samuel Bassey (Technician)',
-    phone_number: '08123344556',
-    vehicle_number: 'EPE-109-BD',
-    house_number: 'House 12',
-    destination: 'Palm View Boulevard, House 12',
-    pass_code: 'FOG-VIS-4219',
-    officer_badge: 'FOG-SEC-04',
-    officer_name: 'Guard Sunday Eze',
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    notes: 'AC servicing technician, host confirmed via intercom'
-  },
-  {
-    id: 'gl-002',
-    log_number: 'GL-20260924-002',
-    movement_type: 'Entry',
-    entity_type: 'Delivery',
-    name: 'GIG Logistics Courier (Ifeanyi)',
-    phone_number: '07081122334',
-    vehicle_number: 'KJA-881-XY (Motorcycle)',
-    house_number: 'Plot 4A',
-    destination: 'Hibiscus Crescent',
-    officer_badge: 'FOG-SEC-04',
-    officer_name: 'Guard Sunday Eze',
-    timestamp: new Date(Date.now() - 5400000).toISOString(),
-    notes: 'Package delivery'
-  }
-];
+const INITIAL_GATE_LOGS_SEED: GateLogEntry[] = [];
 
 const INITIAL_PATROLS_SEED: PatrolRecord[] = [
   {
@@ -441,350 +243,19 @@ const INITIAL_PATROLS_SEED: PatrolRecord[] = [
   }
 ];
 
-const INITIAL_VEHICLES_SEED: ResidentVehicle[] = [
-  {
-    id: 'veh-001',
-    resident_id: 'res-001',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    house_number: 'Plot 4A',
-    vehicle_type: 'SUV',
-    make: 'Toyota',
-    model: 'Land Cruiser Prado',
-    color: 'Pearl White',
-    plate_number: 'ABC-819-LS',
-    status: 'Active',
-    registered_by: 'Resident Self-Service',
-    notes: 'Primary executive SUV with electronic RFID tag #RF-001A',
-    created_at: '2026-09-02T10:00:00Z'
-  },
-  {
-    id: 'veh-002',
-    resident_id: 'res-001',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    house_number: 'Plot 4A',
-    vehicle_type: 'Sedan',
-    make: 'Honda',
-    model: 'Accord Touring',
-    color: 'Metallic Gray',
-    plate_number: 'KJA-492-AA',
-    status: 'Active',
-    registered_by: 'Resident Self-Service',
-    notes: 'Secondary city commuter',
-    created_at: '2026-09-05T12:00:00Z'
-  },
-  {
-    id: 'veh-003',
-    resident_id: 'res-002',
-    resident_number: '002',
-    resident_name: 'Dr. Chioma Nwachukwu',
-    house_number: 'House 12',
-    vehicle_type: 'SUV',
-    make: 'Lexus',
-    model: 'RX 350',
-    color: 'Midnight Black',
-    plate_number: 'LSR-210-FK',
-    status: 'Active',
-    registered_by: 'Admin / CSO Desk',
-    notes: 'Medical emergency responder pass attached',
-    created_at: '2026-09-08T09:30:00Z'
-  },
-  {
-    id: 'veh-004',
-    resident_id: 'res-002',
-    resident_number: '002',
-    resident_name: 'Dr. Chioma Nwachukwu',
-    house_number: 'House 12',
-    vehicle_type: 'Sedan',
-    make: 'Mercedes-Benz',
-    model: 'C300 4MATIC',
-    color: 'Iridium Silver',
-    plate_number: 'APP-773-BC',
-    status: 'Active',
-    registered_by: 'Resident Self-Service',
-    notes: 'Registered personal sedan',
-    created_at: '2026-09-10T14:15:00Z'
-  },
-  {
-    id: 'veh-005',
-    resident_id: 'res-003',
-    resident_number: '003',
-    resident_name: 'Alhaji Usman Danladi',
-    house_number: 'Plot 18B',
-    vehicle_type: 'Pickup Truck',
-    make: 'Ford',
-    model: 'F-150 Lariat',
-    color: 'Navy Blue',
-    plate_number: 'ABJ-304-DX',
-    status: 'Active',
-    registered_by: 'Resident Self-Service',
-    notes: 'Estate security cleared',
-    created_at: '2026-09-11T08:00:00Z'
-  },
-  {
-    id: 'veh-006',
-    resident_id: 'res-004',
-    resident_number: '004',
-    resident_name: 'Mrs. Folashade Balogun',
-    house_number: 'Flat 3, Block C',
-    vehicle_type: 'Hatchback',
-    make: 'Hyundai',
-    model: 'Tucson',
-    color: 'Wine Red',
-    plate_number: 'EPE-652-GH',
-    status: 'Suspended',
-    registered_by: 'Admin / CSO Desk',
-    notes: 'Suspended pending tenant verification and security clearance',
-    created_at: '2026-09-12T16:00:00Z'
-  }
-];
+const INITIAL_VEHICLES_SEED: ResidentVehicle[] = [];
 
-const INITIAL_WATCHLIST_SEED: RestrictedWatchlistEntry[] = [
-  {
-    id: 'wl-001',
-    entity_name: 'Emeka Obinna (Former Artisan)',
-    phone_number: '08099881122',
-    plate_number: 'KTU-882-AB',
-    category: 'Banned Contractor',
-    reason: 'Caught attempting to remove electrical copper cabling from unoccupied plot without work order. Banned by Estate Exco.',
-    severity: 'Strict Denial',
-    date_added: '2026-08-14',
-    added_by: 'CSO Sgt. Audu Momoh',
-    is_active: true,
-    notes: 'Immediate gate refusal and summon armed patrol if on premises.',
-    created_at: '2026-08-14T09:00:00Z'
-  },
-  {
-    id: 'wl-002',
-    entity_name: 'Unregistered Black Tinted Corolla',
-    phone_number: null,
-    plate_number: 'KRD-990-ZZ',
-    category: 'Suspicious Vehicle',
-    reason: 'Vehicle observed conducting slow surveillance around Palm View perimeter without destination. Driver refused gate query.',
-    severity: 'Immediate Apprehension',
-    date_added: '2026-09-18',
-    added_by: 'Inspector David Okon',
-    is_active: true,
-    notes: 'Hold at barrier, notify Chief Security Officer and detain driver for questioning.',
-    created_at: '2026-09-18T14:30:00Z'
-  },
-  {
-    id: 'wl-003',
-    entity_name: 'Alhaji Gbadamosi (Defaulting Occupant - Plot 22)',
-    phone_number: '08022114455',
-    plate_number: 'MUS-419-EF',
-    category: 'Court Order / Police Notice',
-    reason: 'Pending eviction notice and security dispute over non-payment and aggressive conduct at estate barriers.',
-    severity: 'Warning',
-    date_added: '2026-09-01',
-    added_by: 'Estate Secretariat',
-    is_active: true,
-    notes: 'Escort to facility manager office. Do not allow unauthorized commercial trucks.',
-    created_at: '2026-09-01T10:00:00Z'
-  }
-];
+const INITIAL_WATCHLIST_SEED: RestrictedWatchlistEntry[] = [];
 
-const INITIAL_CONTRACTORS_SEED: ContractorAccessPass[] = [
-  {
-    id: 'con-001',
-    pass_code: 'FOG-CON-2026-0001',
-    company_name: 'CoolAir HVAC Engineering Ltd',
-    lead_contractor_name: 'Engr. Samuel Bassey',
-    lead_phone: '08123344556',
-    worker_count: 3,
-    worker_names: 'Samuel Bassey, Sunday Paul, Peter Obi',
-    service_type: 'Air Conditioning / HVAC',
-    house_number: 'House 12',
-    resident_number: '002',
-    resident_name: 'Dr. Chioma Nwachukwu',
-    permit_id: 'PRM-2026-09-41',
-    id_type_recorded: 'NIN',
-    id_number: 'NIN-78901234567',
-    valid_date: new Date().toISOString().split('T')[0],
-    entry_time: new Date(Date.now() - 3600000).toISOString(),
-    status: 'Active On-Site',
-    security_officer: 'Guard Sunday Eze',
-    notes: 'Servicing central AC outdoor units. Work permitted between 08:00 and 17:00.',
-    created_at: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: 'con-002',
-    pass_code: 'FOG-CON-2026-0002',
-    company_name: 'Apex Green Landscaping',
-    lead_contractor_name: 'Musa Garba',
-    lead_phone: '08055667788',
-    worker_count: 4,
-    worker_names: 'Musa Garba, Ibrahim Sani, Victor Eze, Tunde Alabi',
-    service_type: 'Landscaping & Gardening',
-    house_number: 'Plot 4A',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    permit_id: 'PRM-2026-09-42',
-    id_type_recorded: "Driver's License",
-    id_number: 'DL-LA-9021-AA',
-    valid_date: new Date().toISOString().split('T')[0],
-    entry_time: null,
-    status: 'Expected',
-    security_officer: 'Sgt. Audu Momoh',
-    notes: 'Tree trimming and lawn maintenance equipment pre-inspected.',
-    created_at: new Date().toISOString()
-  }
-];
+const INITIAL_CONTRACTORS_SEED: ContractorAccessPass[] = [];
 
-const INITIAL_DELIVERIES_SEED: DeliveryAccessPass[] = [
-  {
-    id: 'del-001',
-    pass_code: 'FOG-DEL-2026-0001',
-    courier_company: 'GIG Logistics',
-    rider_name: 'Ifeanyi Okoro',
-    rider_phone: '07081122334',
-    vehicle_type: 'Motorcycle',
-    vehicle_plate: 'KJA-881-XY',
-    package_type: 'E-Commerce Parcel',
-    house_number: 'Plot 4A',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    entry_time: new Date(Date.now() - 1800000).toISOString(),
-    status: 'Inside Estate',
-    security_officer: 'Guard Sunday Eze',
-    notes: 'Delivery pass issued. Maximum allowed turnaround time 25 minutes.',
-    created_at: new Date(Date.now() - 1800000).toISOString()
-  },
-  {
-    id: 'del-002',
-    pass_code: 'FOG-DEL-2026-0002',
-    courier_company: 'Chowdeck',
-    rider_name: 'Kehinde Adewale',
-    rider_phone: '08144556677',
-    vehicle_type: 'Motorcycle',
-    vehicle_plate: 'APP-301-ZZ',
-    package_type: 'Food / Beverage Order',
-    house_number: 'House 12',
-    resident_number: '002',
-    resident_name: 'Dr. Chioma Nwachukwu',
-    entry_time: new Date(Date.now() - 5400000).toISOString(),
-    exit_time: new Date(Date.now() - 4200000).toISOString(),
-    status: 'Exited',
-    security_officer: 'Guard Sunday Eze',
-    notes: 'Completed meal drop-off in 20 minutes.',
-    created_at: new Date(Date.now() - 5400000).toISOString()
-  }
-];
+const INITIAL_DELIVERIES_SEED: DeliveryAccessPass[] = [];
 
-const INITIAL_PAYMENTS_SEED: MonthlyPayment[] = [
-  {
-    id: 'pay-001',
-    resident_id: 'res-001',
-    resident_number: '001',
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    amount_due: 5000,
-    amount_paid: 5000,
-    status: 'PAID',
-    due_date: '2026-10-01',
-    paid_at: '2026-09-20T10:30:00Z',
-    paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-    created_at: '2026-09-01T08:00:00Z',
-    updated_at: '2026-09-20T10:30:00Z'
-  },
-  {
-    id: 'pay-002',
-    resident_id: 'res-002',
-    resident_number: '002',
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    amount_due: 5000,
-    amount_paid: 0,
-    status: 'UNPAID',
-    due_date: '2026-10-01',
-    paid_at: null,
-    paystack_reference: null,
-    created_at: '2026-09-05T09:30:00Z',
-    updated_at: '2026-09-05T09:30:00Z'
-  },
-  {
-    id: 'pay-003',
-    resident_id: 'res-003',
-    resident_number: '003',
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    amount_due: 5000,
-    amount_paid: 0,
-    status: 'UNPAID',
-    due_date: '2026-10-01',
-    paid_at: null,
-    paystack_reference: null,
-    created_at: '2026-09-10T11:15:00Z',
-    updated_at: '2026-09-10T11:15:00Z'
-  },
-  {
-    id: 'pay-004',
-    resident_id: 'res-004',
-    resident_number: '004',
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    amount_due: 5000,
-    amount_paid: 0,
-    status: 'UNPAID',
-    due_date: '2026-10-01',
-    paid_at: null,
-    paystack_reference: null,
-    created_at: '2026-09-12T14:20:00Z',
-    updated_at: '2026-09-12T14:20:00Z'
-  }
-];
+const INITIAL_PAYMENTS_SEED: MonthlyPayment[] = [];
 
-const INITIAL_TRANSACTIONS_SEED: PaymentTransaction[] = [
-  {
-    id: 'tx-001',
-    payment_id: 'pay-001',
-    resident_id: 'res-001',
-    resident_number: '001',
-    period_month: 10,
-    period_year: 2026,
-    period_label: 'October 2026',
-    transaction_reference: 'FOGES-202610-001-A7C8E9F1',
-    paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-    paystack_transaction_id: '394857201',
-    amount_due: 5000,
-    amount_paid: 5000,
-    currency: 'NGN',
-    payment_method: 'Paystack',
-    status: 'PAID',
-    payment_channel: 'card',
-    payment_date: '2026-09-20T10:30:00Z',
-    gateway_response: 'Approved',
-    customer_email: 'babatunde.adeleke@gmail.com',
-    channel_details: { card_type: 'Mastercard', last4: '4084', bank: 'Access Bank' },
-    created_at: '2026-09-20T10:28:15Z',
-    updated_at: '2026-09-20T10:30:00Z'
-  }
-];
+const INITIAL_TRANSACTIONS_SEED: PaymentTransaction[] = [];
 
-const INITIAL_RECEIPTS_SEED: Receipt[] = [
-  {
-    id: 'rcp-001',
-    receipt_number: 'RCP-202610-001-A7C8E9',
-    transaction_id: 'tx-001',
-    payment_id: 'pay-001',
-    resident_id: 'res-001',
-    resident_number: '001',
-    resident_name: 'Engr. Babatunde Adeleke',
-    house_number: 'Plot 4A, Hibiscus Crescent',
-    amount_paid: 5000,
-    currency: 'NGN',
-    period_covered: 'October 2026',
-    payment_date: '2026-09-20T10:30:00Z',
-    paystack_reference: 'FOGES-202610-001-A7C8E9F1',
-    status: 'PAID',
-    issued_at: '2026-09-20T10:30:05Z'
-  }
-];
+const INITIAL_RECEIPTS_SEED: Receipt[] = [];
 
 const INITIAL_ROAD_TRANSACTIONS_SEED: Omit<RoadProjectTransaction, 'running_balance'>[] = [];
 
@@ -962,59 +433,7 @@ function saveLocalReceipts(receipts: Receipt[]) {
   }
 }
 
-const INITIAL_SMS_LOGS_SEED: SMSLog[] = [
-  {
-    id: 'sms-seed-1',
-    resident_id: 'res-002',
-    resident_number: '002',
-    phone_number: '08098765432',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'REMINDER_1',
-    message: 'Dear Dr. Chioma Nwachukwu, your Finger of God Estate security levy of ₦1,500 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 002.',
-    provider: 'termii',
-    provider_message_id: 'msg-tm-9834102',
-    delivery_status: 'SENT',
-    sent_at: '2026-10-06T09:00:00Z',
-    error_message: null,
-    created_at: '2026-10-06T09:00:00Z'
-  },
-  {
-    id: 'sms-seed-2',
-    resident_id: 'res-003',
-    resident_number: '003',
-    phone_number: '08123459876',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'REMINDER_1',
-    message: 'Dear Alhaji Usman Danladi, your Finger of God Estate security levy of ₦1,500 for October 2026 is due. Please make payment through the Finger of God Estate Security Management website. Resident No: 003.',
-    provider: 'termii',
-    provider_message_id: 'msg-tm-9834103',
-    delivery_status: 'SENT',
-    sent_at: '2026-10-06T09:00:00Z',
-    error_message: null,
-    created_at: '2026-10-06T09:00:00Z'
-  },
-  {
-    id: 'sms-seed-3',
-    resident_id: 'res-001',
-    resident_number: '001',
-    phone_number: '08023456789',
-    payment_month: 10,
-    payment_year: 2026,
-    period_label: 'October 2026',
-    reminder_type: 'TEST',
-    message: 'Dear Engr. Babatunde Adeleke, this is a test notification from Finger of God Estate Security Management. Estate security line: 08023456789. Resident No: 001.',
-    provider: 'termii',
-    provider_message_id: 'msg-tm-test-01',
-    delivery_status: 'SENT',
-    sent_at: '2026-09-24T10:00:00Z',
-    error_message: null,
-    created_at: '2026-09-24T10:00:00Z'
-  }
-];
+const INITIAL_SMS_LOGS_SEED: SMSLog[] = [];
 
 function getLocalSmsLogs(): SMSLog[] {
   try {
@@ -1096,6 +515,27 @@ function saveLocalSettings(settings: EstateSettings) {
 
 const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
   {
+    id: 'ann-gm-2026-10-24',
+    title: 'Notice of General Meeting — Saturday, 24th October 2026',
+    slug: 'notice-of-general-meeting-24th-october-2026',
+    category: 'Meeting',
+    priority: 'Urgent',
+    status: 'Published',
+    target_audience: 'All Residents',
+    is_pinned: true,
+    is_important: true,
+    publish_at: '2026-10-22T08:00:00.000Z',
+    expires_at: null,
+    author_name: 'Executive Committee (EXCO) Secretariat',
+    created_by: 'admin@fingerofgodestate.ng',
+    read_by_residents: [],
+    view_count: 184,
+    body: "All landlords, homeowners, and residents of Finger of God Estate are hereby notified of the Statutory General Meeting scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nAgenda Highlights:\n1. Presentation of the October 2026 Security Levy & Estate Infrastructure Financial Report.\n2. Progress review on the Estate Road Modernization & Drainage Rehabilitation Project.\n3. Gate Access Control, 24/7 Armed Patrol Operations, and Resident Slot Verification.\n4. General Welfare, Environmental Sanitation, and Open Floor Deliberations.\n\nAttendance is mandatory for all households. Please be punctual as deliberations commence strictly at 07:00 AM.",
+    content: "All landlords, homeowners, and residents of Finger of God Estate are hereby notified of the Statutory General Meeting scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nAgenda Highlights:\n1. Presentation of the October 2026 Security Levy & Estate Infrastructure Financial Report.\n2. Progress review on the Estate Road Modernization & Drainage Rehabilitation Project.\n3. Gate Access Control, 24/7 Armed Patrol Operations, and Resident Slot Verification.\n4. General Welfare, Environmental Sanitation, and Open Floor Deliberations.\n\nAttendance is mandatory for all households. Please be punctual as deliberations commence strictly at 07:00 AM.",
+    created_at: '2026-10-22T08:00:00.000Z',
+    updated_at: '2026-10-22T18:03:00.000Z'
+  },
+  {
     id: 'ann-001',
     title: 'Updated Estate Security Protocols & RFID Gate Automation',
     slug: 'updated-estate-security-protocols-rfid-gate-automation',
@@ -1157,10 +597,10 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
     created_by: 'admin@fingerofgodestate.ng',
     read_by_residents: ['001'],
     view_count: 95,
-    body: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request).\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.',
-    content: 'All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate Townhall Meeting scheduled for Saturday, October 24, 2026, at 10:00 AM at the Estate Community Hall (with a hybrid Zoom broadcast link available upon request).\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.',
+    body: "All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate General Meeting & Townhall scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.",
+    content: "All residents, landlords, and tenants are cordially invited to the upcoming Finger of God Estate General Meeting & Townhall scheduled for Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church.\n\nKey agenda items include:\n1. Review of Q3 security reports and CCTV camera expansions.\n2. Financial stewardship report and levy collection status.\n3. Traffic management within estate boulevards.\n\nYour active participation is invaluable in building a safer community.",
     created_at: '2026-09-22T10:00:00.000Z',
-    updated_at: '2026-09-22T10:00:00.000Z'
+    updated_at: '2026-10-22T18:03:00.000Z'
   },
   {
     id: 'ann-004',
@@ -1229,6 +669,21 @@ const INITIAL_ANNOUNCEMENTS_SEED: Announcement[] = [
 ];
 
 const INITIAL_NOTIFICATIONS_SEED: ResidentNotification[] = [
+  {
+    id: 'notif-gm-2026-10-24',
+    resident_number: 'ALL',
+    title: 'Notice of General Meeting — Saturday, 24th October 2026',
+    message: "Statutory General Meeting holds on Saturday, 24th October 2026 at 07:00 AM prompt at Potter's Church. Attendance is mandatory for all households.",
+    category: 'Meeting',
+    priority: 'Urgent',
+    is_read: false,
+    link_tab: 'resident_portal',
+    link_target: 'announcements',
+    announcement_id: 'ann-gm-2026-10-24',
+    announcement_slug: 'notice-of-general-meeting-24th-october-2026',
+    is_pinned: true,
+    created_at: '2026-10-22T08:00:00.000Z'
+  },
   {
     id: 'notif-001',
     resident_number: 'ALL',
@@ -1309,7 +764,25 @@ function getLocalAnnouncements(): Announcement[] {
       localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(INITIAL_ANNOUNCEMENTS_SEED));
       return INITIAL_ANNOUNCEMENTS_SEED;
     }
-    return JSON.parse(raw);
+    const parsed: Announcement[] = JSON.parse(raw);
+    const seedById = new Map(INITIAL_ANNOUNCEMENTS_SEED.map(s => [s.id, s]));
+    let changed = false;
+    const synced = parsed.map(item => {
+      const seed = seedById.get(item.id);
+      if (seed && (item.id === 'ann-gm-2026-10-24' || item.id === 'ann-003') && item.body !== seed.body) {
+        changed = true;
+        return { ...item, body: seed.body, content: seed.content, updated_at: seed.updated_at };
+      }
+      return item;
+    });
+    const existingIds = new Set(synced.map(a => a.id));
+    const missingSeeds = INITIAL_ANNOUNCEMENTS_SEED.filter(s => !existingIds.has(s.id));
+    if (missingSeeds.length > 0 || changed) {
+      const merged = [...missingSeeds, ...synced];
+      localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(merged));
+      return merged;
+    }
+    return synced;
   } catch {
     return INITIAL_ANNOUNCEMENTS_SEED;
   }
@@ -1330,7 +803,25 @@ function getLocalNotifications(): ResidentNotification[] {
       localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS_SEED));
       return INITIAL_NOTIFICATIONS_SEED;
     }
-    return JSON.parse(raw);
+    const parsed: ResidentNotification[] = JSON.parse(raw);
+    const seedById = new Map(INITIAL_NOTIFICATIONS_SEED.map(s => [s.id, s]));
+    let changed = false;
+    const synced = parsed.map(item => {
+      const seed = seedById.get(item.id);
+      if (seed && item.id === 'notif-gm-2026-10-24' && item.message !== seed.message) {
+        changed = true;
+        return { ...item, message: seed.message };
+      }
+      return item;
+    });
+    const existingIds = new Set(synced.map(n => n.id));
+    const missingSeeds = INITIAL_NOTIFICATIONS_SEED.filter(s => !existingIds.has(s.id));
+    if (missingSeeds.length > 0 || changed) {
+      const merged = [...missingSeeds, ...synced];
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(merged));
+      return merged;
+    }
+    return synced;
   } catch {
     return INITIAL_NOTIFICATIONS_SEED;
   }
@@ -2457,6 +1948,20 @@ export const dbService = {
       }
     }
 
+    // Fetch from authoritative backend API if admin session is active
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch('/api/payments/all', { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.payments)) {
+          saveLocalPayments(json.payments);
+        }
+      }
+    } catch {
+      // Fall back to local cache
+    }
+
     // Local storage fallback with automatic resident sync
     const payments = getLocalPayments();
     const residents = getLocalResidents();
@@ -2476,7 +1981,7 @@ export const dbService = {
           period_month: month,
           period_year: year,
           period_label: `${new Date(year, month - 1).toLocaleString('default', { month: 'long' })} ${year}`,
-          amount_due: 5000,
+          amount_due: 1500,
           amount_paid: 0,
           status: 'UNPAID',
           due_date: `${year}-${String(month).padStart(2, '0')}-01`,
@@ -2596,6 +2101,20 @@ export const dbService = {
         }
         console.warn('Supabase fetch payment_transactions notice, using local storage:', err?.message || err);
       }
+    }
+
+    // Fetch from authoritative backend API if admin session is active
+    try {
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch('/api/payments/transactions', { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.transactions)) {
+          saveLocalTransactions(json.transactions);
+        }
+      }
+    } catch {
+      // Fall back to local cache
     }
 
     const transactions = getLocalTransactions();
@@ -2718,6 +2237,7 @@ export const dbService = {
     adminEmail?: string;
   }): Promise<void> {
     const { payment, transaction, receipt, adminEmail = 'system' } = data;
+    const verifiedPaidAmount = Number(receipt.amount_paid || transaction.amount_paid || payment.amount_paid || payment.amount_due || 1500);
 
     // 1. Update in-memory & Local Storage
     const payments = getLocalPayments();
@@ -2727,18 +2247,18 @@ export const dbService = {
       p.period_year === payment.period_year
     );
     if (pIdx !== -1) {
-      payments[pIdx] = { ...payments[pIdx], ...payment, status: 'PAID', amount_paid: 5000 };
+      payments[pIdx] = { ...payments[pIdx], ...payment, status: 'PAID', amount_paid: Number(payment.amount_paid || 1500) };
     } else {
-      payments.push(payment);
+      payments.push({ ...payment, status: 'PAID', amount_paid: Number(payment.amount_paid || 1500) });
     }
     saveLocalPayments(payments);
 
     const transactions = getLocalTransactions();
     const tIdx = transactions.findIndex(t => t.transaction_reference === transaction.transaction_reference);
     if (tIdx !== -1) {
-      transactions[tIdx] = { ...transactions[tIdx], ...transaction, status: 'PAID', amount_paid: 5000 };
+      transactions[tIdx] = { ...transactions[tIdx], ...transaction, status: 'PAID', amount_paid: verifiedPaidAmount };
     } else {
-      transactions.unshift(transaction);
+      transactions.unshift({ ...transaction, status: 'PAID', amount_paid: verifiedPaidAmount });
     }
     saveLocalTransactions(transactions);
 
@@ -2758,8 +2278,8 @@ export const dbService = {
             period_month: payment.period_month,
             period_year: payment.period_year,
             period_label: payment.period_label,
-            amount_due: payment.amount_due,
-            amount_paid: 5000,
+            amount_due: payment.amount_due || 1500,
+            amount_paid: payment.amount_paid || 1500,
             status: 'Paid',
             due_date: payment.due_date,
             paid_at: payment.paid_at || new Date().toISOString()
@@ -2771,7 +2291,7 @@ export const dbService = {
             resident_id: transaction.resident_id,
             transaction_reference: transaction.transaction_reference,
             paystack_reference: transaction.paystack_reference,
-            amount: 5000,
+            amount: verifiedPaidAmount,
             currency: 'NGN',
             payment_method: 'Paystack',
             status: 'Success'
@@ -2782,7 +2302,7 @@ export const dbService = {
           await supabase.from('receipts').upsert({
             receipt_number: receipt.receipt_number,
             resident_id: receipt.resident_id,
-            amount_paid: receipt.amount_paid,
+            amount_paid: receipt.amount_paid || verifiedPaidAmount,
             period_covered: receipt.period_covered,
             issued_at: receipt.issued_at
           }, { onConflict: 'receipt_number' });
@@ -2798,7 +2318,7 @@ export const dbService = {
       action: 'STATUS_CHANGED',
       entity_type: 'resident',
       entity_id: payment.resident_number,
-      description: `Confirmed ₦5,000 security levy payment for resident ${payment.resident_number} (${receipt.period_covered}) via Paystack. Ref: ${receipt.paystack_reference}`
+      description: `Confirmed ₦${verifiedPaidAmount.toLocaleString()} security levy payment for resident ${payment.resident_number} (${receipt.period_covered}) via Paystack. Ref: ${receipt.paystack_reference}`
     });
   },
 
@@ -3902,7 +3422,7 @@ export const dbService = {
       period_month: 10,
       period_year: 2026,
       period_label: 'October 2026',
-      amount_due: 5000,
+      amount_due: 1500,
       amount_paid: 0,
       status: 'UNPAID',
       due_date: '2026-10-01',
@@ -3914,7 +3434,7 @@ export const dbService = {
     }
 
     const paidPayments = payments.filter(p => p.status === 'PAID');
-    const totalPaid = paidPayments.reduce((acc, curr) => acc + (curr.amount_paid || 5000), 0);
+    const totalPaid = paidPayments.reduce((acc, curr) => acc + (curr.amount_paid || 1500), 0);
     const monthsPaid = paidPayments.length;
 
     const outstandingLevies = payments.filter(p => p.status === 'UNPAID' && (p.period_year === 2026 && p.period_month <= 10));
@@ -4016,13 +3536,15 @@ export const dbService = {
     ];
 
     const residents = await this.getResidents();
+    const allPayments = await this.getMonthlyPayments();
     const active = residents.filter(r => r.status === 'Active');
     const eligibleCount = active.length;
     const expectedPerMonth = eligibleCount * 1500;
 
     return billingCycles.map(c => {
-      const paid = c.month === 10 ? 1 : 0;
-      const collected = paid * 1500;
+      const paidRecords = allPayments.filter(p => p.period_month === c.month && p.period_year === c.year && p.status === 'PAID');
+      const paid = paidRecords.length;
+      const collected = paidRecords.reduce((sum, p) => sum + (p.amount_paid || 1500), 0);
       return {
         period_month: c.month,
         period_year: c.year,
@@ -4062,10 +3584,10 @@ export const dbService = {
         resident_name: r ? r.full_name : 'Estate Resident',
         house_number: r ? r.house_number : '—',
         phone_number: r ? r.phone_number : '—',
-        amount_paid: p.amount_paid || 5000,
+        amount_paid: p.amount_paid || 1500,
         payment_date: p.paid_at || p.created_at,
         payment_reference: p.paystack_reference || 'FOGES-PAID',
-        receipt_number: rcp ? rcp.receipt_number : `FOGES-REC-${year}10-${p.resident_number}-A7C8E9`,
+        receipt_number: rcp ? rcp.receipt_number : `FOGES-REC-${year}10-${p.resident_number}-PAID`,
         payment_channel: 'card'
       };
     });
@@ -4097,8 +3619,8 @@ export const dbService = {
         phone_number: r.phone_number,
         amount_due: 1500,
         payment_status: 'UNPAID',
-        reminder_status: r.resident_number === '002' ? 'REMINDER_1' : 'NONE',
-        last_reminder_date: r.resident_number === '002' ? '2026-10-06T09:00:00Z' : null
+        reminder_status: 'NONE',
+        last_reminder_date: null
       }));
   },
 

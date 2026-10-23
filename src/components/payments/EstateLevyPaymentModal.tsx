@@ -195,6 +195,9 @@ export const EstateLevyPaymentModal: React.FC<EstateLevyPaymentModalProps> = ({
             verifyEstateLevyReference(response.reference || res.reference!);
           },
           onClose: () => {
+            if (res.reference) {
+              estateLevyService.cancelPayment(res.reference, 'CANCELLED').catch(() => {});
+            }
             setProcessing(false);
             setErrorMsg('Payment cancelled. Transaction was not completed.');
           }

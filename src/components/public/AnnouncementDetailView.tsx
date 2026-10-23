@@ -220,7 +220,7 @@ export const AnnouncementDetailView: React.FC<AnnouncementDetailViewProps> = ({
 
           {/* Body Content */}
           <div className="prose prose-slate max-w-none text-sm sm:text-base leading-relaxed text-slate-700 space-y-4 whitespace-pre-line">
-            {announcement.body}
+            {announcement.body || (announcement as any).content}
           </div>
 
           {/* Attachment if present */}

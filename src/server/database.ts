@@ -605,7 +605,8 @@ export const serverDb = {
       if (!error && data) {
         return {
           ...data,
-          resident_number: String(data.resident_number).trim().padStart(3, '0')
+          resident_number: String(data.resident_number).trim().padStart(3, '0'),
+          phone_number: data.phone_number && String(data.phone_number).startsWith('08000000') ? '' : (data.phone_number || '')
         };
       }
     } catch (e) {
@@ -615,7 +616,8 @@ export const serverDb = {
     if (found) {
       return {
         ...found,
-        resident_number: String(found.resident_number).trim().padStart(3, '0')
+        resident_number: String(found.resident_number).trim().padStart(3, '0'),
+        phone_number: found.phone_number && String(found.phone_number).startsWith('08000000') ? '' : (found.phone_number || '')
       };
     }
     return null;
@@ -680,9 +682,19 @@ export const serverDb = {
   async getResidentById(id: string): Promise<any | null> {
     try {
       const { data, error } = await supabaseAdmin.from('residents').select('*').eq('id', id).maybeSingle();
-      if (!error && data) return data;
+      if (!error && data) {
+        return {
+          ...data,
+          phone_number: data.phone_number && String(data.phone_number).startsWith('08000000') ? '' : (data.phone_number || '')
+        };
+      }
     } catch {}
-    return localDb.residents.find(r => r.id === id) || null;
+    const found = localDb.residents.find(r => r.id === id);
+    if (!found) return null;
+    return {
+      ...found,
+      phone_number: found.phone_number && String(found.phone_number).startsWith('08000000') ? '' : (found.phone_number || '')
+    };
   },
 
   async saveResident(residentData: any): Promise<any> {
@@ -751,7 +763,7 @@ export const serverDb = {
       auth_user_id: residentRecord.auth_user_id && isValidUuid(residentRecord.auth_user_id) ? residentRecord.auth_user_id : null,
       resident_number: cleanNum,
       full_name: residentRecord.full_name,
-      phone_number: residentRecord.phone_number,
+      phone_number: residentRecord.phone_number || `08000000${cleanNum}`,
       additional_phone: residentRecord.additional_phone || null,
       email: residentRecord.email || null,
       house_number: residentRecord.house_number,
@@ -1040,6 +1052,16 @@ export const serverDb = {
               existingRefs.add(loc.reference);
             }
           }
+          // Recompute running_balance chronologically across verified transactions
+          vaultTransactions.sort((a: any, b: any) => new Date(a.paid_at || a.date || a.created_at).getTime() - new Date(b.paid_at || b.date || b.created_at).getTime());
+          let running = 0;
+          for (const t of vaultTransactions) {
+            if (t.status === 'VERIFIED') {
+              running += (t.type === 'CREDIT' ? Number(t.amount || 0) : -Number(t.amount || 0));
+            }
+            t.running_balance = running;
+          }
+          vaultTransactions.sort((a: any, b: any) => new Date(b.paid_at || b.date || b.created_at).getTime() - new Date(a.paid_at || a.date || a.created_at).getTime());
           localDb.road_project_transactions = vaultTransactions;
           saveDbToFile(localDb);
           return vaultTransactions;
@@ -1396,13 +1418,15 @@ export const serverDb = {
     };
 
     if (isSupabaseAdminConfigured()) {
-      const { data, error } = await supabaseAdmin.from('buildings').upsert(record).select().maybeSingle();
-      if (error) {
-        console.error('[Supabase Error] buildings upsert failed:', error.message);
-        throw new Error(`Database error saving building: ${error.message}`);
-      }
-      if (data) {
-        record = { ...record, ...data };
+      try {
+        const { data, error } = await supabaseAdmin.from('buildings').upsert(record).select().maybeSingle();
+        if (error) {
+          console.warn('[Supabase Sync Notice] buildings upsert fallback to local vault:', error.message);
+        } else if (data) {
+          record = { ...record, ...data };
+        }
+      } catch (e: any) {
+        console.warn('[Supabase Sync Notice] buildings upsert exception:', e?.message);
       }
     }
 
@@ -1444,10 +1468,13 @@ export const serverDb = {
     }
 
     if (isSupabaseAdminConfigured()) {
-      const { data, error } = await supabaseAdmin.from('buildings').update(cleanUpdates).eq('id', id).select().maybeSingle();
-      if (error) {
-        console.error('[Supabase Error] buildings update failed:', error.message);
-        throw new Error(`Database error updating building: ${error.message}`);
+      try {
+        const { error } = await supabaseAdmin.from('buildings').update(cleanUpdates).eq('id', id).select().maybeSingle();
+        if (error) {
+          console.warn('[Supabase Sync Notice] buildings update fallback to local vault:', error.message);
+        }
+      } catch (e: any) {
+        console.warn('[Supabase Sync Notice] buildings update exception:', e?.message);
       }
     }
 
@@ -1552,13 +1579,15 @@ export const serverDb = {
     };
 
     if (isSupabaseAdminConfigured()) {
-      const { data, error } = await supabaseAdmin.from('flats').upsert(record).select().maybeSingle();
-      if (error) {
-        console.error('[Supabase Error] flats upsert failed:', error.message);
-        throw new Error(`Database error saving flat: ${error.message}`);
-      }
-      if (data) {
-        record = { ...record, ...data };
+      try {
+        const { data, error } = await supabaseAdmin.from('flats').upsert(record).select().maybeSingle();
+        if (error) {
+          console.warn('[Supabase Sync Notice] flats upsert fallback to local vault:', error.message);
+        } else if (data) {
+          record = { ...record, ...data };
+        }
+      } catch (e: any) {
+        console.warn('[Supabase Sync Notice] flats upsert exception:', e?.message);
       }
     }
 
@@ -1605,10 +1634,13 @@ export const serverDb = {
     }
 
     if (isSupabaseAdminConfigured()) {
-      const { data, error } = await supabaseAdmin.from('flats').update(cleanUpdates).eq('id', id).select().maybeSingle();
-      if (error) {
-        console.error('[Supabase Error] flats update failed:', error.message);
-        throw new Error(`Database error updating flat: ${error.message}`);
+      try {
+        const { error } = await supabaseAdmin.from('flats').update(cleanUpdates).eq('id', id).select().maybeSingle();
+        if (error) {
+          console.warn('[Supabase Sync Notice] flats update fallback to local vault:', error.message);
+        }
+      } catch (e: any) {
+        console.warn('[Supabase Sync Notice] flats update exception:', e?.message);
       }
     }
 
@@ -2415,7 +2447,7 @@ export const serverDb = {
       building_id: tx.building_id,
       building_house_number: String(tx.building_house_number || '').trim(),
       billing_month: tx.billing_month,
-      amount: 1000.00, // Authoritative ₦1,000 per building
+      amount: Number(tx.amount) || 1000.00, // Authoritative ₦1,000 per month (or ₦12,000 for 12 months)
       currency: 'NGN',
       payer_name: String(tx.payer_name).trim(),
       payer_email: String(tx.payer_email).trim(),
@@ -2480,7 +2512,7 @@ export const serverDb = {
       payer_name: receipt.payer_name,
       billing_month: receipt.billing_month,
       billing_month_label: receipt.billing_month_label,
-      amount_paid: 1000.00,
+      amount_paid: Number(receipt.amount_paid) || 1000.00,
       currency: 'NGN',
       paystack_reference: receipt.paystack_reference,
       payment_date: receipt.payment_date || now,

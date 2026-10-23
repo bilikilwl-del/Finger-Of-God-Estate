@@ -679,7 +679,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                         {rcp.period_covered}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {formatNaira(rcp.amount_paid || 5000)}
+                        {formatNaira(rcp.amount_paid || 1500)}
                       </td>
                       <td className="py-3.5 px-4 text-slate-600">
                         {new Date(rcp.payment_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}

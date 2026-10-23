@@ -151,10 +151,10 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
           <span className="text-slate-500 font-medium">Quick Test Sample:</span>
           <button
             type="button"
-            onClick={() => handleQuickFill('FOGES-REC-202610-001-A7C8E9')}
+            onClick={() => handleQuickFill('RCP-RD-PSTK-768758')}
             className="px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
           >
-            FOGES-REC-202610-001-A7C8E9 (Valid)
+            RCP-RD-PSTK-768758 (Valid Verified Receipt)
           </button>
           <button
             type="button"
@@ -186,7 +186,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
                       <span className="text-xs text-emerald-100">Live Database Match</span>
                     </div>
                     <p className="text-sm font-semibold text-white mt-0.5">
-                      Authentic Security Levy Payment
+                      Authentic Estate Payment / Contribution Receipt
                     </p>
                   </div>
                 </div>
@@ -202,7 +202,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
                     Finger of God Estate Security Management
                   </p>
                   <p className="text-lg font-black text-slate-900 font-display mt-0.5">
-                    Official Security Levy Clearance Pass
+                    Official Payment Verification Record
                   </p>
                 </div>
 
@@ -246,7 +246,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
 
                   <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">
-                      Payment Month
+                      Payment Period / Category
                     </span>
                     <span className="font-bold text-emerald-950 text-base">
                       {result.receipt.period_covered}
@@ -258,7 +258,7 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
                       Amount Verified
                     </span>
                     <span className="font-black text-xl sm:text-2xl font-display">
-                      {formatNaira(result.receipt.amount_paid || 5000)}
+                      {formatNaira(result.receipt.amount_paid || 1500)}
                     </span>
                   </div>
 

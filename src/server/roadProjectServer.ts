@@ -328,8 +328,9 @@ initializeRoadStore();
 // -----------------------------------------------------------------
 export function recalculateAllRunningBalances(): ServerRoadProjectTransaction[] {
   const transactions = Array.from(roadTransactionsStore.values()).sort((a, b) => {
-    const diff = new Date(a.date).getTime() - new Date(b.date).getTime();
-    if (diff !== 0) return diff;
+    const timeA = new Date(a.paid_at || a.verified_at || a.created_at || a.date || '').getTime();
+    const timeB = new Date(b.paid_at || b.verified_at || b.created_at || b.date || '').getTime();
+    if (timeA !== timeB) return timeA - timeB;
     return (a.reference || '').localeCompare(b.reference || '');
   });
 
@@ -812,9 +813,7 @@ roadProjectRouter.get('/ledger', async (_req: Request, res: Response) => {
   if (roadTransactionsStore.size === 0) {
     await syncRoadStoreWithDatabaseAndPaystack();
   }
-  const transactions = recalculateAllRunningBalances().sort(
-    (a, b) => new Date(b.date || b.created_at || '').getTime() - new Date(a.date || a.created_at || '').getTime() || (b.reference || '').localeCompare(a.reference || '')
-  );
+  const transactions = recalculateAllRunningBalances().reverse();
   const summary = computeRoadProjectSummary();
 
   res.json({
@@ -1010,24 +1009,52 @@ roadProjectRouter.post('/paystack/verify', async (req: Request, res: Response) =
   }
 });
 
+// 4B. CANCEL OR RECORD FAILED PAYSTACK ROAD CONTRIBUTION ATTEMPT
+roadProjectRouter.post('/paystack/cancel', async (req: Request, res: Response) => {
+  try {
+    const { reference, status: requestedStatus, reason } = req.body;
+    if (!reference) {
+      return res.status(400).json({ success: false, message: 'Reference is required' });
+    }
+    const cleanRef = String(reference).trim();
+    if (roadProcessedReferences.has(cleanRef)) {
+      return res.status(400).json({ success: false, message: 'Cannot cancel an already verified contribution.' });
+    }
+    const finalStatus = requestedStatus === 'FAILED' ? 'FAILED' : 'CANCELLED';
+    return res.json({
+      success: true,
+      status: finalStatus,
+      reference: cleanRef,
+      message: reason || `Road contribution checkout ${finalStatus.toLowerCase()}. Ledger unchanged.`
+    });
+  } catch (err: any) {
+    console.error('[Road Paystack Cancel Error]', err);
+    res.status(500).json({ success: false, message: 'Server error cancelling road contribution' });
+  }
+});
+
 // 5. DEDICATED PAYSTACK WEBHOOK ROUTE FOR ROAD PROJECT
 roadProjectRouter.post('/paystack/webhook', async (req: any, res: Response) => {
   try {
     const secretKey = getEstatePaystackSecret();
     const signature = req.headers['x-paystack-signature'];
+    const rawBody = req.rawBody;
 
-    // Strict signature enforcement: reject if secret is missing or signature header omitted
-    if (!secretKey || !signature) {
-      console.warn('[Road Paystack Webhook] Missing secret key or x-paystack-signature header');
+    // Strict signature enforcement: reject if secret, rawBody, or signature header omitted
+    if (!secretKey || !signature || typeof signature !== 'string' || !rawBody) {
+      console.warn('[Road Paystack Webhook] Missing secret key, rawBody, or x-paystack-signature header');
       return res.status(401).json({ error: 'Unauthorized webhook request.' });
     }
 
     const hash = crypto
       .createHmac('sha512', secretKey)
-      .update(req.rawBody || JSON.stringify(req.body))
+      .update(rawBody)
       .digest('hex');
 
-    if (hash !== signature) {
+    const hashBuffer = Buffer.from(hash, 'utf8');
+    const sigBuffer = Buffer.from(signature, 'utf8');
+
+    if (hashBuffer.length !== sigBuffer.length || !crypto.timingSafeEqual(hashBuffer, sigBuffer)) {
       console.warn('[Road Paystack Webhook] Invalid webhook signature detected');
       return res.status(401).json({ error: 'Invalid webhook signature.' });
     }

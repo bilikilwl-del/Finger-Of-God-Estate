@@ -90,7 +90,7 @@ export const PaidResidentsView: React.FC<PaidResidentsViewProps> = ({
     }
   };
 
-  const totalCollected = paidResidents.reduce((sum, r) => sum + (r.amount_paid || 5000), 0);
+  const totalCollected = paidResidents.reduce((sum, r) => sum + (r.amount_paid || 1500), 0);
 
   return (
     <div className="space-y-6">

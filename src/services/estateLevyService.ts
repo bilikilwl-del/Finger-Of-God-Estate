@@ -117,6 +117,20 @@ export const estateLevyService = {
     return res.json();
   },
 
+  // Cancel / abandon pending payment reference so building obligation lock is released
+  async cancelPayment(reference: string, reason: 'CANCELLED' | 'FAILED' = 'CANCELLED'): Promise<{
+    success: boolean;
+    status?: string;
+    message?: string;
+  }> {
+    const res = await fetch('/api/estate-levy/cancel-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference, reason })
+    });
+    return res.json();
+  },
+
   // Get receipt by number
   async getReceipt(receiptNumber: string): Promise<{
     success: boolean;
