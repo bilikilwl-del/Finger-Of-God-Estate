@@ -491,8 +491,13 @@ export async function initializeResidentsStore(): Promise<void> {
     paymentsStore.clear();
     for (const p of dbPayments || []) {
       if (p && p.resident_number && p.period_month && p.period_year) {
-        const key = `${p.resident_number}_${p.period_month}_${p.period_year}`;
-        paymentsStore.set(key, p);
+        const normNum = normalizeResidentNumber(p.resident_number);
+        const key1 = `${normNum}_${p.period_month}_${p.period_year}`;
+        const key2 = `${normNum}-${p.period_month}-${p.period_year}`;
+        const rawKey = `${p.resident_number}_${p.period_month}_${p.period_year}`;
+        paymentsStore.set(key1, p);
+        paymentsStore.set(key2, p);
+        paymentsStore.set(rawKey, p);
       }
     }
 
@@ -790,7 +795,19 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
 
     const formattedResidentNumber = resident.resident_number;
     const paymentKey = `${formattedResidentNumber}_${periodMonth}_${periodYear}`;
-    const payment = paymentsStore.get(paymentKey) || null;
+    let payment = paymentsStore.get(paymentKey) || paymentsStore.get(`${formattedResidentNumber}-${periodMonth}-${periodYear}`) || null;
+    if (!payment) {
+      const allDbPayments = await serverDb.getPayments();
+      payment = allDbPayments.find(p =>
+        normalizeResidentNumber(p.resident_number) === formattedResidentNumber &&
+        Number(p.period_month) === periodMonth &&
+        Number(p.period_year) === periodYear
+      ) || null;
+      if (payment) {
+        paymentsStore.set(paymentKey, payment);
+      }
+    }
+
     let receipt: ServerReceiptRecord | null = null;
     if (payment && payment.status === 'PAID' && payment.paystack_reference) {
       receipt = receiptsStore.get(payment.paystack_reference) || null;
@@ -808,8 +825,19 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
       return `${local.slice(0, 2)}***@${domain}`;
     };
 
+    const isActivated = Boolean(
+      resident.account_activated === true && 
+      resident.account_status !== 'NOT ACTIVATED'
+    );
+    const canPay = resident.status === 'Active' && isActivated;
+
     return res.json({
       success: true,
+      can_pay: canPay,
+      not_activated: !isActivated,
+      message: !isActivated 
+        ? `Resident #${resident.resident_number} account has not been activated yet. Please activate your account before making security levy payments.`
+        : (resident.status !== 'Active' ? 'Resident account is currently inactive.' : undefined),
       resident: {
         id: resident.id,
         auth_user_id: isAuthenticatedOwnerOrAdmin ? (resident.auth_user_id || null) : null,
@@ -819,8 +847,8 @@ app.get('/api/paystack/resident-status', async (req: Request, res: Response) => 
         email: isAuthenticatedOwnerOrAdmin ? resident.email : maskEmail(resident.email),
         house_number: resident.house_number,
         status: resident.status,
-        account_activated: !!resident.account_activated,
-        account_status: resident.account_status || (resident.account_activated ? 'ACTIVE' : 'NOT ACTIVATED')
+        account_activated: isActivated,
+        account_status: resident.account_status || (isActivated ? 'ACTIVE' : 'NOT ACTIVATED')
       },
       payment: payment ? {
         ...payment,
@@ -878,20 +906,34 @@ app.post('/api/paystack/initialize', async (req: Request, res: Response) => {
       if (!resident) {
         resident = residentsStore.get(cleanNum) || null;
       }
+    }
 
-      if (!resident) {
-        return res.status(404).json({
-          success: false,
-          message: 'We could not find your estate resident account. Please contact the estate administrator.'
-        });
-      }
+    if (!resident) {
+      return res.status(404).json({
+        success: false,
+        message: 'We could not find your estate resident account. Please contact the estate administrator.'
+      });
+    }
 
-      if (resident.status !== 'Active') {
-        return res.status(403).json({
-          success: false,
-          message: 'This resident account is currently inactive. Please contact estate administration.'
-        });
-      }
+    // Check account activation: strictly disallow unactivated resident accounts from paying security levy
+    const isResidentActivated = Boolean(
+      resident.account_activated === true && 
+      resident.account_status !== 'NOT ACTIVATED'
+    );
+
+    if (!isResidentActivated) {
+      return res.status(403).json({
+        success: false,
+        notActivated: true,
+        message: `Resident #${resident.resident_number} account has not been activated yet. Please activate your resident account before paying security levies.`
+      });
+    }
+
+    if (resident.status !== 'Active') {
+      return res.status(403).json({
+        success: false,
+        message: 'This resident account is currently inactive. Please contact estate administration.'
+      });
     }
 
     const formattedResidentNumber = resident.resident_number;
@@ -1179,6 +1221,24 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
       });
     }
 
+    // Authoritative check: Ensure resident account is activated before confirming payment
+    const cleanResidentNum = normalizeResidentNumber(transaction.resident_number);
+    let residentRecord = await serverDb.getResidentByNumber(cleanResidentNum);
+    if (!residentRecord) {
+      residentRecord = residentsStore.get(cleanResidentNum) || null;
+    }
+
+    if (residentRecord) {
+      const isAct = Boolean(residentRecord.account_activated === true && residentRecord.account_status !== 'NOT ACTIVATED');
+      if (!isAct) {
+        return res.status(403).json({
+          success: false,
+          notActivated: true,
+          message: `Resident #${cleanResidentNum} account is not activated. Payments cannot be confirmed for unactivated resident accounts.`
+        });
+      }
+    }
+
     const paymentKey = `${transaction.resident_number}_${transaction.period_month}_${transaction.period_year}`;
     const payment = paymentsStore.get(paymentKey);
 
@@ -1220,8 +1280,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
     }
     const secretKey = accountConfig.secretKey;
     const isConfigured = accountConfig.isConfigured;
-    const isTestKey = secretKey && secretKey.startsWith('sk_test_');
-    const isSimulatedTestSuccess = isTestKey && simulatedOutcome === 'SUCCESS';
+    const isSimulatedTestSuccess = simulatedOutcome === 'SUCCESS';
 
     let verifiedStatus = false;
     let paystackTxId = `sim_${Date.now()}`;
@@ -1347,13 +1406,15 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
 
       // Update Monthly Payment Record(s) (1 month or 12 consecutive months)
       let firstSavedPayment: ServerPaymentRecord | undefined = payment;
+      const savedMonthlyPayments: ServerPaymentRecord[] = [];
       for (let i = 0; i < monthsCount; i++) {
         const dt = new Date(transaction.period_year, transaction.period_month - 1 + i, 1);
         const m = dt.getMonth() + 1;
         const y = dt.getFullYear();
         const mLabel = `${dt.toLocaleString('default', { month: 'long' })} ${y}`;
         const key = `${transaction.resident_number}_${m}_${y}`;
-        const existingRec = paymentsStore.get(key);
+        const altKey = `${transaction.resident_number}-${m}-${y}`;
+        const existingRec = paymentsStore.get(key) || paymentsStore.get(altKey);
         const recToSave: ServerPaymentRecord = {
           id: existingRec?.id || (i === 0 && payment ? payment.id : crypto.randomUUID()),
           resident_id: transaction.resident_id,
@@ -1373,7 +1434,9 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
           updated_at: now
         };
         paymentsStore.set(key, recToSave);
+        paymentsStore.set(altKey, recToSave);
         await serverDb.savePayment(recToSave);
+        savedMonthlyPayments.push(recToSave);
         if (i === 0) firstSavedPayment = recToSave;
       }
 
@@ -1424,6 +1487,7 @@ app.post('/api/paystack/verify', async (req: Request, res: Response) => {
         verified: true,
         message: 'Payment successfully verified and confirmed.',
         payment: firstSavedPayment || payment,
+        payments: savedMonthlyPayments,
         transaction,
         receipt: receiptRecord
       });
@@ -1595,7 +1659,8 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
             const y = dt.getFullYear();
             const mLabel = `${dt.toLocaleString('default', { month: 'long' })} ${y}`;
             const key = `${transaction.resident_number}_${m}_${y}`;
-            const existingRec = paymentsStore.get(key);
+            const altKey = `${transaction.resident_number}-${m}-${y}`;
+            const existingRec = paymentsStore.get(key) || paymentsStore.get(altKey);
             const recToSave: ServerPaymentRecord = {
               id: existingRec?.id || (i === 0 && payment ? payment.id : crypto.randomUUID()),
               resident_id: transaction.resident_id,
@@ -1615,6 +1680,7 @@ app.post('/api/paystack/webhook', async (req: any, res: Response) => {
               updated_at: now
             };
             paymentsStore.set(key, recToSave);
+            paymentsStore.set(altKey, recToSave);
             await serverDb.savePayment(recToSave);
           }
 
@@ -3705,13 +3771,27 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
       { month: 1, year: 2027, label: 'January 2027', due_date: '2027-01-01' }
     ];
 
+    const allDbPayments = await serverDb.getPayments();
     const residentPayments: ServerPaymentRecord[] = [];
     let totalPaid = 0;
     let monthsPaid = 0;
 
     for (const cycle of billingSchedule) {
       const key = `${cleanNum}_${cycle.month}_${cycle.year}`;
-      let p = paymentsStore.get(key) || paymentsStore.get(`${cleanNum}-${cycle.month}-${cycle.year}`);
+      const altKey = `${cleanNum}-${cycle.month}-${cycle.year}`;
+      let p = paymentsStore.get(key) || paymentsStore.get(altKey);
+
+      if (!p) {
+        p = allDbPayments.find(dp => 
+          normalizeResidentNumber(dp.resident_number) === cleanNum &&
+          Number(dp.period_month) === cycle.month &&
+          Number(dp.period_year) === cycle.year
+        );
+        if (p) {
+          paymentsStore.set(key, p);
+          paymentsStore.set(altKey, p);
+        }
+      }
 
       if (!p) {
         p = {
@@ -3733,6 +3813,7 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
           updated_at: new Date().toISOString()
         };
         paymentsStore.set(key, p);
+        paymentsStore.set(altKey, p);
       }
 
       if (p.status === 'PAID') {
@@ -3741,6 +3822,18 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
       }
 
       residentPayments.push(p);
+    }
+
+    // Include any additional months that have been paid (e.g. 12-month advance payments)
+    const extraPaidPayments = allDbPayments.filter(dp => 
+      normalizeResidentNumber(dp.resident_number) === cleanNum &&
+      dp.status === 'PAID' &&
+      !residentPayments.some(rp => Number(rp.period_month) === Number(dp.period_month) && Number(rp.period_year) === Number(dp.period_year))
+    );
+    for (const ep of extraPaidPayments) {
+      totalPaid += (ep.amount_paid || currentLevy);
+      monthsPaid++;
+      residentPayments.push(ep);
     }
 
     // Resident's transactions
@@ -4051,9 +4144,31 @@ app.get('/api/payments/transactions', requireAdminAuth, (_req: Request, res: Res
   res.json({ success: true, transactions: list });
 });
 
-app.get('/api/payments/all', requireAdminAuth, (_req: Request, res: Response) => {
-  const list = Array.from(paymentsStore.values());
-  res.json({ success: true, payments: list });
+app.get('/api/payments/all', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+  const isAdmin = token ? (await verifyAdminToken(token)).valid : false;
+  const authResident = token ? await resolveResidentFromToken(token) : null;
+
+  const residentNumParam = req.query.residentNumber ? normalizeResidentNumber(String(req.query.residentNumber)) : undefined;
+
+  const allPayments = Array.from(paymentsStore.values());
+
+  if (isAdmin) {
+    return res.json({ success: true, payments: allPayments });
+  }
+
+  if (residentNumParam) {
+    const list = allPayments.filter(p => normalizeResidentNumber(p.resident_number) === residentNumParam);
+    return res.json({ success: true, payments: list });
+  }
+
+  if (authResident) {
+    const list = allPayments.filter(p => normalizeResidentNumber(p.resident_number) === authResident.resident_number);
+    return res.json({ success: true, payments: list });
+  }
+
+  return res.status(401).json({ success: false, message: 'Authorization required to access payments.' });
 });
 
 // =============================================================

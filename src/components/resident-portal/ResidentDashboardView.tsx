@@ -516,7 +516,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
     setTimeout(() => setCopiedPassCode(null), 3000);
   };
 
-  const isCurrentMonthPaid = dashboardData?.currentMonthPayment.status === 'PAID';
+  const isCurrentMonthPaid = dashboardData?.currentMonthPayment?.status?.toUpperCase() === 'PAID';
 
   const yearsList = useMemo(() => {
     if (!dashboardData) return ['All', '2026'];
@@ -1351,7 +1351,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                     </h4>
                   </div>
                   <span className="text-xs text-slate-500 font-medium">
-                    {filteredHistory.filter(h => h.status === 'PAID').length} Paid / {filteredHistory.length} Billed
+                    {filteredHistory.filter(h => h.status?.toUpperCase() === 'PAID').length} Paid / {filteredHistory.length} Billed
                   </span>
                 </div>
 
@@ -1377,7 +1377,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         </tr>
                       ) : (
                         filteredHistory.map((item) => {
-                          const isPaid = item.status === 'PAID';
+                          const isPaid = item.status?.toUpperCase() === 'PAID';
                           return (
                             <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                               <td className="py-4 px-4 font-bold text-slate-900">

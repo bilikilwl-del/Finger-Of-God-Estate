@@ -972,38 +972,83 @@ export const serverDb = {
   },
 
   async savePayment(payment: any): Promise<any> {
-    const key = `${payment.resident_number}_${payment.period_month}_${payment.period_year}`;
-    const idx = localDb.monthly_payments.findIndex(p => `${p.resident_number}_${p.period_month}_${p.period_year}` === key);
+    const normPayNum = String(payment.resident_number || '').trim().padStart(3, '0');
+    const pMonth = Number(payment.period_month);
+    const pYear = Number(payment.period_year);
+
+    if (!Array.isArray(localDb.monthly_payments)) {
+      localDb.monthly_payments = [];
+    }
+
+    const idx = localDb.monthly_payments.findIndex(p => 
+      String(p.resident_number || '').trim().padStart(3, '0') === normPayNum &&
+      Number(p.period_month) === pMonth &&
+      Number(p.period_year) === pYear
+    );
+
+    const record = {
+      ...payment,
+      resident_number: normPayNum,
+      period_month: pMonth,
+      period_year: pYear,
+      status: 'PAID',
+      paid_at: payment.paid_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
     if (idx >= 0) {
-      localDb.monthly_payments[idx] = { ...localDb.monthly_payments[idx], ...payment, updated_at: new Date().toISOString() };
+      localDb.monthly_payments[idx] = { ...localDb.monthly_payments[idx], ...record };
     } else {
-      localDb.monthly_payments.push({ ...payment, updated_at: new Date().toISOString() });
+      localDb.monthly_payments.push(record);
     }
     saveDbToFile(localDb);
 
     try {
-      await supabaseAdmin.from('monthly_payments').upsert(payment);
+      await supabaseAdmin.from('monthly_payments').upsert(record);
     } catch (e) {
       console.warn('Supabase monthly_payments sync queued locally:', e);
     }
-    return payment;
+    return record;
+  },
+
+  async getPaymentByResidentAndMonth(residentNumber: string, month: number, year: number): Promise<any | null> {
+    const norm = String(residentNumber).trim().padStart(3, '0');
+    const payments = await this.getPayments();
+    return payments.find(p => 
+      String(p.resident_number).trim().padStart(3, '0') === norm &&
+      Number(p.period_month) === Number(month) &&
+      Number(p.period_year) === Number(year)
+    ) || null;
   },
 
   async saveTransaction(transaction: any): Promise<any> {
-    const idx = localDb.payment_transactions.findIndex(t => t.transaction_reference === transaction.transaction_reference || t.id === transaction.id);
+    if (!Array.isArray(localDb.payment_transactions)) {
+      localDb.payment_transactions = [];
+    }
+    const idx = localDb.payment_transactions.findIndex(t => 
+      t.transaction_reference === transaction.transaction_reference || 
+      t.paystack_reference === transaction.paystack_reference ||
+      t.id === transaction.id
+    );
+    const record = {
+      ...transaction,
+      resident_number: String(transaction.resident_number || '').trim().padStart(3, '0'),
+      status: transaction.status || 'PAID',
+      updated_at: new Date().toISOString()
+    };
     if (idx >= 0) {
-      localDb.payment_transactions[idx] = { ...localDb.payment_transactions[idx], ...transaction, updated_at: new Date().toISOString() };
+      localDb.payment_transactions[idx] = { ...localDb.payment_transactions[idx], ...record };
     } else {
-      localDb.payment_transactions.push({ ...transaction, updated_at: new Date().toISOString() });
+      localDb.payment_transactions.push(record);
     }
     saveDbToFile(localDb);
 
     try {
-      await supabaseAdmin.from('payment_transactions').upsert(transaction);
+      await supabaseAdmin.from('payment_transactions').upsert(record);
     } catch (e) {
       console.warn('Supabase payment_transactions sync queued locally:', e);
     }
-    return transaction;
+    return record;
   },
 
   // RECEIPTS
@@ -1028,20 +1073,33 @@ export const serverDb = {
   },
 
   async saveReceipt(receipt: any): Promise<any> {
-    const idx = localDb.receipts.findIndex(r => r.receipt_number === receipt.receipt_number || r.id === receipt.id);
+    if (!Array.isArray(localDb.receipts)) {
+      localDb.receipts = [];
+    }
+    const idx = localDb.receipts.findIndex(r => 
+      r.receipt_number === receipt.receipt_number || 
+      r.paystack_reference === receipt.paystack_reference ||
+      r.id === receipt.id
+    );
+    const record = {
+      ...receipt,
+      resident_number: String(receipt.resident_number || '').trim().padStart(3, '0'),
+      status: receipt.status || 'PAID',
+      updated_at: new Date().toISOString()
+    };
     if (idx >= 0) {
-      localDb.receipts[idx] = { ...localDb.receipts[idx], ...receipt };
+      localDb.receipts[idx] = { ...localDb.receipts[idx], ...record };
     } else {
-      localDb.receipts.push(receipt);
+      localDb.receipts.push(record);
     }
     saveDbToFile(localDb);
 
     try {
-      await supabaseAdmin.from('receipts').upsert(receipt);
+      await supabaseAdmin.from('receipts').upsert(record);
     } catch (e) {
       console.warn('Supabase receipts sync queued locally:', e);
     }
-    return receipt;
+    return record;
   },
 
   // ROAD PROJECT

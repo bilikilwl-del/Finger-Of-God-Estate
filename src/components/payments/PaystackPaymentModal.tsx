@@ -142,6 +142,13 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         setSelectedResident(statusRes.resident);
         setExistingPayment(statusRes.payment || null);
         setExistingReceipt(statusRes.receipt || null);
+
+        if (!statusRes.resident.account_activated || statusRes.resident.account_status === 'NOT ACTIVATED') {
+          setErrorMessage(
+            `Resident #${statusRes.resident.resident_number} (${statusRes.resident.full_name}) has not been activated yet. Only activated residents can make security levy payments. Please activate your account first.`
+          );
+        }
+
         setStep('verify_resident');
         setLoading(false);
         return;
@@ -150,6 +157,11 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
       // 3. Fallback: if active resident matches, allow proceeding with active resident
       if (activeRes && (activeRes.resident_number === formatted || activeRes.resident_number === resNumber.trim())) {
         setSelectedResident(activeRes);
+        if (!activeRes.account_activated || activeRes.account_status === 'NOT ACTIVATED') {
+          setErrorMessage(
+            `Resident #${activeRes.resident_number} (${activeRes.full_name}) has not been activated yet. Only activated residents can make security levy payments. Please activate your account first.`
+          );
+        }
         setStep('verify_resident');
         setLoading(false);
         return;
@@ -158,9 +170,15 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
       // 4. Fallback: check database via public lookup
       const pubLookup = await dbService.lookupResidentPublic(formatted);
       if (pubLookup.found && pubLookup.resident) {
-        setSelectedResident(pubLookup.resident as Resident);
+        const foundResident = pubLookup.resident as Resident;
+        setSelectedResident(foundResident);
         setExistingPayment(null);
         setExistingReceipt(null);
+        if (!foundResident.account_activated || foundResident.account_status === 'NOT ACTIVATED') {
+          setErrorMessage(
+            `Resident #${foundResident.resident_number} (${foundResident.full_name}) has not been activated yet. Only activated residents can make security levy payments. Please activate your account first.`
+          );
+        }
         setStep('verify_resident');
         setLoading(false);
         return;
@@ -177,6 +195,11 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
     } catch (err: any) {
       if (activeRes && (activeRes.resident_number === formatted || activeRes.resident_number === resNumber.trim())) {
         setSelectedResident(activeRes);
+        if (!activeRes.account_activated || activeRes.account_status === 'NOT ACTIVATED') {
+          setErrorMessage(
+            `Resident #${activeRes.resident_number} (${activeRes.full_name}) has not been activated yet. Only activated residents can make security levy payments. Please activate your account first.`
+          );
+        }
         setStep('verify_resident');
       } else {
         setErrorMessage(err.message || 'We could not find your estate resident account. Please contact the estate administrator.');
@@ -197,6 +220,11 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
   // STEP 3 & 4: Initialize Payment with Server & Open Paystack
   const handleProceedToPayment = async () => {
     if (!selectedResident) return;
+
+    if (!selectedResident.account_activated || selectedResident.account_status === 'NOT ACTIVATED') {
+      setErrorMessage(`Resident #${selectedResident.resident_number} account is not yet activated. You must activate your resident account before paying monthly security levies.`);
+      return;
+    }
 
     if (selectedResident.status !== 'Active') {
       setErrorMessage('Resident is inactive. Only active residents can pay security levies.');
@@ -280,6 +308,7 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
         if (verifyRes.payment && verifyRes.transaction && verifyRes.receipt) {
           await dbService.confirmVerifiedPayment({
             payment: verifyRes.payment,
+            payments: verifyRes.payments,
             transaction: verifyRes.transaction,
             receipt: verifyRes.receipt
           });
@@ -420,13 +449,22 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                       </span>
                       <span className="text-xs font-bold text-slate-900">{selectedResident.full_name}</span>
                     </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                      selectedResident.status === 'Active' 
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                        : 'bg-rose-100 text-rose-800 border border-rose-200'
-                    }`}>
-                      {selectedResident.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        selectedResident.account_activated && selectedResident.account_status !== 'NOT ACTIVATED'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}>
+                        {selectedResident.account_activated && selectedResident.account_status !== 'NOT ACTIVATED' ? 'Activated' : 'Not Activated'}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        selectedResident.status === 'Active' 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}>
+                        {selectedResident.status}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
@@ -440,6 +478,19 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Account Not Activated Alert */}
+                {(!selectedResident.account_activated || selectedResident.account_status === 'NOT ACTIVATED') && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/90 text-amber-900 space-y-1.5">
+                    <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-amber-800">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Account Not Activated</span>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Resident #{selectedResident.resident_number} ({selectedResident.full_name}) has not completed account activation. Security levy payments cannot be made until this resident ID has been activated.
+                    </p>
+                  </div>
+                )}
 
                 {/* PAYMENT DURATION SELECTOR: 1 MONTH OR 12 MONTHS ONLY */}
                 <div className="space-y-2">
@@ -560,17 +611,27 @@ export const PaystackPaymentModal: React.FC<PaystackPaymentModalProps> = ({
                     {/* Pay with Paystack Button */}
                     <button
                       onClick={handleProceedToPayment}
-                      disabled={selectedResident.status !== 'Active'}
-                      className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer"
+                      disabled={
+                        selectedResident.status !== 'Active' || 
+                        !selectedResident.account_activated || 
+                        selectedResident.account_status === 'NOT ACTIVATED'
+                      }
+                      className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer"
                     >
                       <CreditCard className="w-4 h-4" />
                       <span>Proceed to Pay {durationMonths === 12 ? '12 Months' : '1 Month'} ({formatNaira(levyAmount)})</span>
                     </button>
 
-                    <div className="flex items-center justify-center gap-2 text-center text-[11px] text-slate-400">
-                      <Lock className="w-3 h-3 text-slate-400" />
-                      <span>Secure payment handled directly via Paystack gateway</span>
-                    </div>
+                    {(!selectedResident.account_activated || selectedResident.account_status === 'NOT ACTIVATED') ? (
+                      <p className="text-center text-xs font-semibold text-rose-600">
+                        Payment blocked: Resident #{selectedResident.resident_number} must be activated before making security levy payments.
+                      </p>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 text-center text-[11px] text-slate-400">
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Secure payment handled directly via Paystack gateway</span>
+                      </div>
+                    )}
                   </div>
                 )}
 

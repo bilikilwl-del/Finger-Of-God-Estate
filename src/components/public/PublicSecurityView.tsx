@@ -128,6 +128,14 @@ export const PublicSecurityView: React.FC<PublicSecurityViewProps> = ({
       const clean = lookupNumber.trim().padStart(3, '0');
       const res = await dbService.lookupResidentPublic(clean);
       if (res.found && res.resident) {
+        const foundRes = res.resident as any;
+        if (!foundRes.account_activated || foundRes.account_status === 'NOT ACTIVATED') {
+          setLookupMessage({ 
+            text: `Resident #${clean} (${res.resident.full_name}) has not been activated yet. Only activated residents can make security levy payments. Please activate your account first.`, 
+            type: 'error' 
+          });
+          return;
+        }
         setTargetResident(res.resident as Resident);
         setLookupMessage({ text: `Identified: ${res.resident.full_name} (${res.resident.house_number || 'Plot ' + clean})`, type: 'success' });
         setIsPayModalOpen(true);

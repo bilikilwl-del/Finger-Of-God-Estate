@@ -1948,14 +1948,33 @@ export const dbService = {
       }
     }
 
-    // Fetch from authoritative backend API if admin session is active
+    // Fetch from authoritative backend API (admin or resident session)
     try {
-      const headers = await getAdminAuthHeaders();
-      const res = await fetch('/api/payments/all', { headers });
+      const adminHeaders = await getAdminAuthHeaders();
+      const resToken = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = { ...adminHeaders };
+      if (!headers['Authorization'] && resToken) {
+        headers['Authorization'] = `Bearer ${resToken}`;
+      }
+      const qParam = filters?.residentNumber ? `?residentNumber=${encodeURIComponent(filters.residentNumber)}` : '';
+      const res = await fetch(`/api/payments/all${qParam}`, { headers });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.payments)) {
-          saveLocalPayments(json.payments);
+          const currentLocal = getLocalPayments();
+          for (const sP of json.payments) {
+            const idx = currentLocal.findIndex(p => 
+              String(p.resident_number || '').trim().padStart(3, '0') === String(sP.resident_number || '').trim().padStart(3, '0') &&
+              Number(p.period_month) === Number(sP.period_month) &&
+              Number(p.period_year) === Number(sP.period_year)
+            );
+            if (idx >= 0) {
+              currentLocal[idx] = { ...currentLocal[idx], ...sP };
+            } else {
+              currentLocal.push(sP);
+            }
+          }
+          saveLocalPayments(currentLocal);
         }
       }
     } catch {
@@ -2232,29 +2251,42 @@ export const dbService = {
   // 8. CONFIRM & SYNC VERIFIED PAYMENT
   async confirmVerifiedPayment(data: {
     payment: MonthlyPayment;
+    payments?: MonthlyPayment[];
     transaction: PaymentTransaction;
     receipt: Receipt;
     adminEmail?: string;
   }): Promise<void> {
-    const { payment, transaction, receipt, adminEmail = 'system' } = data;
+    const { payment, payments: batchPayments, transaction, receipt, adminEmail = 'system' } = data;
     const verifiedPaidAmount = Number(receipt.amount_paid || transaction.amount_paid || payment.amount_paid || payment.amount_due || 1500);
+
+    const allPaymentsToSync: MonthlyPayment[] = (batchPayments && batchPayments.length > 0)
+      ? batchPayments
+      : [payment];
 
     // 1. Update in-memory & Local Storage
     const payments = getLocalPayments();
-    const pIdx = payments.findIndex(p => 
-      p.resident_number === payment.resident_number &&
-      p.period_month === payment.period_month &&
-      p.period_year === payment.period_year
-    );
-    if (pIdx !== -1) {
-      payments[pIdx] = { ...payments[pIdx], ...payment, status: 'PAID', amount_paid: Number(payment.amount_paid || 1500) };
-    } else {
-      payments.push({ ...payment, status: 'PAID', amount_paid: Number(payment.amount_paid || 1500) });
+    for (const pToSave of allPaymentsToSync) {
+      const pIdx = payments.findIndex(p => 
+        String(p.resident_number || '').trim().padStart(3, '0') === String(pToSave.resident_number || '').trim().padStart(3, '0') &&
+        Number(p.period_month) === Number(pToSave.period_month) &&
+        Number(p.period_year) === Number(pToSave.period_year)
+      );
+      const paidRecord: MonthlyPayment = {
+        ...pToSave,
+        status: 'PAID',
+        amount_paid: Number(pToSave.amount_paid || 1500),
+        paid_at: pToSave.paid_at || new Date().toISOString()
+      };
+      if (pIdx !== -1) {
+        payments[pIdx] = { ...payments[pIdx], ...paidRecord };
+      } else {
+        payments.push(paidRecord);
+      }
     }
     saveLocalPayments(payments);
 
     const transactions = getLocalTransactions();
-    const tIdx = transactions.findIndex(t => t.transaction_reference === transaction.transaction_reference);
+    const tIdx = transactions.findIndex(t => t.transaction_reference === transaction.transaction_reference || t.paystack_reference === transaction.paystack_reference);
     if (tIdx !== -1) {
       transactions[tIdx] = { ...transactions[tIdx], ...transaction, status: 'PAID', amount_paid: verifiedPaidAmount };
     } else {
@@ -2263,9 +2295,12 @@ export const dbService = {
     saveLocalTransactions(transactions);
 
     const receipts = getLocalReceipts();
-    const rIdx = receipts.findIndex(r => r.paystack_reference === receipt.paystack_reference);
+    const rIdx = receipts.findIndex(r => r.paystack_reference === receipt.paystack_reference || r.receipt_number === receipt.receipt_number);
     if (rIdx === -1) {
       receipts.unshift(receipt);
+      saveLocalReceipts(receipts);
+    } else {
+      receipts[rIdx] = { ...receipts[rIdx], ...receipt };
       saveLocalReceipts(receipts);
     }
 
@@ -2273,17 +2308,19 @@ export const dbService = {
     if (isSupabaseConfigured && supabase) {
       try {
         if (!isTableMarkedMissing('monthly_payments')) {
-          await supabase.from('monthly_payments').upsert({
-            resident_id: payment.resident_id,
-            period_month: payment.period_month,
-            period_year: payment.period_year,
-            period_label: payment.period_label,
-            amount_due: payment.amount_due || 1500,
-            amount_paid: payment.amount_paid || 1500,
-            status: 'Paid',
-            due_date: payment.due_date,
-            paid_at: payment.paid_at || new Date().toISOString()
-          }, { onConflict: 'resident_id, period_month, period_year' });
+          for (const pToSync of allPaymentsToSync) {
+            await supabase.from('monthly_payments').upsert({
+              resident_id: pToSync.resident_id,
+              period_month: pToSync.period_month,
+              period_year: pToSync.period_year,
+              period_label: pToSync.period_label,
+              amount_due: pToSync.amount_due || 1500,
+              amount_paid: pToSync.amount_paid || 1500,
+              status: 'PAID',
+              due_date: pToSync.due_date,
+              paid_at: pToSync.paid_at || new Date().toISOString()
+            }, { onConflict: 'resident_id, period_month, period_year' });
+          }
         }
 
         if (!isTableMarkedMissing('payment_transactions')) {

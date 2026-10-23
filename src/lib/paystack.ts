@@ -36,6 +36,7 @@ export interface VerifyPaymentResponse {
   verified: boolean;
   message?: string;
   payment?: any;
+  payments?: any[];
   transaction?: any;
   receipt?: any;
   discrepancy?: boolean;
