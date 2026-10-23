@@ -349,7 +349,28 @@ function saveDbToFile(db: PersistentDatabaseSchema) {
 // Sync helper: Check if Supabase table is available
 const tableAvailabilityCache: Record<string, boolean> = {};
 
+function isSchemaCacheMissingTableError(error: any, tableName?: string): boolean {
+  const msg = String(error?.message || error || '');
+  const code = String(error?.code || '');
+  if (
+    code === 'PGRST205' ||
+    code === '42P01' ||
+    msg.includes('schema cache') ||
+    msg.includes('Could not find the table') ||
+    msg.includes('does not exist')
+  ) {
+    if (tableName) {
+      tableAvailabilityCache[tableName] = false;
+    }
+    return true;
+  }
+  return false;
+}
+
 export async function isTableAvailableInSupabase(tableName: string): Promise<boolean> {
+  if (!isSupabaseAdminConfigured()) {
+    return false;
+  }
   if (tableAvailabilityCache[tableName] !== undefined) {
     return tableAvailabilityCache[tableName];
   }
@@ -359,7 +380,6 @@ export async function isTableAvailableInSupabase(tableName: string): Promise<boo
       tableAvailabilityCache[tableName] = true;
       return true;
     }
-    // If PGRST205 or PGRST116, table not found in schema cache
     tableAvailabilityCache[tableName] = false;
     return false;
   } catch {
@@ -1422,29 +1442,64 @@ export const serverDb = {
   // ==========================================
   async getBuildings(): Promise<any[]> {
     if (!localDb.buildings) localDb.buildings = [];
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('buildings')) {
       try {
         const { data, error } = await supabaseAdmin.from('buildings').select('*').order('house_number', { ascending: true });
         if (!error && Array.isArray(data)) {
-          localDb.buildings = data;
-          saveDbToFile(localDb);
-          return data;
-        }
-        if (error) {
+          if (data.length > 0) {
+            localDb.buildings = data;
+            saveDbToFile(localDb);
+            return data;
+          }
+        } else if (error && !isSchemaCacheMissingTableError(error, 'buildings')) {
           console.warn('[Supabase Warning] getBuildings query error:', error.message);
         }
       } catch (err: any) {
-        console.warn('[Supabase Warning] getBuildings exception:', err?.message);
+        if (!isSchemaCacheMissingTableError(err, 'buildings')) {
+          console.warn('[Supabase Warning] getBuildings exception:', err?.message);
+        }
       }
     }
+
+    // If local buildings list is empty, derive buildings from active residents with house numbers
+    if (localDb.buildings.length === 0 && Array.isArray(localDb.residents)) {
+      const now = new Date().toISOString();
+      const seenHouses = new Set<string>();
+      for (const r of localDb.residents) {
+        const house = String(r.house_number || '').trim();
+        const fullName = String(r.full_name || '').trim();
+        if (house && fullName && !seenHouses.has(house.toLowerCase())) {
+          seenHouses.add(house.toLowerCase());
+          localDb.buildings.push({
+            id: `bldg_${String(r.resident_number || '').trim().padStart(3, '0')}`,
+            house_number: house,
+            building_name: `${house} (${fullName})`,
+            total_flats_count: 1,
+            landlord_name: fullName,
+            landlord_phone: r.phone_number && !String(r.phone_number).startsWith('08000000') ? r.phone_number : null,
+            landlord_email: r.email || null,
+            landlord_resident_id: r.id || null,
+            notes: null,
+            status: 'ACTIVE',
+            created_at: r.created_at || now,
+            updated_at: now
+          });
+        }
+      }
+      if (localDb.buildings.length > 0) {
+        saveDbToFile(localDb);
+      }
+    }
+
     return localDb.buildings;
   },
 
   async getBuildingById(id: string): Promise<any | null> {
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('buildings')) {
       try {
         const { data, error } = await supabaseAdmin.from('buildings').select('*').eq('id', id).maybeSingle();
         if (!error && data) return data;
+        if (error) isSchemaCacheMissingTableError(error, 'buildings');
       } catch {}
     }
     const list = await this.getBuildings();
@@ -1493,16 +1548,20 @@ export const serverDb = {
       updated_at: now
     };
 
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('buildings')) {
       try {
         const { data, error } = await supabaseAdmin.from('buildings').upsert(record).select().maybeSingle();
         if (error) {
-          console.warn('[Supabase Sync Notice] buildings upsert fallback to local vault:', error.message);
+          if (!isSchemaCacheMissingTableError(error, 'buildings')) {
+            console.warn('[Supabase Sync Notice] buildings upsert fallback to local vault:', error.message);
+          }
         } else if (data) {
           record = { ...record, ...data };
         }
       } catch (e: any) {
-        console.warn('[Supabase Sync Notice] buildings upsert exception:', e?.message);
+        if (!isSchemaCacheMissingTableError(e, 'buildings')) {
+          console.warn('[Supabase Sync Notice] buildings upsert exception:', e?.message);
+        }
       }
     }
 
@@ -1543,14 +1602,16 @@ export const serverDb = {
       }
     }
 
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('buildings')) {
       try {
         const { error } = await supabaseAdmin.from('buildings').update(cleanUpdates).eq('id', id).select().maybeSingle();
-        if (error) {
+        if (error && !isSchemaCacheMissingTableError(error, 'buildings')) {
           console.warn('[Supabase Sync Notice] buildings update fallback to local vault:', error.message);
         }
       } catch (e: any) {
-        console.warn('[Supabase Sync Notice] buildings update exception:', e?.message);
+        if (!isSchemaCacheMissingTableError(e, 'buildings')) {
+          console.warn('[Supabase Sync Notice] buildings update exception:', e?.message);
+        }
       }
     }
 
@@ -1568,7 +1629,7 @@ export const serverDb = {
   // ==========================================
   async getFlats(buildingId?: string): Promise<any[]> {
     if (!localDb.flats) localDb.flats = [];
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('flats')) {
       try {
         let query = supabaseAdmin.from('flats').select('*').order('flat_number', { ascending: true });
         if (buildingId) {
@@ -1584,11 +1645,13 @@ export const serverDb = {
           saveDbToFile(localDb);
           return data;
         }
-        if (error) {
+        if (error && !isSchemaCacheMissingTableError(error, 'flats')) {
           console.warn('[Supabase Warning] getFlats query error:', error.message);
         }
       } catch (err: any) {
-        console.warn('[Supabase Warning] getFlats exception:', err?.message);
+        if (!isSchemaCacheMissingTableError(err, 'flats')) {
+          console.warn('[Supabase Warning] getFlats exception:', err?.message);
+        }
       }
     }
     if (buildingId) {
@@ -1598,10 +1661,11 @@ export const serverDb = {
   },
 
   async getFlatById(id: string): Promise<any | null> {
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('flats')) {
       try {
         const { data, error } = await supabaseAdmin.from('flats').select('*').eq('id', id).maybeSingle();
         if (!error && data) return data;
+        if (error) isSchemaCacheMissingTableError(error, 'flats');
       } catch {}
     }
     const list = await this.getFlats();
@@ -1654,16 +1718,20 @@ export const serverDb = {
       updated_at: now
     };
 
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('flats')) {
       try {
         const { data, error } = await supabaseAdmin.from('flats').upsert(record).select().maybeSingle();
         if (error) {
-          console.warn('[Supabase Sync Notice] flats upsert fallback to local vault:', error.message);
+          if (!isSchemaCacheMissingTableError(error, 'flats')) {
+            console.warn('[Supabase Sync Notice] flats upsert fallback to local vault:', error.message);
+          }
         } else if (data) {
           record = { ...record, ...data };
         }
       } catch (e: any) {
-        console.warn('[Supabase Sync Notice] flats upsert exception:', e?.message);
+        if (!isSchemaCacheMissingTableError(e, 'flats')) {
+          console.warn('[Supabase Sync Notice] flats upsert exception:', e?.message);
+        }
       }
     }
 
@@ -1709,14 +1777,16 @@ export const serverDb = {
       cleanUpdates.billing_activated_at = now;
     }
 
-    if (isSupabaseAdminConfigured()) {
+    if (await isTableAvailableInSupabase('flats')) {
       try {
         const { error } = await supabaseAdmin.from('flats').update(cleanUpdates).eq('id', id).select().maybeSingle();
-        if (error) {
+        if (error && !isSchemaCacheMissingTableError(error, 'flats')) {
           console.warn('[Supabase Sync Notice] flats update fallback to local vault:', error.message);
         }
       } catch (e: any) {
-        console.warn('[Supabase Sync Notice] flats update exception:', e?.message);
+        if (!isSchemaCacheMissingTableError(e, 'flats')) {
+          console.warn('[Supabase Sync Notice] flats update exception:', e?.message);
+        }
       }
     }
 
