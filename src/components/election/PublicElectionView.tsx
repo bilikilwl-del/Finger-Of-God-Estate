@@ -22,7 +22,8 @@ import {
   ElectionPosition, 
   ElectionCandidate, 
   ElectionResultSnapshot,
-  ElectionStatus 
+  ElectionStatus,
+  VoterEligibilityStatus
 } from '../../types/election';
 import { EstateSettings, Resident, NavigationTab } from '../../types/database';
 import { electionService } from '../../services/electionService';
@@ -48,6 +49,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
   const [positions, setPositions] = useState<ElectionPosition[]>([]);
   const [candidates, setCandidates] = useState<ElectionCandidate[]>([]);
   const [results, setResults] = useState<ElectionResultSnapshot | null>(null);
+  const [voterStatus, setVoterStatus] = useState<VoterEligibilityStatus | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,7 +76,9 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
     try {
       setError('');
       const data = await electionService.getActiveElection();
+      let targetElection: Election | null = null;
       if (data.success && data.election) {
+        targetElection = data.election;
         setElection(data.election);
         setPositions(data.positions || []);
         setCandidates(data.candidates || []);
@@ -90,6 +94,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
         // Fallback: Check official election by ID
         const fallback = await electionService.getElectionById('aee791a1-d88a-4292-b0d2-0e5f68ea7de8');
         if (fallback.success && fallback.election) {
+          targetElection = fallback.election;
           setElection(fallback.election);
           setPositions(fallback.positions || []);
           setCandidates(fallback.candidates || []);
@@ -97,13 +102,20 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
           setError(data.message || fallback.message || 'No election scheduled at this time.');
         }
       }
+
+      if (targetElection && currentResident) {
+        const statusRes = await electionService.getVoterStatus(targetElection.id);
+        setVoterStatus(statusRes);
+      } else if (!currentResident) {
+        setVoterStatus(null);
+      }
     } catch (err: any) {
       setError(err.message || 'Network error fetching election details.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [currentResident]);
 
   useEffect(() => {
     loadElectionData();
@@ -413,14 +425,31 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
             {/* Call to action column */}
             <div className="flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-3 shrink-0">
               {electionState?.isVotingOpen ? (
-                <button
-                  onClick={() => setIsBallotModalOpen(true)}
-                  className="w-full sm:w-auto px-7 py-3.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Vote className="w-5 h-5" />
-                  <span>Cast Confidential Ballot</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </button>
+                voterStatus?.hasVoted ? (
+                  <div className="bg-emerald-950/90 border border-emerald-500/40 rounded-2xl p-4 text-xs text-emerald-200 max-w-xs space-y-1.5 shadow-lg">
+                    <div className="font-bold text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>Ballot Recorded · Plot #{voterStatus.resident?.resident_number || currentResident?.resident_number}</span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Your confidential ballot for this election has been permanently recorded. Thank you for participating.
+                    </p>
+                    {voterStatus.votedAt && (
+                      <div className="text-[10px] font-mono text-emerald-300/90 pt-1">
+                        Submitted: {formatElectionWat(voterStatus.votedAt)}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsBallotModalOpen(true)}
+                    className="w-full sm:w-auto px-7 py-3.5 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Vote className="w-5 h-5" />
+                    <span>Cast Confidential Ballot</span>
+                    <ArrowRight className="w-4 h-4 ml-1" />
+                  </button>
+                )
               ) : electionState?.key === 'RESULTS_PUBLISHED' ? (
                 <a
                   href="#official-results"
@@ -643,6 +672,107 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
               </section>
             )}
 
+            {/* Resident Voter Eligibility & Account Banner */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs">
+              {currentResident ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                      voterStatus?.hasVoted
+                        ? 'bg-purple-50 border-purple-200 text-purple-700'
+                        : voterStatus?.eligible
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                        : 'bg-amber-50 border-amber-200 text-amber-700'
+                    }`}>
+                      {voterStatus?.hasVoted ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : voterStatus?.eligible ? (
+                        <ShieldCheck className="w-5 h-5" />
+                      ) : (
+                        <AlertCircle className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                          Resident Account: Plot #{currentResident.resident_number} ({currentResident.full_name})
+                        </span>
+                        {voterStatus?.hasVoted ? (
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                            Ballot Cast
+                          </span>
+                        ) : voterStatus?.eligible ? (
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Eligible & Accredited to Vote
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            {voterStatus?.code === 'ACCOUNT_NOT_ACTIVATED' ? 'Activation Required' : 'Ineligible'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        {voterStatus?.reason || (
+                          currentResident.account_activated
+                            ? 'Your resident account is active and accredited for the Estate Executive Election.'
+                            : 'Your resident account must be activated before you can cast a ballot.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {voterStatus?.code === 'ACCOUNT_NOT_ACTIVATED' || !currentResident.account_activated ? (
+                      <button
+                        onClick={() => onOpenResidentLogin('activate')}
+                        className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                      >
+                        Activate Account
+                      </button>
+                    ) : electionState?.isVotingOpen && !voterStatus?.hasVoted && voterStatus?.eligible ? (
+                      <button
+                        onClick={() => setIsBallotModalOpen(true)}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Vote className="w-4 h-4" />
+                        <span>Open Official Ballot</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Resident Account Authentication Required to Vote
+                      </h3>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Only eligible residents with activated accounts (Plots 001–100) may vote. Sign in to your Resident Portal account or activate your slot before voting opens.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => onOpenResidentLogin('login')}
+                      className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Resident Sign In
+                    </button>
+                    <button
+                      onClick={() => onOpenResidentLogin('activate')}
+                      className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Activate Slot
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 2. Electoral Guidelines & Constitutional Rules */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs">
               <div className="flex items-start gap-4">
@@ -654,7 +784,7 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
                     Official Electoral Guidelines & Constitutional Rules
                   </h3>
                   <div className="text-xs sm:text-sm text-slate-600 space-y-1.5 leading-relaxed">
-                    <p>• <strong>Accredited Voting Body:</strong> Only verified landlords and registered residents with allocated Estate Numbers (001–100) are accredited to vote.</p>
+                    <p>• <strong>Accredited Voting Body:</strong> Only verified landlords and registered residents with allocated Estate Numbers (001–100) and activated accounts are accredited to vote.</p>
                     <p>• <strong>Strict 1 Vote per Accredited Property:</strong> Each property is allotted exactly one vote per election cycle. Once cast, the property record is marked as voted.</p>
                     <p>• <strong>Confidential Secret Ballot:</strong> Voter identities and telephone credentials are cryptographically isolated from ballot choices. Nobody, including the administrators, can inspect individual voter ballots.</p>
                     <p>• <strong>Tie Resolution:</strong> {election?.tie_resolution_rule || 'Run-off assembly within 7 days in accordance with Article 8.'}</p>
@@ -851,6 +981,9 @@ export const PublicElectionView: React.FC<PublicElectionViewProps> = ({
           election={election}
           positions={positions}
           candidates={candidates}
+          currentResident={currentResident}
+          voterStatus={voterStatus}
+          onOpenResidentLogin={onOpenResidentLogin}
           onClose={() => setIsBallotModalOpen(false)}
           onVoteCastSuccess={() => {
             loadElectionData();

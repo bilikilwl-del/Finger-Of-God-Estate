@@ -119,7 +119,9 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
     opening_at: '',
     closing_at: '',
     election_rules: '',
-    tie_resolution_rule: ''
+    tie_resolution_rule: '',
+    emergencyOverride: false,
+    emergencyReason: ''
   });
 
   const [voterSearch, setVoterSearch] = useState('');
@@ -160,8 +162,8 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
   // Load details for selected election
   const loadElectionDetails = async (electionId: string) => {
     try {
-      // 1. Get election with positions & candidates
-      const det = await electionService.getElectionById(electionId);
+      // 1. Get election with positions & candidates (includeAdminAuth = true so admin sees all candidate statuses)
+      const det = await electionService.getElectionById(electionId, true);
       if (det.success && det.election) {
         setSelectedElection(det.election);
         setPositions(det.positions || []);
@@ -173,7 +175,9 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
           opening_at: det.election.opening_at || '',
           closing_at: det.election.closing_at || '',
           election_rules: det.election.election_rules || '',
-          tie_resolution_rule: det.election.tie_resolution_rule || ''
+          tie_resolution_rule: det.election.tie_resolution_rule || '',
+          emergencyOverride: false,
+          emergencyReason: ''
         });
       }
 
@@ -615,8 +619,29 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
 
   // Calculate Turnout Metric
   const totalEligible = voters.filter(v => v.eligible).length;
-  const totalVoted = voters.filter(v => v.has_voted).length;
+  const totalActivatedEligible = voters.filter(v => v.eligible && v.account_activated !== false).length;
+  const totalVoted = Math.max(
+    voters.filter(v => v.has_voted).length,
+    Number(selectedElection?.ballots_submitted_count ?? 0)
+  );
   const turnoutPercent = totalEligible > 0 ? Number(((totalVoted / totalEligible) * 100).toFixed(1)) : 0;
+
+  const formatWatDateTime = (dateStr?: string) => {
+    if (!dateStr) return '—';
+    try {
+      return new Date(dateStr).toLocaleString('en-US', {
+        timeZone: 'Africa/Lagos',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }) + ' WAT';
+    } catch {
+      return new Date(dateStr).toLocaleString();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -711,9 +736,8 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
             {selectedElection && (
               <button
                 onClick={() => setShowEditConfigModal(true)}
-                disabled={selectedElection.status === 'OPEN'}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
-                title={selectedElection.status === 'OPEN' ? 'Cannot edit config while voting is OPEN' : 'Edit Rules and Dates'}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5"
+                title={selectedElection.status === 'OPEN' ? 'Protected while OPEN (Emergency Override required)' : 'Edit Rules and Dates'}
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Edit Configuration</span>
@@ -736,21 +760,25 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
         {/* Quick Metrics Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-800/80">
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 font-medium block">Total Turnout</span>
-            <span className="text-xl sm:text-2xl font-bold text-emerald-400">{turnoutPercent}%</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">{totalVoted} / {totalEligible} votes cast</span>
+            <span className="text-[11px] text-slate-400 font-medium block">Accepted Ballots & Turnout</span>
+            <span className="text-xl sm:text-2xl font-bold text-emerald-400">{totalVoted} <span className="text-sm font-semibold text-emerald-300">({turnoutPercent}%)</span></span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{totalVoted} of {totalEligible} eligible residents voted</span>
           </div>
 
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 font-medium block">Accredited Voters</span>
-            <span className="text-xl sm:text-2xl font-bold text-white">{voters.length}</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">Plots 001–100</span>
+            <span className="text-[11px] text-slate-400 font-medium block">Eligible Residents</span>
+            <span className="text-xl sm:text-2xl font-bold text-white">{totalEligible}</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{totalActivatedEligible} activated · {voters.length} total slots</span>
           </div>
 
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
-            <span className="text-[11px] text-slate-400 font-medium block">Active Positions</span>
-            <span className="text-xl sm:text-2xl font-bold text-white">{positions.filter(p => p.active).length}</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">{positions.length} configured</span>
+            <span className="text-[11px] text-slate-400 font-medium block">Election Schedule (WAT)</span>
+            <span className="text-xs sm:text-sm font-bold text-white block truncate" title={formatWatDateTime(selectedElection?.opening_at)}>
+              Opens: {formatWatDateTime(selectedElection?.opening_at)}
+            </span>
+            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={formatWatDateTime(selectedElection?.closing_at)}>
+              Closes: {formatWatDateTime(selectedElection?.closing_at)}
+            </span>
           </div>
 
           <div className="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
@@ -758,7 +786,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
             <span className="text-xl sm:text-2xl font-bold text-white">
               {candidates.filter(c => c.status === 'APPROVED').length}
             </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">{candidates.length} total nominees</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{positions.filter(p => p.active).length} active positions · {candidates.length} total nominees</span>
           </div>
         </div>
       </div>
@@ -865,12 +893,12 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
 
             <div className="space-y-3 text-xs">
               <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Opening Date / Time:</span>
-                <span className="text-slate-900 font-bold">{new Date(selectedElection.opening_at).toLocaleString()}</span>
+                <span className="text-slate-500 font-medium">Opening Date / Time (WAT):</span>
+                <span className="text-slate-900 font-bold">{formatWatDateTime(selectedElection.opening_at)}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
-                <span className="text-slate-500 font-medium">Closing Date / Time:</span>
-                <span className="text-slate-900 font-bold">{new Date(selectedElection.closing_at).toLocaleString()}</span>
+                <span className="text-slate-500 font-medium">Closing Date / Time (WAT):</span>
+                <span className="text-slate-900 font-bold">{formatWatDateTime(selectedElection.closing_at)}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Secret Ballot Enforced:</span>
@@ -878,7 +906,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100">
                 <span className="text-slate-500 font-medium">Voting Restriction:</span>
-                <span className="text-slate-900 font-bold">1 Vote per Accredited Property (001–100)</span>
+                <span className="text-slate-900 font-bold">1 Vote per Activated Accredited Property (001–100)</span>
               </div>
             </div>
 
@@ -1307,6 +1335,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
                 <tr>
                   <th className="px-4 py-3">Plot #</th>
                   <th className="px-4 py-3">Accredited Property</th>
+                  <th className="px-4 py-3">Account Status</th>
                   <th className="px-4 py-3">Eligibility Status</th>
                   <th className="px-4 py-3">Voting Status</th>
                   <th className="px-4 py-3">Ballot Cast Time</th>
@@ -1321,6 +1350,21 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
                     </td>
                     <td className="px-4 py-3 font-medium">
                       {voter.full_name || `Estate Property Plot ${voter.resident_number}`}
+                    </td>
+                    <td className="px-4 py-3">
+                      {voter.account_activated === false ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Not Activated
+                        </span>
+                      ) : voter.account_status === 'SUSPENDED' || voter.resident_status === 'Suspended' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                          Suspended
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Activated
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {voter.eligible ? (
@@ -1403,7 +1447,7 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
               </h3>
               <p className="text-xs text-slate-500">
                 {selectedElection.status === 'OPEN' 
-                  ? 'Notice: Official tallies should only be executed once voting is closed.'
+                  ? 'Ballot totals are cryptographically sealed while voting is OPEN. Close the election first to calculate and certify results.'
                   : 'Calculate votes per position, evaluate winning candidates, and verify tie conditions.'}
               </p>
             </div>
@@ -1411,14 +1455,15 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={handleCalculateResults}
-                disabled={actionLoading}
-                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2"
+                disabled={actionLoading || selectedElection.status === 'OPEN'}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2"
+                title={selectedElection.status === 'OPEN' ? 'Ballot tally is sealed until voting closes' : 'Calculate anonymous ballots'}
               >
                 <Trophy className="w-4 h-4 text-amber-400" />
                 <span>Calculate Anonymous Ballots</span>
               </button>
 
-              {resultsSnapshot && selectedElection.status !== 'RESULTS_PUBLISHED' && (
+              {resultsSnapshot && selectedElection.status !== 'RESULTS_PUBLISHED' && selectedElection.status !== 'OPEN' && (
                 <button
                   onClick={() => setShowPublishConfirmModal(true)}
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs flex items-center gap-2"
@@ -1953,6 +1998,43 @@ export const AdminElectionView: React.FC<AdminElectionViewProps> = ({
                   className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono"
                 />
               </div>
+
+              {selectedElection && ['OPEN', 'PAUSED', 'CLOSED', 'RESULTS_PUBLISHED'].includes(selectedElection.status) && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl space-y-2.5 text-xs">
+                  <div className="flex items-start gap-2 text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold block">Protected Election State ({selectedElection.status})</strong>
+                      <span>Election settings are locked once voting begins. Modifying configuration requires an audited Emergency Procedure override.</span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 font-bold text-amber-950 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={configForm.emergencyOverride}
+                      onChange={(e) => setConfigForm({ ...configForm, emergencyOverride: e.target.checked })}
+                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Invoke Audited Emergency Configuration Override</span>
+                  </label>
+                  {configForm.emergencyOverride && (
+                    <div>
+                      <label className="text-[11px] font-bold text-amber-900 block mb-1">
+                        Documented Emergency Justification (Recorded in Immutable Audit Log) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        minLength={10}
+                        placeholder="Enter detailed justification (min 10 characters)..."
+                        value={configForm.emergencyReason}
+                        onChange={(e) => setConfigForm({ ...configForm, emergencyReason: e.target.value })}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-lg text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button

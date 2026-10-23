@@ -35,6 +35,7 @@ export interface Election {
   updated_at: string;
   positions?: ElectionPosition[];
   stats?: ElectionStats;
+  ballots_submitted_count?: number;
 }
 
 export interface ElectionPosition {
@@ -72,6 +73,9 @@ export interface ElectionVoter {
   full_name?: string;
   phone_number?: string;
   house_number?: string;
+  account_activated?: boolean;
+  account_status?: string;
+  resident_status?: string;
   eligible: boolean;
   eligibility_reason: string;
   authenticated_at?: string | null;
@@ -79,6 +83,23 @@ export interface ElectionVoter {
   has_voted: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface VoterEligibilityStatus {
+  authenticated: boolean;
+  eligible: boolean;
+  hasVoted: boolean;
+  votedAt?: string | null;
+  code?: string;
+  reason?: string;
+  resident?: {
+    resident_number: string;
+    full_name: string;
+    house_number: string;
+    account_activated: boolean;
+    account_status: string;
+    status: string;
+  };
 }
 
 export interface ElectionBallotChoice {
@@ -137,6 +158,8 @@ export interface ElectionAuditLog {
   election_id: string;
   action: string;
   actor_email: string;
+  actor_type?: string;
+  actor_reference?: string;
   record_id?: string;
   description: string;
   metadata?: Record<string, any>;

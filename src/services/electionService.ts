@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, getFreshAdminToken, residentSessionService } from '../lib/supabase';
 import { 
   Election, 
   ElectionPosition, 
@@ -7,10 +7,9 @@ import {
   ElectionStats, 
   ElectionResultSnapshot, 
   ElectionAuditLog,
-  ElectionStatus
+  ElectionStatus,
+  VoterEligibilityStatus
 } from '../types/election';
-
-import { getFreshAdminToken } from '../lib/supabase';
 
 async function getAdminAuthHeader(explicitToken?: string): Promise<Record<string, string>> {
   if (explicitToken && explicitToken !== 'local_session') {
@@ -24,6 +23,25 @@ async function getAdminAuthHeader(explicitToken?: string): Promise<Record<string
   } catch (err) {
     console.warn('Could not retrieve admin token for election:', err);
   }
+  return {};
+}
+
+async function getResidentAuthHeader(explicitToken?: string): Promise<Record<string, string>> {
+  if (explicitToken) {
+    return { Authorization: `Bearer ${explicitToken}` };
+  }
+  try {
+    const localToken = residentSessionService.getResidentToken();
+    if (localToken) {
+      return { Authorization: `Bearer ${localToken}` };
+    }
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        return { Authorization: `Bearer ${session.access_token}` };
+      }
+    }
+  } catch {}
   return {};
 }
 
@@ -51,7 +69,7 @@ export const electionService = {
     }
   },
 
-  async getElectionById(id: string): Promise<{
+  async getElectionById(id: string, includeAdminAuth: boolean = false): Promise<{
     success: boolean;
     election?: Election;
     positions?: ElectionPosition[];
@@ -59,7 +77,8 @@ export const electionService = {
     message?: string;
   }> {
     try {
-      const res = await fetch(`/api/election/${id}`);
+      const headers = includeAdminAuth ? await getAdminAuthHeader() : {};
+      const res = await fetch(`/api/election/${id}`, { headers });
       return await res.json();
     } catch (err: any) {
       return { success: false, message: err.message || 'Error fetching election.' };
@@ -94,29 +113,54 @@ export const electionService = {
     }
   },
 
-  // Step 1: Initiate Voter OTP Authentication
-  async initiateVoterAuth(residentNumber: string, electionId?: string): Promise<{
+  // Authoritative Resident Eligibility & Ballot Status Check
+  async getVoterStatus(electionId?: string, residentToken?: string): Promise<VoterEligibilityStatus & { success: boolean }> {
+    try {
+      const headers = await getResidentAuthHeader(residentToken);
+      const query = electionId ? `?electionId=${encodeURIComponent(electionId)}` : '';
+      const res = await fetch(`/api/election/voter-status${query}`, { headers });
+      return await res.json();
+    } catch (err: any) {
+      return {
+        success: false,
+        authenticated: false,
+        eligible: false,
+        hasVoted: false,
+        reason: err.message || 'Unable to verify voter status.'
+      };
+    }
+  },
+
+  // Step 1: Initiate Voter Authentication (Supports authenticated Resident Portal session OR OTP)
+  async initiateVoterAuth(residentNumber?: string, electionId?: string, residentToken?: string): Promise<{
     success: boolean;
+    authenticatedViaAccount?: boolean;
+    code?: string;
     message: string;
     sessionToken?: string;
+    residentNumber?: string;
+    residentName?: string;
+    houseNumber?: string;
     maskedPhone?: string;
     expiresAt?: string;
   }> {
     try {
+      const authHeaders = await getResidentAuthHeader(residentToken);
       const res = await fetch('/api/election/auth/initiate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ residentNumber, electionId })
       });
       return await res.json();
     } catch (err: any) {
-      return { success: false, message: err.message || 'Failed to request verification code.' };
+      return { success: false, message: err.message || 'Failed to initiate voter verification.' };
     }
   },
 
   // Step 2: Verify 6-digit OTP
   async verifyVoterOtp(sessionToken: string, otpCode: string): Promise<{
     success: boolean;
+    code?: string;
     message: string;
     voter?: { resident_number: string; eligible: boolean };
   }> {
@@ -137,16 +181,19 @@ export const electionService = {
     sessionToken: string;
     electionId: string;
     selections: { positionId: string; candidateId: string }[];
-  }): Promise<{
+    idempotencyKey?: string;
+  }, residentToken?: string): Promise<{
     success: boolean;
+    code?: string;
     message: string;
     confirmationCode?: string;
     submittedAt?: string;
   }> {
     try {
+      const authHeaders = await getResidentAuthHeader(residentToken);
       const res = await fetch('/api/election/ballot/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       return await res.json();
@@ -191,8 +238,13 @@ export const electionService = {
     }
   },
 
-  async updateAdminElection(id: string, payload: Partial<Election>, token?: string): Promise<{
+  async updateAdminElection(
+    id: string,
+    payload: Partial<Election> & { emergencyOverride?: boolean; emergencyReason?: string },
+    token?: string
+  ): Promise<{
     success: boolean;
+    code?: string;
     election?: Election;
     message?: string;
   }> {
@@ -350,6 +402,7 @@ export const electionService = {
   async syncVoters(id: string, token?: string): Promise<{
     success: boolean;
     count?: number;
+    eligibleCount?: number;
     message?: string;
   }> {
     try {
@@ -398,6 +451,7 @@ export const electionService = {
 
   async calculateResults(id: string, token?: string): Promise<{
     success: boolean;
+    code?: string;
     results?: ElectionResultSnapshot;
     message?: string;
   }> {
@@ -413,9 +467,11 @@ export const electionService = {
     }
   },
 
-  async publishResults(id: string, results: ElectionResultSnapshot, token?: string): Promise<{
+  async publishResults(id: string, results?: ElectionResultSnapshot, token?: string): Promise<{
     success: boolean;
+    code?: string;
     election?: Election;
+    results?: ElectionResultSnapshot;
     message?: string;
   }> {
     try {
