@@ -19,12 +19,10 @@ import {
   Landmark,
   Calendar,
   Clock,
-  Lock,
   Layers,
   Compass,
   Building,
-  KeyRound,
-  ExternalLink
+  KeyRound
 } from 'lucide-react';
 import {
   EstateSettings,
@@ -48,13 +46,21 @@ interface PublicHomeViewProps {
   onOpenResidentLogin: (initialTab?: 'login' | 'activate') => void;
 }
 
-// Curated high-resolution photography assets from reputable sources (Unsplash)
+// Curated high-resolution photography assets using authentic estate road photograph & verified residential imagery
 const PHOTO_ASSETS = {
-  hero: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
+  // Supplied real estate road photograph (PNG original + WebP optimized for fast loading)
+  estateRoadPng: '/assets/aistudio/Patterned_Paver_Driveway_with_Landscaped_Curb_6b5e79c2.png',
+  estateRoadWebp: '/assets/aistudio/Patterned_Paver_Driveway_with_Landscaped_Curb_6b5e79c2.webp',
   welcomeVilla: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
-  roadPavingMain: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&w=1200&q=80',
+  roadPavingMain: '/assets/aistudio/Patterned_Paver_Driveway_with_Landscaped_Curb_6b5e79c2.webp',
   roadDrainageDetail: 'https://images.unsplash.com/photo-1590486803833-1c5dc8ddd4c8?auto=format&fit=crop&w=800&q=80',
   gallery: [
+    {
+      url: '/assets/aistudio/Patterned_Paver_Driveway_with_Landscaped_Curb_6b5e79c2.webp',
+      title: 'Interlocking Road & Drainage Corridor',
+      category: 'Estate Infrastructure',
+      caption: 'Patterned interlocking road pavers, drainage channels, black-and-white kerbs, and manicured green hedges.'
+    },
     {
       url: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
       title: 'Modern Residential Architecture',
@@ -78,12 +84,6 @@ const PHOTO_ASSETS = {
       title: 'Greenery & Walkways',
       category: 'Environment',
       caption: 'Tree-lined verges and well-maintained residential surroundings contributing to clean estate living.'
-    },
-    {
-      url: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1000&q=80',
-      title: 'Secure Access & Perimeter',
-      category: 'Security Perimeter',
-      caption: 'Access-controlled main entry corridor with dedicated physical security surveillance.'
     },
     {
       url: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=1000&q=80',
@@ -229,7 +229,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
         ogType="website"
       />
 
-      {/* Section A: Header and Navigation */}
+      {/* Section A: Header and Navigation (Transparent over Hero -> Solid on Scroll) */}
       <PublicNavbar
         currentTab="home"
         estateSettings={estateSettings}
@@ -295,88 +295,105 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
       )}
 
       <main className="flex-1">
-        {/* Section B: Hero Section with Real Photograph */}
-        <section className="relative min-h-[580px] lg:min-h-[660px] flex items-center bg-slate-900 text-white overflow-hidden">
-          {/* High-Resolution Real Residential Photograph */}
-          <div className="absolute inset-0 z-0">
-            <img
-              src={PHOTO_ASSETS.hero}
-              alt="Peaceful residential houses with paved road and landscaped trees in a modern estate"
-              className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out"
-              referrerPolicy="no-referrer"
-            />
-            {/* Carefully balanced cinematic dark scrim for contrast & legibility */}
+        {/* Section B: Hero Section with Real Supplied Estate Road Photograph */}
+        <section className="relative min-h-[85vh] sm:min-h-[88vh] lg:min-h-[92vh] flex items-center bg-[#0F172A] text-white overflow-hidden">
+          {/* Full-bleed real photograph background with smooth, slow zoom animation & picture optimization */}
+          <div className="absolute inset-0 z-0 overflow-hidden bg-slate-900 select-none pointer-events-none">
+            <picture className="w-full h-full block">
+              <source type="image/webp" srcSet={PHOTO_ASSETS.estateRoadWebp} />
+              <img
+                src={PHOTO_ASSETS.estateRoadPng}
+                alt="Finger of God Estate interlocking paved road, drainage channels, black-and-white kerbs, and green hedges"
+                className="w-full h-full object-cover object-[72%_35%] sm:object-[65%_42%] lg:object-[68%_50%] animate-hero-zoom transition-transform"
+                loading="eager"
+                fetchPriority="high"
+              />
+            </picture>
+
+            {/* Directional subtle dark gradient overlays preserving road, kerbs, grates, and hedges visibility */}
+            {/* Desktop: gradient on the left side ensures text contrast while leaving right side open and clear */}
             <div
-              className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/40"
+              className="hidden lg:block absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/50 via-55% to-transparent"
               aria-hidden="true"
             />
+            {/* Mobile/Tablet: vertical gradient for readability */}
             <div
-              className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/25"
+              className="lg:hidden absolute inset-0 bg-gradient-to-t from-slate-950/92 via-slate-950/70 to-slate-950/40"
+              aria-hidden="true"
+            />
+            {/* Gentle top and bottom darkening for clean edge blending */}
+            <div
+              className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none"
               aria-hidden="true"
             />
           </div>
 
-          <div className="relative z-10 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 w-full">
-            <div className="max-w-3xl">
-              {/* Quiet editorial location kicker (Zero-pill discipline) */}
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium text-emerald-200/90 mb-4 tracking-wide uppercase">
-                <span>Finger of God Estate</span>
-                <span aria-hidden="true" className="text-emerald-400/60">·</span>
-                <span>Iyiaba, Asaba, Delta State</span>
-                <span aria-hidden="true" className="text-emerald-400/60">·</span>
-                <span>Established 2021</span>
+          <div className="relative z-10 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 w-full">
+            <div className="max-w-2xl lg:max-w-3xl">
+              {/* 1. Estate Name & 2. Location Subtitle */}
+              <div className="inline-flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 text-xs sm:text-sm font-semibold mb-5 tracking-wide text-emerald-300">
+                <span className="tracking-widest uppercase text-white font-bold text-xs sm:text-sm">
+                  FINGER OF GOD ESTATE
+                </span>
+                <span aria-hidden="true" className="hidden sm:inline-block text-emerald-400/60">·</span>
+                <div className="flex items-center gap-1.5 text-slate-200 font-medium text-xs sm:text-sm">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Iyiaba, Asaba, Delta State, Nigeria</span>
+                </div>
               </div>
 
-              {/* Primary Headline */}
+              {/* 3. Welcoming Headline */}
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.5rem] font-bold text-white tracking-tight leading-[1.12] mb-6 [text-wrap:balance]">
-                Building a Better Community, Together.
+                A Better Community. A Shared Vision.
               </h1>
 
-              {/* Supporting Natural Copy */}
-              <p className="text-base sm:text-lg md:text-xl text-slate-200 font-normal leading-relaxed mb-8 max-w-2xl">
-                Welcome to Finger of God Estate, Iyiaba, Asaba — a community committed to responsible
-                management, transparent contributions, and continuous neighbourhood development.
+              {/* 4. Short Description */}
+              <p className="text-base sm:text-lg md:text-xl text-slate-200/95 font-normal leading-relaxed mb-8 max-w-2xl">
+                Welcome to Finger of God Estate — an organised, peaceful residential community
+                committed to transparent administration, secure family living, and continuous road
+                and civil infrastructure development.
               </p>
 
-              {/* Action Buttons */}
+              {/* 6. Prominent Buttons: Resident Login & Explore the Estate */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 mb-10">
                 <button
                   type="button"
                   onClick={() => (currentResident ? onNavigate('resident_portal') : onOpenResidentLogin('login'))}
-                  className="px-6 py-3.5 bg-[#0F382A] hover:bg-[#164E3A] text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  className="px-6 py-3.5 bg-[#0F382A] hover:bg-[#134E39] text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-[0.99]"
                 >
                   <UserCheck className="w-4 h-4 text-emerald-300" />
-                  <span>Enter Resident Portal</span>
+                  <span>{currentResident ? 'Open Resident Portal' : 'Resident Login'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => scrollToSection('welcome')}
-                  className="px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white border border-white/25 hover:border-white/40 text-sm font-semibold rounded-lg backdrop-blur-sm transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  className="px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white border border-white/30 hover:border-white/50 text-sm font-semibold rounded-lg backdrop-blur-sm transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-[0.99]"
                 >
-                  <span>Explore Our Community</span>
+                  <Compass className="w-4 h-4 text-emerald-300" />
+                  <span>Explore the Estate</span>
                   <ChevronRight className="w-4 h-4 text-slate-300" />
                 </button>
               </div>
 
-              {/* Factual Trust Indicators Bar */}
-              <div className="pt-6 border-t border-white/15 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 text-left">
+              {/* Real Road & Estate Highlights Strip */}
+              <div className="pt-6 border-t border-white/20 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 text-left">
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums">2021</div>
+                  <div className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums">2021</div>
                   <div className="text-xs text-slate-300 mt-0.5">Established Year</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums">Plots 001–100</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Demarcated Plots</div>
+                  <div className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums">Paved Roads</div>
+                  <div className="text-xs text-slate-300 mt-0.5">Interlocking Pavers &amp; Drains</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums">24 / 7</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Gate Access Patrol</div>
+                  <div className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums">Plots 001–100</div>
+                  <div className="text-xs text-slate-300 mt-0.5">Demarcated Registry</div>
                 </div>
                 <div>
-                  <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums">100%</div>
-                  <div className="text-xs text-slate-300 mt-0.5">Public Financial Ledger</div>
+                  <div className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums">24 / 7</div>
+                  <div className="text-xs text-slate-300 mt-0.5">Gated Security Patrol</div>
                 </div>
               </div>
             </div>
@@ -399,7 +416,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                   />
                   {/* Subtle contextual caption banner */}
                   <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-                    <span className="font-medium text-slate-800">Residential Environment & Greenery</span>
+                    <span className="font-medium text-slate-800">Residential Environment &amp; Greenery</span>
                     <span>1 Ogbueshi Ugboko St Corridor</span>
                   </div>
                 </div>
@@ -438,7 +455,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                     onClick={() => onNavigate('security_public')}
                     className="inline-flex items-center gap-2 text-sm font-semibold text-[#0F382A] hover:text-[#134E39] transition-colors cursor-pointer"
                   >
-                    <span>Read security & gate guidelines</span>
+                    <span>Read security &amp; gate guidelines</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                   <span aria-hidden="true" className="text-slate-300">·</span>
@@ -447,7 +464,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                     onClick={() => onNavigate('documents')}
                     className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
                   >
-                    <span>View community bylaws & constitution</span>
+                    <span>View community bylaws &amp; constitution</span>
                     <ArrowUpRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -525,7 +542,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                 </div>
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span>Leadership</span>
-                  <span className="font-medium text-slate-800">Chairman & Executive</span>
+                  <span className="font-medium text-slate-800">Chairman &amp; Executive</span>
                 </div>
               </div>
 
@@ -604,7 +621,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                   Infrastructure Stewardship
                 </div>
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 tracking-tight leading-snug mb-5 [text-wrap:balance]">
-                  Community Development & Road Modernisation
+                  Community Development &amp; Road Modernisation
                 </h2>
                 <p className="text-slate-600 text-sm sm:text-base leading-relaxed mb-6">
                   Well-paved streets, structured stormwater drainage, and reliable environmental maintenance are
@@ -677,13 +694,15 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               {/* Right Side: High-Resolution Real Civil Paving Photographs */}
               <div className="lg:col-span-6 space-y-4">
                 <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100">
-                  <img
-                    src={PHOTO_ASSETS.roadPavingMain}
-                    alt="Interlocking paved road with clean residential curbing and curbside drainage"
-                    className="w-full h-[280px] sm:h-[320px] object-cover object-center"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
+                  <picture className="w-full h-[280px] sm:h-[320px] block">
+                    <source type="image/webp" srcSet={PHOTO_ASSETS.estateRoadWebp} />
+                    <img
+                      src={PHOTO_ASSETS.estateRoadPng}
+                      alt="Finger of God Estate interlocking paved road with clean curbing and curbside drainage"
+                      className="w-full h-[280px] sm:h-[320px] object-cover object-center"
+                      loading="lazy"
+                    />
+                  </picture>
                   <div className="p-3.5 bg-white border-t border-slate-100 text-xs text-slate-600 flex items-center justify-between">
                     <span className="font-medium text-slate-800">Interlocking Paved Avenue Standard</span>
                     <span>Durable All-Weather Surface</span>
@@ -709,7 +728,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                       "Collective contributions ensure our streets remain navigable, protect our vehicles, and appreciate our property values."
                     </div>
                     <div className="text-[11px] font-medium text-slate-500 pt-3 border-t border-slate-200/60 mt-3">
-                      Works & Infrastructure Committee
+                      Works &amp; Infrastructure Committee
                     </div>
                   </div>
                 </div>
@@ -879,7 +898,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                       ) : (
                         <>
                           <CreditCard className="w-4 h-4 text-emerald-300" />
-                          <span>Verify & Proceed to Payment</span>
+                          <span>Verify &amp; Proceed to Payment</span>
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
@@ -919,7 +938,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                 </p>
               </div>
               <div className="text-xs text-slate-500">
-                <span>Representative residential photography</span>
+                <span>Authentic estate infrastructure &amp; residential views</span>
               </div>
             </div>
 
@@ -944,7 +963,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
                       />
                       {/* Quiet Scrim & Details */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
-                      
+
                       <div className="absolute bottom-0 inset-x-0 p-5 text-white">
                         <div className="text-[11px] font-medium text-emerald-300 uppercase tracking-wider mb-1">
                           {item.category}
@@ -1094,7 +1113,7 @@ export const PublicHomeView: React.FC<PublicHomeViewProps> = ({
               {/* Contact Info */}
               <div className="lg:col-span-5">
                 <div className="text-xs font-semibold text-[#0F382A] tracking-wider uppercase mb-2">
-                  Secretariat & Security Liaison
+                  Secretariat &amp; Security Liaison
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-4">
                   Connect with the Estate Administration

@@ -225,3 +225,29 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Subtle Slow Hero Background Zoom Animation (Restrained Ken Burns) */
+@keyframes heroKenBurns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.06) translate3d(-1%, -0.5%, 0);
+  }
+  100% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+.animate-hero-zoom {
+  animation: heroKenBurns 30s ease-in-out infinite alternate;
+  will-change: transform;
+  transform-origin: 65% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-zoom {
+    animation: none !important;
+    transform: none !important;
+  }
+}
