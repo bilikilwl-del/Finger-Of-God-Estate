@@ -10,6 +10,7 @@ import {
   CreditCard, 
   Building2, 
   Printer, 
+  Download,
   ExternalLink,
   ArrowRight,
   Clock,
@@ -21,6 +22,7 @@ import { PublicReceiptVerification } from '../../types/database';
 import { formatNaira } from '../../lib/paystack';
 import { EstateLogo } from '../common/EstateLogo';
 import { SEOHead } from '../common/SEOHead';
+import { downloadOfficialReceiptPdf, printOfficialReceipt } from '../../lib/pdfReceiptGenerator';
 
 interface ReceiptVerificationViewProps {
   initialReceiptNumber?: string;
@@ -281,6 +283,67 @@ export const ReceiptVerificationView: React.FC<ReceiptVerificationViewProps> = (
                     <span className="font-mono text-xs font-semibold text-slate-700 break-all block mt-0.5">
                       {result.receipt.payment_gateway} • {result.receipt.paystack_reference}
                     </span>
+                  </div>
+                </div>
+
+                {/* PDF Download & Print Actions */}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Download or print this verified receipt for your official records:
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const r = result.receipt!;
+                        printOfficialReceipt({
+                          receiptNumber: r.receipt_number,
+                          levyType: 'SECURITY_LEVY',
+                          levyTitle: 'Monthly Resident Security Levy',
+                          residentNumber: r.resident_number || 'N/A',
+                          residentName: r.resident_name || 'Verified Resident',
+                          houseNumber: r.house_number || 'Plot Plot',
+                          periodCovered: r.period_covered,
+                          amountPaid: r.amount_paid || 1500,
+                          currency: 'NGN',
+                          paymentDate: r.payment_date,
+                          paymentReference: r.paystack_reference,
+                          status: r.status,
+                          estateName: 'Finger of God Estate',
+                          estateSubtitle: 'RESIDENT SECURITY & INFRASTRUCTURE PORTAL',
+                          estateAddress: 'Off Okpanam Road, Asaba, Delta State, Nigeria'
+                        });
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Print Receipt</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const r = result.receipt!;
+                        downloadOfficialReceiptPdf({
+                          receiptNumber: r.receipt_number,
+                          levyType: 'SECURITY_LEVY',
+                          levyTitle: 'Monthly Resident Security Levy',
+                          residentNumber: r.resident_number || 'N/A',
+                          residentName: r.resident_name || 'Verified Resident',
+                          houseNumber: r.house_number || 'Plot Plot',
+                          periodCovered: r.period_covered,
+                          amountPaid: r.amount_paid || 1500,
+                          currency: 'NGN',
+                          paymentDate: r.payment_date,
+                          paymentReference: r.paystack_reference,
+                          status: r.status,
+                          estateName: 'Finger of God Estate',
+                          estateSubtitle: 'RESIDENT SECURITY & INFRASTRUCTURE PORTAL',
+                          estateAddress: 'Off Okpanam Road, Asaba, Delta State, Nigeria'
+                        });
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download PDF</span>
+                    </button>
                   </div>
                 </div>
 

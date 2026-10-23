@@ -16,6 +16,11 @@ import {
 import { Receipt, EstateSettings } from '../../types/database';
 import { formatNaira } from '../../lib/paystack';
 import { EstateLogo } from '../common/EstateLogo';
+import {
+  fromSecurityReceipt,
+  downloadOfficialReceiptPdf,
+  printOfficialReceipt
+} from '../../lib/pdfReceiptGenerator';
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
@@ -34,8 +39,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   if (!isOpen || !receipt) return null;
 
+  const receiptDocData = fromSecurityReceipt(receipt, estateSettings);
+
   const handlePrint = () => {
-    window.print();
+    printOfficialReceipt(receiptDocData);
+  };
+
+  const handleDownloadPdf = () => {
+    downloadOfficialReceiptPdf(receiptDocData);
   };
 
   const formattedDate = receipt.payment_date 
@@ -65,12 +76,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <span>Print</span>
             </button>
             <button
-              onClick={handlePrint}
+              onClick={handleDownloadPdf}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors cursor-pointer"
-              title="Download Receipt"
+              title="Download Official PDF Receipt"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download</span>
+              <span>Download PDF</span>
             </button>
             <button
               onClick={onClose}
@@ -208,19 +219,26 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
 
         {/* Footer actions (Hidden during printing) */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 print:hidden">
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-end gap-2.5 print:hidden">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
+            className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            Close Receipt
+            Close
           </button>
           <button
             onClick={handlePrint}
-            className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            <span>Print / Save as PDF</span>
+            <Printer className="w-4 h-4 text-emerald-400" />
+            <span>Print Receipt</span>
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download PDF</span>
           </button>
         </div>
 

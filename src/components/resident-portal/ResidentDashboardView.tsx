@@ -64,7 +64,15 @@ import {
   BuildingEstateLevyReceipt
 } from '../../types/database';
 import { dbService, residentSessionService } from '../../lib/supabase';
+import { estateLevyService } from '../../services/estateLevyService';
 import { formatNaira } from '../../lib/paystack';
+import {
+  downloadOfficialReceiptPdf,
+  printOfficialReceipt,
+  fromSecurityReceipt,
+  fromEstateLevyReceipt,
+  buildReceiptFromMonthlyPayment
+} from '../../lib/pdfReceiptGenerator';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 import { ReceiptModal } from '../payments/ReceiptModal';
 import { EstateLevyPaymentModal } from '../payments/EstateLevyPaymentModal';
@@ -149,6 +157,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const [isEstateLevyModalOpen, setIsEstateLevyModalOpen] = useState(false);
   const [estateLevyDuration, setEstateLevyDuration] = useState<1 | 12>(1);
   const [selectedEstateLevyReceipt, setSelectedEstateLevyReceipt] = useState<BuildingEstateLevyReceipt | null>(null);
+  const [estateLevyReceipts, setEstateLevyReceipts] = useState<BuildingEstateLevyReceipt[]>([]);
+  const [historyCategory, setHistoryCategory] = useState<'ALL' | 'SECURITY' | 'ESTATE'>('ALL');
   const [paymentTargetMonth, setPaymentTargetMonth] = useState<{ month: number; year: number; label: string } | null>(null);
   
   // History Filters
@@ -296,6 +306,18 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
         p.notes?.includes('WALK-IN')
       );
       setPendingWalkIns(waiting);
+
+      // Load building estate levy receipts for this resident's house number
+      if (currentResident.house_number) {
+        try {
+          const levyRes = await estateLevyService.lookupBuilding(currentResident.house_number);
+          if (levyRes && Array.isArray(levyRes.receipts)) {
+            setEstateLevyReceipts(levyRes.receipts);
+          }
+        } catch (e) {
+          console.warn('Could not load estate levy receipts for plot:', e);
+        }
+      }
     } catch (err) {
       console.error('Failed to load resident dashboard:', err);
     } finally {
@@ -449,6 +471,42 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   const handleViewReceipt = (receipt: Receipt) => {
     setSelectedReceipt(receipt);
     setIsReceiptModalOpen(true);
+  };
+
+  const handleDownloadSecurityReceipt = (receipt: Receipt) => {
+    const docData = fromSecurityReceipt(receipt, estateSettings);
+    downloadOfficialReceiptPdf(docData);
+  };
+
+  const handlePrintSecurityReceipt = (receipt: Receipt) => {
+    const docData = fromSecurityReceipt(receipt, estateSettings);
+    printOfficialReceipt(docData);
+  };
+
+  const handleDownloadPaymentPdf = (payment: MonthlyPayment) => {
+    const rcp = buildReceiptFromMonthlyPayment(payment, currentResident, dashboardData?.receipts || []);
+    const docData = fromSecurityReceipt(rcp, estateSettings);
+    downloadOfficialReceiptPdf(docData);
+  };
+
+  const handlePrintPaymentReceipt = (payment: MonthlyPayment) => {
+    const rcp = buildReceiptFromMonthlyPayment(payment, currentResident, dashboardData?.receipts || []);
+    const docData = fromSecurityReceipt(rcp, estateSettings);
+    printOfficialReceipt(docData);
+  };
+
+  const handleViewEstateLevyReceipt = (receipt: BuildingEstateLevyReceipt) => {
+    setSelectedEstateLevyReceipt(receipt);
+  };
+
+  const handleDownloadEstateLevyReceipt = (receipt: BuildingEstateLevyReceipt) => {
+    const docData = fromEstateLevyReceipt(receipt, estateSettings, currentResident.resident_number);
+    downloadOfficialReceiptPdf(docData);
+  };
+
+  const handlePrintEstateLevyReceipt = (receipt: BuildingEstateLevyReceipt) => {
+    const docData = fromEstateLevyReceipt(receipt, estateSettings, currentResident.resident_number);
+    printOfficialReceipt(docData);
   };
 
   const handleCopyPass = (passCode: string, guestName: string) => {
@@ -1174,22 +1232,38 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
+                      <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] text-slate-500">
                           {new Date(rcp.payment_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <button
                             onClick={() => handleViewReceipt(rcp)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            title="View Receipt"
                           >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>View Receipt</span>
+                            <FileText className="w-3.5 h-3.5 text-slate-500" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSecurityReceipt(rcp)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                            title="Download Official PDF Receipt with Estate Logo"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download PDF</span>
+                          </button>
+                          <button
+                            onClick={() => handlePrintSecurityReceipt(rcp)}
+                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 cursor-pointer transition-colors"
+                            title="Print Official Receipt"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
                           </button>
                           {onNavigateToVerifyReceipt && (
                             <button
                               onClick={() => onNavigateToVerifyReceipt(rcp.receipt_number)}
-                              className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                              className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-200 text-slate-600 cursor-pointer transition-colors"
                               title="Verify Receipt Publicly"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
@@ -1208,19 +1282,32 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
 
         {/* Tab 2: Complete Payment History */}
         {activeTab === 'history' && (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-black text-slate-900 font-display uppercase tracking-tight">
-                  COMPLETE PAYMENT HISTORY
+                  COMPLETE PAYMENT & RECEIPT HISTORY
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Full chronological record of security levy payments and receipts
+                  Full chronological record of security levy and estate levy payments with official downloadable receipts
                 </p>
               </div>
 
               {/* Filters */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                  <span className="text-slate-500 font-medium">Levy Type:</span>
+                  <select
+                    value={historyCategory}
+                    onChange={(e) => setHistoryCategory(e.target.value as any)}
+                    className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="SECURITY">Security Levy (Flat)</option>
+                    <option value="ESTATE">Estate Levy (Building)</option>
+                  </select>
+                </div>
+
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                   <Filter className="w-3.5 h-3.5 text-slate-400" />
                   <span className="text-slate-500 font-medium">Year:</span>
@@ -1253,96 +1340,240 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               </div>
             </div>
 
-            {/* Responsive Table */}
-            <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold whitespace-nowrap">
-                  <tr>
-                    <th className="py-3 px-4">Billing Month</th>
-                    <th className="py-3 px-4">Amount Due</th>
-                    <th className="py-3 px-4">Amount Paid</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Payment Date</th>
-                    <th className="py-3 px-4">Transaction Ref</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500">
-                        No payments found matching the selected filters.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredHistory.map((item) => {
-                      const isPaid = item.status === 'PAID';
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-4 px-4 font-bold text-slate-900">
-                            {item.period_label}
+            {/* SECTION 1: Monthly Security Levy Payments */}
+            {(historyCategory === 'ALL' || historyCategory === 'SECURITY') && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                      Resident Security Levy Payments (₦{(estateSettings?.monthly_security_levy || 1500).toLocaleString()}/month)
+                    </h4>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {filteredHistory.filter(h => h.status === 'PAID').length} Paid / {filteredHistory.length} Billed
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                      <tr>
+                        <th className="py-3 px-4">Billing Month</th>
+                        <th className="py-3 px-4">Amount Due</th>
+                        <th className="py-3 px-4">Amount Paid</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Payment Date</th>
+                        <th className="py-3 px-4">Transaction Ref</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-500">
+                            No security payments found matching the selected filters.
                           </td>
-                          <td className="py-4 px-4 font-semibold text-slate-700">
-                            {formatNaira(item.amount_due || (estateSettings?.monthly_security_levy || 1500))}
-                          </td>
-                          <td className="py-4 px-4 font-bold text-slate-900">
-                            {formatNaira(item.amount_paid || 0)}
-                          </td>
-                          <td className="py-4 px-4">
-                            {isPaid ? (
+                        </tr>
+                      ) : (
+                        filteredHistory.map((item) => {
+                          const isPaid = item.status === 'PAID';
+                          return (
+                            <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-4 px-4 font-bold text-slate-900">
+                                {item.period_label}
+                              </td>
+                              <td className="py-4 px-4 font-semibold text-slate-700">
+                                {formatNaira(item.amount_due || (estateSettings?.monthly_security_levy || 1500))}
+                              </td>
+                              <td className="py-4 px-4 font-bold text-slate-900">
+                                {formatNaira(item.amount_paid || 0)}
+                              </td>
+                              <td className="py-4 px-4">
+                                {isPaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-black text-[11px] uppercase">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                                    <span>PAID</span>
+                                  </span>
+                                ) : item.status === 'PENDING' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-black text-[11px] uppercase">
+                                    <Clock className="w-3 h-3" />
+                                    <span>PENDING</span>
+                                  </span>
+                                ) : item.status === 'FAILED' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-black text-[11px] uppercase">
+                                    <XCircle className="w-3 h-3" />
+                                    <span>FAILED</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] uppercase">
+                                    <Clock className="w-3 h-3 text-amber-700" />
+                                    <span>UNPAID</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-4 px-4 text-slate-600 font-medium">
+                                {item.paid_at ? new Date(item.paid_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : '—'}
+                              </td>
+                              <td className="py-4 px-4 font-mono text-[11px] text-slate-700">
+                                {item.paystack_reference || '—'}
+                              </td>
+                              <td className="py-4 px-4 text-right">
+                                {isPaid ? (
+                                  <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                                    <button
+                                      onClick={() => handleFindReceiptForPayment(item)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                      title="View Receipt Details"
+                                    >
+                                      <FileText className="w-3.5 h-3.5 text-slate-500" />
+                                      <span>View</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleDownloadPaymentPdf(item)}
+                                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                                      title="Download Official PDF Receipt with Estate Logo"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                      <span>Download PDF</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handlePrintPaymentReceipt(item)}
+                                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-medium text-xs inline-flex items-center cursor-pointer transition-colors"
+                                      title="Print Official Receipt"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleOpenPayment(item.period_month, item.period_year, item.period_label)}
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5" />
+                                    <span>Pay Now</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2: Building Monthly Estate Levy Receipts */}
+            {(historyCategory === 'ALL' || historyCategory === 'ESTATE') && (
+              <div className="space-y-3 pt-4 border-t border-slate-200/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-emerald-600" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                      Building Monthly Estate Levy Receipts & Clearance Records
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono text-[10px] font-bold">
+                      Plot {currentResident.house_number}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEstateLevyDuration(1);
+                      setIsEstateLevyModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold inline-flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Pay Building Estate Levy</span>
+                  </button>
+                </div>
+
+                {estateLevyReceipts.length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-2 text-xs text-slate-500">
+                    <p className="font-semibold text-slate-700">No Building Estate Levy receipts on record yet for Plot {currentResident.house_number}.</p>
+                    <p>The building estate levy is ₦1,000 per building per month (or ₦12,000 annually). When paid, official digital receipts appear here for instant PDF download and printing.</p>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                        <tr>
+                          <th className="py-3 px-4">Receipt ID</th>
+                          <th className="py-3 px-4">Billing Month</th>
+                          <th className="py-3 px-4">Building / Plot</th>
+                          <th className="py-3 px-4">Resident / Payer</th>
+                          <th className="py-3 px-4">Amount Paid</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Payment Date</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {estateLevyReceipts.map((rcp) => (
+                          <tr key={rcp.receipt_number} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-4 px-4 font-mono font-bold text-slate-900">
+                              {rcp.receipt_number}
+                            </td>
+                            <td className="py-4 px-4 font-bold text-emerald-900">
+                              {rcp.billing_month_label || rcp.billing_month}
+                            </td>
+                            <td className="py-4 px-4 font-semibold text-slate-700">
+                              {rcp.building_house_number}
+                              {rcp.building_name ? ` (${rcp.building_name})` : ''}
+                            </td>
+                            <td className="py-4 px-4 text-slate-800 font-medium">
+                              {rcp.payer_name}
+                              {rcp.resident_number ? ` (#${rcp.resident_number})` : ''}
+                            </td>
+                            <td className="py-4 px-4 font-black text-slate-900">
+                              {formatNaira(rcp.amount_paid || 1000)}
+                            </td>
+                            <td className="py-4 px-4">
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-black text-[11px] uppercase">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-700" />
                                 <span>PAID</span>
                               </span>
-                            ) : item.status === 'PENDING' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-black text-[11px] uppercase">
-                                <Clock className="w-3 h-3" />
-                                <span>PENDING</span>
-                              </span>
-                            ) : item.status === 'FAILED' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-black text-[11px] uppercase">
-                                <XCircle className="w-3 h-3" />
-                                <span>FAILED</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] uppercase">
-                                <Clock className="w-3 h-3 text-amber-700" />
-                                <span>UNPAID</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-4 text-slate-600 font-medium">
-                            {item.paid_at ? new Date(item.paid_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : '—'}
-                          </td>
-                          <td className="py-4 px-4 font-mono text-[11px] text-slate-700">
-                            {item.paystack_reference || '—'}
-                          </td>
-                          <td className="py-4 px-4 text-right">
-                            {isPaid ? (
-                              <button
-                                onClick={() => handleFindReceiptForPayment(item)}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                                <span>View Receipt</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleOpenPayment(item.period_month, item.period_year, item.period_label)}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <CreditCard className="w-3.5 h-3.5" />
-                                <span>Pay Now</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            </td>
+                            <td className="py-4 px-4 text-slate-600 font-medium">
+                              {rcp.payment_date ? new Date(rcp.payment_date).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : '—'}
+                            </td>
+                            <td className="py-4 px-4 text-right">
+                              <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                                <button
+                                  onClick={() => handleViewEstateLevyReceipt(rcp)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="View Receipt Details"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadEstateLevyReceipt(rcp)}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                                  title="Download Official PDF Receipt with Estate Logo"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Download PDF</span>
+                                </button>
+                                <button
+                                  onClick={() => handlePrintEstateLevyReceipt(rcp)}
+                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-medium text-xs inline-flex items-center cursor-pointer transition-colors"
+                                  title="Print Official Receipt"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -2216,6 +2447,7 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           isOpen={true}
           receipt={selectedEstateLevyReceipt}
           onClose={() => setSelectedEstateLevyReceipt(null)}
+          estateSettings={estateSettings}
         />
       )}
 
