@@ -78,6 +78,8 @@ import { QRCodeDisplay } from '../common/QRCodeDisplay';
 import { ResidentNotificationCenter } from './ResidentNotificationCenter';
 import { ResidentFirstTimeSetupModal } from './ResidentFirstTimeSetupModal';
 import { SEOHead } from '../common/SEOHead';
+import { ResidentPhotoAvatar, LivenessStatusBadge } from '../common/ResidentPhotoAvatar';
+import { ResidentLivenessCapture } from '../auth/ResidentLivenessCapture';
 
 interface ResidentDashboardViewProps {
   currentResident: Resident;
@@ -105,6 +107,8 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
   estateSettings
 }) => {
   const [residentProfile, setResidentProfile] = useState<Resident>(currentResident);
+  const [isReplacingPhoto, setIsReplacingPhoto] = useState(false);
+  const [photoRefreshKey, setPhotoRefreshKey] = useState(0);
 
   useEffect(() => {
     setResidentProfile(currentResident);
@@ -585,10 +589,15 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
             
             <div className="flex items-start sm:items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-900 border-2 border-emerald-300 flex flex-col items-center justify-center font-mono shadow-xs shrink-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">ESTATE</span>
-                <span className="text-xl font-black">#{residentProfile.resident_number}</span>
-              </div>
+              <ResidentPhotoAvatar
+                residentNumber={residentProfile.resident_number}
+                fullName={residentProfile.full_name}
+                hasProfilePhoto={Boolean(residentProfile.has_profile_photo || residentProfile.profile_photo_uploaded_at)}
+                viewerRole="resident"
+                size="lg"
+                allowFullPreview={true}
+                refreshKey={`${residentProfile.profile_photo_uploaded_at || ''}_${photoRefreshKey}`}
+              />
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
@@ -599,6 +608,11 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                   }`}>
                     {residentProfile.status} Resident
                   </span>
+                  <LivenessStatusBadge
+                    status={residentProfile.liveness_status}
+                    verifiedAt={residentProfile.liveness_verified_at}
+                    compact={true}
+                  />
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 font-display">
                   {residentProfile.full_name}
@@ -1839,9 +1853,95 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
               <div>
                 <p className="font-bold text-slate-800">Security Profile Integrity Rule</p>
                 <p className="mt-0.5 leading-relaxed">
-                  Your permanent Resident Number (<span className="font-mono font-bold text-slate-900">#{currentResident.resident_number}</span>), house/plot allocation, and residency status are strictly administrative fields. Self-service updates are enabled for communication info (email, phone) and login password.
+                  Your permanent Resident Number (<span className="font-mono font-bold text-slate-900">#{residentProfile.resident_number}</span>), house/plot allocation, and residency status are strictly administrative fields. Self-service updates are enabled for communication info (email, phone), login password, and live re-verified profile photo replacement.
                 </p>
               </div>
+            </div>
+
+            {/* Verified Profile Photo & Liveness Record Section */}
+            <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <ResidentPhotoAvatar
+                    residentNumber={residentProfile.resident_number}
+                    fullName={residentProfile.full_name}
+                    hasProfilePhoto={Boolean(residentProfile.has_profile_photo || residentProfile.profile_photo_uploaded_at)}
+                    viewerRole="resident"
+                    size="xl"
+                    allowFullPreview={true}
+                    refreshKey={`${residentProfile.profile_photo_uploaded_at || ''}_${photoRefreshKey}`}
+                  />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
+                        RESIDENT #{residentProfile.resident_number}
+                      </span>
+                      <LivenessStatusBadge
+                        status={residentProfile.liveness_status}
+                        verifiedAt={residentProfile.liveness_verified_at}
+                      />
+                    </div>
+                    <h4 className="text-base font-black text-slate-900 font-display">
+                      {residentProfile.full_name}
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      {residentProfile.has_profile_photo || residentProfile.profile_photo_uploaded_at
+                        ? `Approved live profile photo stored in private estate storage${
+                            residentProfile.liveness_verified_at
+                              ? ` • Verified ${new Date(residentProfile.liveness_verified_at).toLocaleString('en-NG')}`
+                              : ''
+                          }`
+                        : 'No verified live profile photo on file yet.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setIsReplacingPhoto((prev) => !prev)}
+                    className="px-3.5 py-2 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                  >
+                    {isReplacingPhoto ? 'Cancel Photo Update' : 'Update Live Profile Photo'}
+                  </button>
+                </div>
+              </div>
+
+              {isReplacingPhoto && (
+                <div className="pt-3 border-t border-slate-200 space-y-3">
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950">
+                    <strong>Re-Verification Requirement:</strong> Replacing your profile photo never inherits a previous photo&apos;s liveness status. You must complete a new live camera capture and human liveness check for the new image.
+                  </div>
+                  <ResidentLivenessCapture
+                    residentNumber={residentProfile.resident_number}
+                    purpose="PHOTO_REPLACEMENT"
+                    onVerified={async ({ sessionId }) => {
+                      const res = await dbService.replaceResidentProfilePhoto(sessionId);
+                      if (res.success && res.resident) {
+                        setResidentProfile(res.resident);
+                        setPhotoRefreshKey((k) => k + 1);
+                        setIsReplacingPhoto(false);
+                        setProfileMsg({
+                          type: 'success',
+                          text: res.message || 'Your profile photo has been updated and re-verified for human liveness.'
+                        });
+                      } else {
+                        setProfileMsg({
+                          type: 'error',
+                          text: res.message || 'Failed to replace profile photo. Please try again.'
+                        });
+                      }
+                    }}
+                    onManualReviewQueued={({ message }) => {
+                      setIsReplacingPhoto(false);
+                      setProfileMsg({
+                        type: 'success',
+                        text: message || 'Your new live photo has been submitted for Estate Administrator manual review.'
+                      });
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Main Information Cards */}

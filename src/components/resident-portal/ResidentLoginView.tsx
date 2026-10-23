@@ -22,10 +22,11 @@ import {
   Home
 } from 'lucide-react';
 import { dbService, authService, residentSessionService } from '../../lib/supabase';
-import { Resident, EstateSettings } from '../../types/database';
+import { Resident, EstateSettings, LivenessVerificationStatus } from '../../types/database';
 import { normalizeResidentNumber } from '../../lib/residentUtils';
 import { EstateLogo } from '../common/EstateLogo';
 import { SEOHead } from '../common/SEOHead';
+import { ResidentLivenessCapture } from '../auth/ResidentLivenessCapture';
 
 interface ResidentLoginViewProps {
   onSuccess: (resident: Resident) => void;
@@ -141,6 +142,10 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
   const [updateHomeAddress, setUpdateHomeAddress] = useState('');
   const [updateHouseNumber, setUpdateHouseNumber] = useState('');
   const [isDetailsStepTwo, setIsDetailsStepTwo] = useState(false);
+
+  // Liveness & Profile Photo Verification State for Account Activation
+  const [livenessSessionId, setLivenessSessionId] = useState<string>('');
+  const [livenessStatus, setLivenessStatus] = useState<LivenessVerificationStatus>('NOT_STARTED');
 
   // Common UI State
   const [isLoading, setIsLoading] = useState(false);
@@ -334,7 +339,9 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setUpdateEmail('');
         setUpdateHouseNumber('');
         setUpdateHomeAddress('');
-        setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, and Home Address to activate your account (one-time activation).`);
+        setLivenessSessionId('');
+        setLivenessStatus('NOT_STARTED');
+        setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, Home Address, and complete Live Profile Photo & Liveness Verification to activate your account.`);
       } else {
         setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
       }
@@ -489,6 +496,20 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
       return;
     }
 
+    if (!livenessSessionId) {
+      setErrorMessage(
+        'Live profile photo capture and human liveness verification are required before activating your resident account. Please complete the Live Camera Verification step below.'
+      );
+      return;
+    }
+
+    if (livenessStatus === 'PENDING_MANUAL_REVIEW') {
+      setErrorMessage(
+        'Your live photo and liveness capture have been submitted for Estate Administrator manual review. Automated activation will unlock once an authorized administrator approves your verification.'
+      );
+      return;
+    }
+
     const activatedEmail = updateEmail.trim().toLowerCase();
 
     setIsLoading(true);
@@ -499,18 +520,21 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         phone_number: updatePhoneNumber.trim(),
         email: activatedEmail,
         house_number: updateHouseNumber.trim() || `Plot ${cleanNum}`,
-        address: updateHomeAddress.trim()
+        address: updateHomeAddress.trim(),
+        livenessSessionId
       });
 
       if (res.success) {
         // Account activated once! Now require the resident to log in with their ID & Email OTP
         setIsDetailsStepTwo(false);
+        setLivenessSessionId('');
+        setLivenessStatus('NOT_STARTED');
         setResidentIdInput(cleanNum);
         setResidentEmailInput(activatedEmail);
         setIdEmailStep('enter_credentials');
         setActiveTab('id_email_login');
         setSuccessMessage(
-          `Account for Resident #${cleanNum} has been activated! Please log in below — a 6-digit OTP will be sent to ${activatedEmail} to access your account.`
+          `Account for Resident #${cleanNum} has been activated with verified live profile photo! Please log in below — a 6-digit OTP will be sent to ${activatedEmail} to access your account.`
         );
       } else {
         if (res.already_activated) {
@@ -773,13 +797,28 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
     const cleanNum = actResidentNumber.trim().padStart(3, '0');
 
+    if (!livenessSessionId) {
+      setErrorMessage(
+        'Live profile photo capture and human liveness verification are required before completing account activation.'
+      );
+      return;
+    }
+
+    if (livenessStatus === 'PENDING_MANUAL_REVIEW') {
+      setErrorMessage(
+        'Your live photo and liveness capture are awaiting Estate Administrator manual review. Automated activation requires verified liveness or administrator approval.'
+      );
+      return;
+    }
+
     setIsLoading(true);
     try {
       const res = await dbService.verifyActivationOtp({
         residentNumber: cleanNum,
         phoneNumber: actPhoneNumber.trim(),
         otp: fullCode,
-        rememberDevice: actRememberDevice
+        rememberDevice: actRememberDevice,
+        livenessSessionId
       });
 
       if (res.success && res.resident) {
@@ -1381,18 +1420,44 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   </div>
                 </div>
 
+                {/* Live Profile Photo & Real Human Liveness Verification */}
+                <div className="pt-1">
+                  <ResidentLivenessCapture
+                    residentNumber={updateResidentNumber}
+                    purpose="ACTIVATION"
+                    disabled={isLoading}
+                    onVerified={({ sessionId, livenessStatus: status }) => {
+                      setLivenessSessionId(sessionId);
+                      setLivenessStatus(status);
+                      setErrorMessage(null);
+                    }}
+                    onManualReviewQueued={({ sessionId }) => {
+                      setLivenessSessionId(sessionId);
+                      setLivenessStatus('PENDING_MANUAL_REVIEW');
+                    }}
+                  />
+                </div>
+
                 {/* Submit / Back Buttons */}
                 <div className="pt-2 flex flex-col sm:flex-row gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsDetailsStepTwo(false)}
+                    onClick={() => {
+                      setIsDetailsStepTwo(false);
+                      setLivenessSessionId('');
+                      setLivenessStatus('NOT_STARTED');
+                    }}
                     className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer order-2 sm:order-1"
                   >
                     &larr; Back
                   </button>
                   <button
                     type="submit"
-                    disabled={isLoading}
+                    disabled={
+                      isLoading ||
+                      !livenessSessionId ||
+                      (livenessStatus !== 'LIVENESS_VERIFIED' && livenessStatus !== 'MANUAL_REVIEW_APPROVED')
+                    }
                     className="flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer order-1 sm:order-2"
                   >
                     {isLoading ? (
@@ -1403,7 +1468,11 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     ) : (
                       <>
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>ACTIVATE ACCOUNT</span>
+                        <span>
+                          {livenessStatus === 'LIVENESS_VERIFIED' || livenessStatus === 'MANUAL_REVIEW_APPROVED'
+                            ? 'COMPLETE ACCOUNT ACTIVATION'
+                            : 'VERIFY LIVENESS TO ACTIVATE'}
+                        </span>
                       </>
                     )}
                   </button>
@@ -1994,6 +2063,24 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                     </div>
                   </div>
 
+                  {/* Live Profile Photo & Real Human Liveness Verification */}
+                  <div className="pt-1">
+                    <ResidentLivenessCapture
+                      residentNumber={actResidentNumber.trim().padStart(3, '0')}
+                      purpose="ACTIVATION"
+                      disabled={isLoading}
+                      onVerified={({ sessionId, livenessStatus: status }) => {
+                        setLivenessSessionId(sessionId);
+                        setLivenessStatus(status);
+                        setErrorMessage(null);
+                      }}
+                      onManualReviewQueued={({ sessionId }) => {
+                        setLivenessSessionId(sessionId);
+                        setLivenessStatus('PENDING_MANUAL_REVIEW');
+                      }}
+                    />
+                  </div>
+
                   {/* Remember Device Checkbox */}
                   <div className="pt-0.5">
                     <label className="flex items-start gap-2.5 cursor-pointer group">
@@ -2017,7 +2104,12 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    disabled={isLoading || actOtpCode.join('').length !== 6}
+                    disabled={
+                      isLoading ||
+                      actOtpCode.join('').length !== 6 ||
+                      !livenessSessionId ||
+                      (livenessStatus !== 'LIVENESS_VERIFIED' && livenessStatus !== 'MANUAL_REVIEW_APPROVED')
+                    }
                     className="w-full py-2.5 sm:py-3 px-4 rounded-xl min-h-[44px] bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm tracking-wide transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isLoading ? (

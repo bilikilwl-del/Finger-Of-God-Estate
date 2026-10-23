@@ -2830,13 +2830,14 @@ export const dbService = {
     phoneNumber?: string;
     otp: string;
     rememberDevice?: boolean;
+    livenessSessionId?: string;
   }): Promise<{
     success: boolean;
     resident?: Resident;
     token?: string;
     message?: string;
   }> {
-    const { residentNumber, phoneNumber = '', otp, rememberDevice = false } = params;
+    const { residentNumber, phoneNumber = '', otp, rememberDevice = false, livenessSessionId } = params;
     try {
       const res = await fetch('/api/resident/verify-activation-otp', {
         method: 'POST',
@@ -2845,7 +2846,8 @@ export const dbService = {
           residentNumber: residentNumber.trim(),
           phoneNumber: phoneNumber.trim(),
           otp: otp.trim(),
-          rememberDevice
+          rememberDevice,
+          livenessSessionId
         })
       });
       const data = await res.json();
@@ -2917,7 +2919,7 @@ export const dbService = {
     }
   },
 
-  // RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION (Requires login via Email OTP afterwards)
+  // RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION (Requires server-validated liveness & login via Email OTP afterwards)
   async updateResidentDetails(details: {
     residentNumber: string;
     full_name: string;
@@ -2925,10 +2927,13 @@ export const dbService = {
     email: string;
     house_number?: string;
     address?: string;
+    livenessSessionId?: string;
   }): Promise<{
     success: boolean;
     already_activated?: boolean;
     requires_login?: boolean;
+    requiresLiveness?: boolean;
+    liveness_status?: string;
     resident?: Resident;
     token?: string;
     message?: string;
@@ -2949,6 +2954,7 @@ export const dbService = {
         return {
           success: true,
           requires_login: !!data.requires_login,
+          liveness_status: data.liveness_status,
           resident: data.resident,
           token: data.token,
           message: data.message
@@ -2957,6 +2963,7 @@ export const dbService = {
       return {
         success: false,
         already_activated: !!data.already_activated,
+        requiresLiveness: !!data.requiresLiveness,
         message: data.message || 'Failed to activate account. Please review your entries and try again.'
       };
     } catch {
@@ -2964,6 +2971,246 @@ export const dbService = {
         success: false,
         message: 'Network error occurred while activating account. Please try again.'
       };
+    }
+  },
+
+  // =========================================================================
+  // RESIDENT LIVENESS VERIFICATION & PRIVATE PROFILE PHOTO CLIENT API
+  // =========================================================================
+  async startLivenessSession(params: {
+    residentNumber: string;
+    purpose?: 'ACTIVATION' | 'PHOTO_REPLACEMENT';
+    consentAccepted: boolean;
+  }): Promise<{
+    success: boolean;
+    session?: {
+      sessionId: string;
+      residentNumber: string;
+      purpose: 'ACTIVATION' | 'PHOTO_REPLACEMENT';
+      challengeNonce: string;
+      challengeSequence: string[];
+      provider: string;
+      automatedPadAvailable: boolean;
+      expiresAt: string;
+    };
+    already_activated?: boolean;
+    message?: string;
+  }> {
+    try {
+      const token = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/resident/liveness/session/start', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch {
+      return {
+        success: false,
+        message: 'Unable to connect to the liveness verification server. Please check your network connection.'
+      };
+    }
+  },
+
+  async verifyLivenessCapture(params: {
+    sessionId: string;
+    residentNumber: string;
+    challengeNonce: string;
+    completedChallenges: string[];
+    challengeFramesCount: number;
+    profilePhotoDataUrl: string;
+    captureSource: 'LIVE_CAMERA_STREAM';
+    cameraMetadata?: Record<string, any>;
+  }): Promise<{
+    success: boolean;
+    verified?: boolean;
+    status?: string;
+    sessionId?: string;
+    provider?: string;
+    confidenceScore?: number | null;
+    spoofReason?: string | null;
+    canProceedWithActivation?: boolean;
+    manualReviewAvailable?: boolean;
+    retryInstructions?: string;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/liveness/session/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch {
+      return {
+        success: false,
+        status: 'PROVIDER_UNAVAILABLE',
+        manualReviewAvailable: true,
+        message: 'Network error during liveness verification. You may retry or submit your live capture for manual administrator review.'
+      };
+    }
+  },
+
+  async requestManualLivenessReview(params: {
+    sessionId: string;
+    residentNumber: string;
+    reason: string;
+    profilePhotoDataUrl?: string;
+  }): Promise<{
+    success: boolean;
+    status?: string;
+    sessionId?: string;
+    canProceedWithActivation?: boolean;
+    message?: string;
+  }> {
+    try {
+      const res = await fetch('/api/resident/liveness/session/request-manual-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      return await res.json();
+    } catch {
+      return {
+        success: false,
+        message: 'Network error submitting manual review request. Please try again.'
+      };
+    }
+  },
+
+  async replaceResidentProfilePhoto(
+    paramsOrSessionId:
+      | string
+      | {
+          residentNumber?: string;
+          livenessSessionId: string;
+        },
+    residentNumberArg?: string
+  ): Promise<{
+    success: boolean;
+    resident?: Resident;
+    message?: string;
+  }> {
+    try {
+      const currentRes = residentSessionService.getCurrentResident();
+      const livenessSessionId =
+        typeof paramsOrSessionId === 'string'
+          ? paramsOrSessionId
+          : paramsOrSessionId.livenessSessionId;
+      const residentNumber =
+        typeof paramsOrSessionId === 'string'
+          ? residentNumberArg || currentRes?.resident_number || ''
+          : paramsOrSessionId.residentNumber || currentRes?.resident_number || '';
+
+      const token = residentSessionService.getResidentToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/resident/profile-photo/replace', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ residentNumber, livenessSessionId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.resident) {
+        residentSessionService.setCurrentResident(data.resident);
+      }
+      return data;
+    } catch {
+      return {
+        success: false,
+        message: 'Network error replacing profile photo.'
+      };
+    }
+  },
+
+  async fetchResidentSelfPhotoObjectUrl(residentNumber: string): Promise<string | null> {
+    try {
+      const token = residentSessionService.getResidentToken();
+      if (!token) return null;
+      const cleanNum = String(residentNumber).trim().padStart(3, '0');
+      const res = await fetch(`/api/resident/profile-photo?residentNumber=${encodeURIComponent(cleanNum)}&t=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  },
+
+  async fetchAdminResidentPhotoObjectUrl(residentNumber: string): Promise<string | null> {
+    try {
+      const cleanNum = String(residentNumber).trim().padStart(3, '0');
+      const res = await authenticatedAdminFetch(`/api/admin/residents/${encodeURIComponent(cleanNum)}/photo?t=${Date.now()}`);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  },
+
+  async submitAdminLivenessReview(
+    residentNumberOrParams:
+      | string
+      | {
+          residentNumber: string;
+          decision: 'APPROVE' | 'REJECT';
+          sessionId?: string;
+          notes?: string;
+        },
+    decisionArg?: 'APPROVE' | 'REJECT',
+    notesArg?: string
+  ): Promise<{ success: boolean; resident?: Resident; message?: string }> {
+    try {
+      const residentNumber =
+        typeof residentNumberOrParams === 'string'
+          ? residentNumberOrParams
+          : residentNumberOrParams.residentNumber;
+      const decision =
+        typeof residentNumberOrParams === 'string'
+          ? decisionArg || 'APPROVE'
+          : residentNumberOrParams.decision;
+      const notes =
+        typeof residentNumberOrParams === 'string'
+          ? notesArg || ''
+          : residentNumberOrParams.notes || '';
+      const sessionId =
+        typeof residentNumberOrParams === 'string'
+          ? undefined
+          : residentNumberOrParams.sessionId;
+
+      const cleanNum = String(residentNumber).trim().padStart(3, '0');
+      const res = await authenticatedAdminFetch(`/api/admin/residents/${encodeURIComponent(cleanNum)}/liveness-review`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, notes, sessionId })
+      });
+      return await res.json();
+    } catch {
+      return {
+        success: false,
+        message: 'Failed to submit manual review decision.'
+      };
+    }
+  },
+
+  async getAdminResidentLivenessAudit(residentNumber: string): Promise<{
+    success: boolean;
+    sessions?: any[];
+    auditLogs?: any[];
+  }> {
+    try {
+      const cleanNum = String(residentNumber).trim().padStart(3, '0');
+      const res = await authenticatedAdminFetch(`/api/admin/residents/${encodeURIComponent(cleanNum)}/liveness-audit`);
+      if (!res.ok) return { success: false };
+      return await res.json();
+    } catch {
+      return { success: false };
     }
   },
 
@@ -3099,8 +3346,9 @@ export const dbService = {
     identifier: string;
     email: string;
     password: string;
+    livenessSessionId?: string;
   }): Promise<{ success: boolean; resident?: Resident; message?: string; error?: string }> {
-    const { residentNumber, identifier, email, password } = data;
+    const { residentNumber, identifier, email, password, livenessSessionId } = data;
 
     let authUserId: string | undefined = undefined;
 
@@ -3138,7 +3386,8 @@ export const dbService = {
           identifier: identifier.trim(),
           email: email.trim().toLowerCase(),
           password,
-          auth_user_id: authUserId
+          auth_user_id: authUserId,
+          livenessSessionId
         })
       });
       const resData = await res.json();

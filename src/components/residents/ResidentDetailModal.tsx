@@ -1,6 +1,8 @@
-import React, { useRef } from 'react';
-import { X, Shield, Phone, Mail, Home, MapPin, Calendar, CheckCircle2, User, Printer, QrCode } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Shield, Phone, Mail, Home, MapPin, Calendar, CheckCircle2, User, Printer, QrCode, XCircle, Loader2 } from 'lucide-react';
 import { Resident, EstateSettings } from '../../types/database';
+import { ResidentPhotoAvatar, LivenessStatusBadge } from '../common/ResidentPhotoAvatar';
+import { dbService } from '../../lib/supabase';
 
 interface ResidentDetailModalProps {
   resident: Resident | null;
@@ -20,11 +22,44 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
   onToggleStatus
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [localResident, setLocalResident] = useState<Resident | null>(resident);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
 
-  if (!isOpen || !resident) return null;
+  React.useEffect(() => {
+    setLocalResident(resident);
+    setReviewFeedback(null);
+  }, [resident]);
+
+  const activeResident = localResident || resident;
+  if (!isOpen || !activeResident) return null;
 
   const handlePrintCard = () => {
     window.print();
+  };
+
+  const handleAdminManualReview = async (decision: 'APPROVE' | 'REJECT') => {
+    setReviewLoading(true);
+    setReviewFeedback(null);
+    try {
+      const res = await dbService.submitAdminLivenessReview({
+        residentNumber: activeResident.resident_number,
+        decision,
+        sessionId: activeResident.liveness_session_id || undefined,
+        notes:
+          decision === 'APPROVE'
+            ? 'Manually reviewed and approved by Estate Administrator.'
+            : 'Rejected during Estate Administrator manual review.'
+      });
+      if (res.success && res.resident) {
+        setLocalResident(res.resident);
+        setReviewFeedback(res.message || `Manual review ${decision.toLowerCase()}d.`);
+      } else {
+        setReviewFeedback(res.message || 'Unable to process manual review decision.');
+      }
+    } finally {
+      setReviewLoading(false);
+    }
   };
 
   return (
@@ -33,12 +68,23 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
         {/* Header */}
         <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center font-mono font-bold text-white text-base">
-              {resident.resident_number}
-            </div>
+            <ResidentPhotoAvatar
+              residentNumber={activeResident.resident_number}
+              fullName={activeResident.full_name}
+              hasProfilePhoto={Boolean(activeResident.has_profile_photo || activeResident.profile_photo_uploaded_at)}
+              viewerRole="admin"
+              size="md"
+              allowFullPreview={true}
+              refreshKey={activeResident.profile_photo_uploaded_at}
+            />
             <div>
-              <h2 className="font-display text-lg font-bold">{resident.full_name}</h2>
-              <p className="text-xs text-slate-400">Resident Identification & Security Record</p>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded bg-emerald-600 text-white">
+                  #{activeResident.resident_number}
+                </span>
+                <h2 className="font-display text-lg font-bold">{activeResident.full_name}</h2>
+              </div>
+              <p className="text-xs text-slate-400">Resident Identification &amp; Biometric Security Record</p>
             </div>
           </div>
           <button 
@@ -51,6 +97,66 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
 
         {/* Modal Content */}
         <div className="p-6 space-y-6">
+          {/* Liveness Verification & Profile Photo Summary Banner */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <ResidentPhotoAvatar
+                  residentNumber={activeResident.resident_number}
+                  fullName={activeResident.full_name}
+                  hasProfilePhoto={Boolean(activeResident.has_profile_photo || activeResident.profile_photo_uploaded_at)}
+                  viewerRole="admin"
+                  size="lg"
+                  allowFullPreview={true}
+                  refreshKey={activeResident.profile_photo_uploaded_at}
+                />
+                <div className="space-y-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Biometric Liveness &amp; Photo Verification
+                  </div>
+                  <LivenessStatusBadge
+                    status={activeResident.liveness_status}
+                    verifiedAt={activeResident.liveness_verified_at}
+                  />
+                  {activeResident.liveness_verified_at && (
+                    <div className="text-[11px] font-mono text-slate-500">
+                      Timestamp: {new Date(activeResident.liveness_verified_at).toLocaleString('en-NG')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {activeResident.liveness_status === 'PENDING_MANUAL_REVIEW' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={reviewLoading}
+                    onClick={() => handleAdminManualReview('APPROVE')}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {reviewLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                    <span>Approve Manual Review</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewLoading}
+                    onClick={() => handleAdminManualReview('REJECT')}
+                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Reject</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {reviewFeedback && (
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-semibold">
+                {reviewFeedback}
+              </div>
+            )}
+          </div>
+
           {/* Printable Estate Resident ID Card */}
           <div 
             ref={cardRef}
@@ -77,7 +183,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               </div>
               <div className="text-right">
                 <span className="font-mono text-xl font-extrabold text-emerald-400 tracking-wider">
-                  #{resident.resident_number}
+                  #{activeResident.resident_number}
                 </span>
               </div>
             </div>
@@ -86,17 +192,17 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <div className="col-span-2 space-y-2">
                 <div>
                   <div className="text-[10px] uppercase font-bold text-slate-400">Resident Name</div>
-                  <div className="text-sm font-bold text-white tracking-wide">{resident.full_name}</div>
+                  <div className="text-sm font-bold text-white tracking-wide">{activeResident.full_name}</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <div className="text-[10px] uppercase font-bold text-slate-400">Plot / House</div>
-                    <div className="text-xs font-semibold text-slate-200">{resident.house_number}</div>
+                    <div className="text-xs font-semibold text-slate-200">{activeResident.house_number}</div>
                   </div>
                   <div>
                     <div className="text-[10px] uppercase font-bold text-slate-400">Reg. Date</div>
-                    <div className="text-xs font-mono text-slate-200">{resident.registration_date}</div>
+                    <div className="text-xs font-mono text-slate-200">{activeResident.registration_date}</div>
                   </div>
                 </div>
               </div>
@@ -110,12 +216,12 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
 
             <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between text-[11px]">
               <span className="text-slate-400 truncate max-w-[200px]">
-                {resident.address}
+                {activeResident.address}
               </span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                resident.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 text-slate-300'
+                activeResident.status === 'Active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 text-slate-300'
               }`}>
-                {resident.status}
+                {activeResident.status}
               </span>
             </div>
           </div>
@@ -127,10 +233,10 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <div>
                 <span className="text-slate-500 block font-medium">Primary Phone</span>
                 <a 
-                  href={`tel:${resident.phone_number}`}
+                  href={`tel:${activeResident.phone_number}`}
                   className="font-mono text-sm font-semibold text-slate-900 hover:text-emerald-600 transition-colors"
                 >
-                  {resident.phone_number}
+                  {activeResident.phone_number}
                 </a>
               </div>
             </div>
@@ -139,12 +245,12 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <Phone className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
               <div>
                 <span className="text-slate-500 block font-medium">Alt Phone</span>
-                {resident.additional_phone ? (
+                {activeResident.additional_phone ? (
                   <a 
-                    href={`tel:${resident.additional_phone}`}
+                    href={`tel:${activeResident.additional_phone}`}
                     className="font-mono text-sm font-semibold text-slate-800 hover:text-emerald-600 transition-colors"
                   >
-                    {resident.additional_phone}
+                    {activeResident.additional_phone}
                   </a>
                 ) : (
                   <span className="text-slate-400 italic">None provided</span>
@@ -156,12 +262,12 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <Mail className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
               <div>
                 <span className="text-slate-500 block font-medium">Email Address</span>
-                {resident.email ? (
+                {activeResident.email ? (
                   <a 
-                    href={`mailto:${resident.email}`}
+                    href={`mailto:${activeResident.email}`}
                     className="font-semibold text-slate-900 hover:text-emerald-600 transition-colors break-all"
                   >
-                    {resident.email}
+                    {activeResident.email}
                   </a>
                 ) : (
                   <span className="text-slate-400 italic">Not specified</span>
@@ -173,7 +279,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <Home className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
               <div>
                 <span className="text-slate-500 block font-medium">Plot / House Number</span>
-                <span className="font-semibold text-slate-900">{resident.house_number}</span>
+                <span className="font-semibold text-slate-900">{activeResident.house_number}</span>
               </div>
             </div>
 
@@ -181,14 +287,14 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
               <MapPin className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
               <div>
                 <span className="text-slate-500 block font-medium">Street / Location</span>
-                <span className="font-semibold text-slate-900">{resident.address} ({resident.lga}, {resident.state})</span>
+                <span className="font-semibold text-slate-900">{activeResident.address} ({activeResident.lga}, {activeResident.state})</span>
               </div>
             </div>
 
-            {resident.notes && (
+            {activeResident.notes && (
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 sm:col-span-2">
                 <span className="text-amber-800 block font-bold text-[11px] uppercase tracking-wider mb-0.5">Notes</span>
-                <p>{resident.notes}</p>
+                <p>{activeResident.notes}</p>
               </div>
             )}
           </div>
@@ -214,14 +320,14 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onToggleStatus(resident)}
+              onClick={() => onToggleStatus(activeResident)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                resident.status === 'Active'
+                activeResident.status === 'Active'
                   ? 'border-slate-300 text-slate-700 hover:bg-slate-100'
                   : 'border-emerald-600 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
               }`}
             >
-              {resident.status === 'Active' ? 'Deactivate Resident' : 'Activate Resident'}
+              {activeResident.status === 'Active' ? 'Deactivate Resident' : 'Activate Resident'}
             </button>
             <button
               onClick={handlePrintCard}
@@ -236,7 +342,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
             <button
               onClick={() => {
                 onClose();
-                onEdit(resident);
+                onEdit(activeResident);
               }}
               className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors shadow-xs"
             >

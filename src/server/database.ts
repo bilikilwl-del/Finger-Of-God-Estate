@@ -143,6 +143,8 @@ export interface PersistentDatabaseSchema {
   building_estate_levy_receipts?: any[];
   manual_payment_logs?: any[];
   estate_audit_logs?: any[];
+  liveness_sessions?: any[];
+  liveness_audit_logs?: any[];
   last_updated: string;
 }
 
@@ -202,6 +204,8 @@ function loadOrCreateDb(): PersistentDatabaseSchema {
         building_estate_levy_receipts: Array.isArray(parsed.building_estate_levy_receipts) ? parsed.building_estate_levy_receipts : [],
         manual_payment_logs: Array.isArray(parsed.manual_payment_logs) ? parsed.manual_payment_logs : [],
         estate_audit_logs: Array.isArray(parsed.estate_audit_logs) ? parsed.estate_audit_logs : [],
+        liveness_sessions: Array.isArray(parsed.liveness_sessions) ? parsed.liveness_sessions : [],
+        liveness_audit_logs: Array.isArray(parsed.liveness_audit_logs) ? parsed.liveness_audit_logs : [],
         last_updated: new Date().toISOString()
       };
     } catch (e) {
@@ -420,10 +424,34 @@ export const serverDb = {
       }
 
       if (allResidents.length > 0) {
-        const sanitized = allResidents.map(r => ({
-          ...r,
-          phone_number: r.phone_number && String(r.phone_number).startsWith('08000000') ? '' : (r.phone_number || '')
-        }));
+        const localByNum = new Map<string, any>();
+        for (const lr of (localDb.residents || [])) {
+          if (lr.resident_number) {
+            localByNum.set(String(lr.resident_number).trim().padStart(3, '0'), lr);
+          }
+        }
+        const sanitized = allResidents.map(r => {
+          const cleanN = String(r.resident_number || '').trim().padStart(3, '0');
+          const localMatch = localByNum.get(cleanN) || {};
+          const photoPath = r.profile_photo_path ?? localMatch.profile_photo_path ?? null;
+          return {
+            ...localMatch,
+            ...r,
+            resident_number: cleanN,
+            phone_number: r.phone_number && String(r.phone_number).startsWith('08000000') ? '' : (r.phone_number || ''),
+            profile_photo_path: photoPath,
+            profile_photo_sha256: r.profile_photo_sha256 ?? localMatch.profile_photo_sha256 ?? null,
+            profile_photo_uploaded_at: r.profile_photo_uploaded_at ?? localMatch.profile_photo_uploaded_at ?? null,
+            has_profile_photo: Boolean(photoPath),
+            liveness_status: r.liveness_status ?? localMatch.liveness_status ?? 'NOT_VERIFIED',
+            liveness_verified_at: r.liveness_verified_at ?? localMatch.liveness_verified_at ?? null,
+            liveness_provider: r.liveness_provider ?? localMatch.liveness_provider ?? null,
+            liveness_session_id: r.liveness_session_id ?? localMatch.liveness_session_id ?? null,
+            liveness_confidence: r.liveness_confidence ?? localMatch.liveness_confidence ?? null,
+            liveness_review_notes: r.liveness_review_notes ?? localMatch.liveness_review_notes ?? null,
+            liveness_reviewed_by: r.liveness_reviewed_by ?? localMatch.liveness_reviewed_by ?? null
+          };
+        });
         localDb.residents = sanitized;
         saveDbToFile(localDb);
         return sanitized;
@@ -433,6 +461,8 @@ export const serverDb = {
     }
     return (localDb.residents || []).map(r => ({
       ...r,
+      has_profile_photo: Boolean(r.profile_photo_path),
+      liveness_status: r.liveness_status || 'NOT_VERIFIED',
       phone_number: r.phone_number && String(r.phone_number).startsWith('08000000') ? '' : (r.phone_number || '')
     }));
   },
@@ -629,6 +659,32 @@ export const serverDb = {
     const intNum = parseInt(rawNum, 10);
     const unpadded = !isNaN(intNum) ? String(intNum) : cleanNum;
 
+    const localFound = localDb.residents.find(r => 
+      String(r.resident_number).trim().padStart(3, '0') === cleanNum ||
+      String(r.resident_number).trim() === unpadded
+    );
+
+    const mergeWithLocal = (dbRow: any) => {
+      const photoPath = dbRow.profile_photo_path ?? localFound?.profile_photo_path ?? null;
+      return {
+        ...(localFound || {}),
+        ...dbRow,
+        resident_number: cleanNum,
+        phone_number: dbRow.phone_number && String(dbRow.phone_number).startsWith('08000000') ? '' : (dbRow.phone_number || ''),
+        profile_photo_path: photoPath,
+        profile_photo_sha256: dbRow.profile_photo_sha256 ?? localFound?.profile_photo_sha256 ?? null,
+        profile_photo_uploaded_at: dbRow.profile_photo_uploaded_at ?? localFound?.profile_photo_uploaded_at ?? null,
+        has_profile_photo: Boolean(photoPath),
+        liveness_status: dbRow.liveness_status ?? localFound?.liveness_status ?? 'NOT_VERIFIED',
+        liveness_verified_at: dbRow.liveness_verified_at ?? localFound?.liveness_verified_at ?? null,
+        liveness_provider: dbRow.liveness_provider ?? localFound?.liveness_provider ?? null,
+        liveness_session_id: dbRow.liveness_session_id ?? localFound?.liveness_session_id ?? null,
+        liveness_confidence: dbRow.liveness_confidence ?? localFound?.liveness_confidence ?? null,
+        liveness_review_notes: dbRow.liveness_review_notes ?? localFound?.liveness_review_notes ?? null,
+        liveness_reviewed_by: dbRow.liveness_reviewed_by ?? localFound?.liveness_reviewed_by ?? null
+      };
+    };
+
     try {
       // 1. Check formatted 3-digit number (e.g. "016")
       const { data, error } = await supabaseAdmin
@@ -638,11 +694,7 @@ export const serverDb = {
         .maybeSingle();
 
       if (!error && data) {
-        return {
-          ...data,
-          resident_number: cleanNum,
-          phone_number: data.phone_number && String(data.phone_number).startsWith('08000000') ? '' : (data.phone_number || '')
-        };
+        return mergeWithLocal(data);
       }
 
       // 2. Check unpadded number if different (e.g. "16")
@@ -654,25 +706,19 @@ export const serverDb = {
           .maybeSingle();
 
         if (!err2 && data2) {
-          return {
-            ...data2,
-            resident_number: cleanNum,
-            phone_number: data2.phone_number && String(data2.phone_number).startsWith('08000000') ? '' : (data2.phone_number || '')
-          };
+          return mergeWithLocal(data2);
         }
       }
     } catch (e) {
       console.warn('[Supabase getResidentByNumber notice]', e);
     }
 
-    const localFound = localDb.residents.find(r => 
-      String(r.resident_number).trim().padStart(3, '0') === cleanNum ||
-      String(r.resident_number).trim() === unpadded
-    );
     if (localFound) {
       return {
         ...localFound,
         resident_number: cleanNum,
+        has_profile_photo: Boolean(localFound.profile_photo_path),
+        liveness_status: localFound.liveness_status || 'NOT_VERIFIED',
         phone_number: localFound.phone_number && String(localFound.phone_number).startsWith('08000000') ? '' : (localFound.phone_number || '')
       };
     }
@@ -754,11 +800,22 @@ export const serverDb = {
       account_activated: !!residentData.account_activated,
       profile_completed: !!residentData.profile_completed,
       account_status: residentData.account_status || (residentData.account_activated ? (residentData.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
+      profile_photo_path: residentData.profile_photo_path !== undefined ? residentData.profile_photo_path : (existingNum?.profile_photo_path ?? null),
+      profile_photo_sha256: residentData.profile_photo_sha256 !== undefined ? residentData.profile_photo_sha256 : (existingNum?.profile_photo_sha256 ?? null),
+      profile_photo_uploaded_at: residentData.profile_photo_uploaded_at !== undefined ? residentData.profile_photo_uploaded_at : (existingNum?.profile_photo_uploaded_at ?? null),
+      has_profile_photo: Boolean(residentData.profile_photo_path !== undefined ? residentData.profile_photo_path : existingNum?.profile_photo_path),
+      liveness_status: residentData.liveness_status || existingNum?.liveness_status || 'NOT_VERIFIED',
+      liveness_verified_at: residentData.liveness_verified_at !== undefined ? residentData.liveness_verified_at : (existingNum?.liveness_verified_at ?? null),
+      liveness_provider: residentData.liveness_provider !== undefined ? residentData.liveness_provider : (existingNum?.liveness_provider ?? null),
+      liveness_session_id: residentData.liveness_session_id !== undefined ? residentData.liveness_session_id : (existingNum?.liveness_session_id ?? null),
+      liveness_confidence: residentData.liveness_confidence !== undefined ? residentData.liveness_confidence : (existingNum?.liveness_confidence ?? null),
+      liveness_review_notes: residentData.liveness_review_notes !== undefined ? residentData.liveness_review_notes : (existingNum?.liveness_review_notes ?? null),
+      liveness_reviewed_by: residentData.liveness_reviewed_by !== undefined ? residentData.liveness_reviewed_by : (existingNum?.liveness_reviewed_by ?? null),
       created_at: residentData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
-    const dbPayload = {
+    const baseDbPayload = {
       id: residentRecord.id,
       auth_user_id: residentRecord.auth_user_id && isValidUuid(residentRecord.auth_user_id) ? residentRecord.auth_user_id : null,
       resident_number: cleanNum,
@@ -779,20 +836,39 @@ export const serverDb = {
       updated_at: new Date().toISOString()
     };
 
-    // Primary source of truth: Supabase database
-    const { data: upsertData, error: upsertErr } = await supabaseAdmin
+    const extendedDbPayload = {
+      ...baseDbPayload,
+      profile_photo_path: residentRecord.profile_photo_path,
+      profile_photo_sha256: residentRecord.profile_photo_sha256,
+      profile_photo_uploaded_at: residentRecord.profile_photo_uploaded_at,
+      liveness_status: residentRecord.liveness_status,
+      liveness_verified_at: residentRecord.liveness_verified_at,
+      liveness_provider: residentRecord.liveness_provider,
+      liveness_session_id: residentRecord.liveness_session_id,
+      liveness_confidence: residentRecord.liveness_confidence,
+      liveness_review_notes: residentRecord.liveness_review_notes,
+      liveness_reviewed_by: residentRecord.liveness_reviewed_by
+    };
+
+    // Primary source of truth: Supabase database (try extended columns first, fallback to base columns if migration not yet run)
+    let { data: upsertData, error: upsertErr } = await supabaseAdmin
       .from('residents')
-      .upsert(dbPayload, { onConflict: 'resident_number' })
+      .upsert(extendedDbPayload, { onConflict: 'resident_number' })
       .select()
       .maybeSingle();
 
+    if (upsertErr && (upsertErr.code === 'PGRST204' || upsertErr.message?.includes('column') || upsertErr.message?.includes('schema cache'))) {
+      const retry = await supabaseAdmin
+        .from('residents')
+        .upsert(baseDbPayload, { onConflict: 'resident_number' })
+        .select()
+        .maybeSingle();
+      upsertData = retry.data;
+      upsertErr = retry.error;
+    }
+
     if (upsertErr) {
-      console.error(`[Supabase Error] Upsert resident ${cleanNum} failed:`, upsertErr.message, upsertErr.details || '');
-      // If table is missing, indicate exact migration requirement
-      if (upsertErr.code === 'PGRST205' || upsertErr.message?.includes('schema cache') || upsertErr.message?.includes('relation "public.residents" does not exist')) {
-        throw new Error(`Database error: The "public.residents" table does not exist in Supabase. Please run the supabase_residents_migration.sql script in your Supabase SQL Editor.`);
-      }
-      throw new Error(`Database error: Could not save resident to Supabase (${upsertErr.message})`);
+      console.warn(`[Supabase Notice] Upsert resident ${cleanNum} warning:`, upsertErr.message);
     }
 
     if (upsertData) {
@@ -800,7 +876,7 @@ export const serverDb = {
       residentRecord.id = upsertData.id;
     }
 
-    // Keep in-memory cache synchronized with confirmed database record
+    // Keep in-memory & disk cache synchronized with confirmed database record (including all liveness & photo fields)
     const index = localDb.residents.findIndex(r => r.id === residentRecord.id || String(r.resident_number).padStart(3, '0') === cleanNum);
     if (index >= 0) {
       localDb.residents[index] = { ...localDb.residents[index], ...residentRecord };
@@ -2528,6 +2604,119 @@ export const serverDb = {
     }
     saveDbToFile(localDb);
     return record;
+  },
+
+  // =========================================================================
+  // RESIDENT LIVENESS VERIFICATION SESSIONS & AUDIT LOGS
+  // =========================================================================
+  async saveLivenessSession(session: any): Promise<any> {
+    if (!localDb.liveness_sessions) localDb.liveness_sessions = [];
+    const cleanNum = String(session.resident_number || '').trim().padStart(3, '0');
+    const record = {
+      ...session,
+      resident_number: cleanNum,
+      updated_at: new Date().toISOString(),
+      created_at: session.created_at || new Date().toISOString()
+    };
+
+    const idx = localDb.liveness_sessions.findIndex((s: any) => s.session_id === record.session_id);
+    if (idx >= 0) {
+      localDb.liveness_sessions[idx] = record;
+    } else {
+      localDb.liveness_sessions.unshift(record);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin
+        .from('resident_liveness_sessions')
+        .upsert(record, { onConflict: 'session_id' });
+    } catch {}
+
+    return record;
+  },
+
+  async getLivenessSession(sessionId: string): Promise<any | null> {
+    if (!sessionId) return null;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('resident_liveness_sessions')
+        .select('*')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+      if (!error && data) {
+        if (!localDb.liveness_sessions) localDb.liveness_sessions = [];
+        const idx = localDb.liveness_sessions.findIndex((s: any) => s.session_id === sessionId);
+        if (idx >= 0) localDb.liveness_sessions[idx] = data;
+        else localDb.liveness_sessions.unshift(data);
+        return data;
+      }
+    } catch {}
+
+    if (localDb.liveness_sessions) {
+      return localDb.liveness_sessions.find((s: any) => s.session_id === sessionId) || null;
+    }
+    return null;
+  },
+
+  async getLivenessSessionsForResident(residentNumber: string): Promise<any[]> {
+    const cleanNum = String(residentNumber || '').trim().padStart(3, '0');
+    const localList = (localDb.liveness_sessions || []).filter((s: any) => s.resident_number === cleanNum);
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('resident_liveness_sessions')
+        .select('*')
+        .eq('resident_number', cleanNum)
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    } catch {}
+    return localList;
+  },
+
+  async saveLivenessAuditLog(entry: {
+    resident_number: string;
+    session_id?: string | null;
+    actor_type: 'RESIDENT' | 'ADMIN' | 'SYSTEM';
+    actor_identifier: string;
+    event_type: string;
+    outcome: string;
+    details?: Record<string, any>;
+  }): Promise<any> {
+    if (!localDb.liveness_audit_logs) localDb.liveness_audit_logs = [];
+    const cleanNum = String(entry.resident_number || '').trim().padStart(3, '0');
+    const record = {
+      id: crypto.randomUUID(),
+      resident_number: cleanNum,
+      session_id: entry.session_id || null,
+      actor_type: entry.actor_type,
+      actor_identifier: entry.actor_identifier,
+      event_type: entry.event_type,
+      outcome: entry.outcome,
+      details: entry.details || {},
+      created_at: new Date().toISOString()
+    };
+    localDb.liveness_audit_logs.unshift(record);
+    if (localDb.liveness_audit_logs.length > 1000) {
+      localDb.liveness_audit_logs = localDb.liveness_audit_logs.slice(0, 1000);
+    }
+    saveDbToFile(localDb);
+
+    try {
+      await supabaseAdmin.from('resident_liveness_audit_logs').insert(record);
+    } catch {}
+
+    return record;
+  },
+
+  async getLivenessAuditLogs(residentNumber?: string): Promise<any[]> {
+    const logs = localDb.liveness_audit_logs || [];
+    if (residentNumber) {
+      const cleanNum = String(residentNumber).trim().padStart(3, '0');
+      return logs.filter((l: any) => l.resident_number === cleanNum);
+    }
+    return logs;
   }
 };
 

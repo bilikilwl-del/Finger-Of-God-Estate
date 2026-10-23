@@ -33,6 +33,7 @@ import { formatNaira } from '../../lib/paystack';
 import { PaystackPaymentModal } from '../payments/PaystackPaymentModal';
 import { ReceiptModal } from '../payments/ReceiptModal';
 import { SendTestSMSModal } from '../sms/SendTestSMSModal';
+import { ResidentPhotoAvatar, LivenessStatusBadge } from '../common/ResidentPhotoAvatar';
 
 interface ResidentProfileViewProps {
   resident: Resident;
@@ -51,6 +52,16 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
 }) => {
   const isSuspended = resident.status === 'Inactive';
 
+  const [residentState, setResidentState] = useState<Resident>(resident);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewNotesInput, setReviewNotesInput] = useState(resident.liveness_review_notes || '');
+  const [reviewMessage, setReviewMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setResidentState(resident);
+    setReviewNotesInput(resident.liveness_review_notes || '');
+  }, [resident]);
+
   // Payment states for Stage 4
   const [currentPayment, setCurrentPayment] = useState<MonthlyPayment | null>(null);
   const [residentTransactions, setResidentTransactions] = useState<PaymentTransaction[]>([]);
@@ -60,6 +71,37 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isTestSmsModalOpen, setIsTestSmsModalOpen] = useState(false);
+
+  const handleManualLivenessDecision = async (decision: 'APPROVE' | 'REJECT') => {
+    setReviewLoading(true);
+    setReviewMessage(null);
+    try {
+      const res = await dbService.submitAdminLivenessReview({
+        residentNumber: residentState.resident_number,
+        decision,
+        sessionId: residentState.liveness_session_id || undefined,
+        notes:
+          reviewNotesInput.trim() ||
+          (decision === 'APPROVE'
+            ? 'Approved via Estate Administrator manual verification review.'
+            : 'Rejected via Estate Administrator manual verification review.')
+      });
+      if (res.success && res.resident) {
+        setResidentState(res.resident);
+        setReviewMessage({
+          type: 'success',
+          text: res.message || `Manual review ${decision === 'APPROVE' ? 'approved' : 'rejected'}.`
+        });
+      } else {
+        setReviewMessage({
+          type: 'error',
+          text: res.message || 'Unable to submit manual review decision.'
+        });
+      }
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   const fetchResidentPaymentData = async () => {
     setLoadingPayment(true);
@@ -162,41 +204,61 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-start gap-4 sm:gap-5">
-            {/* Resident Badge Number Avatar */}
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-900 text-emerald-400 border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold shadow-md shrink-0">
-              <span className="text-[10px] text-slate-400 uppercase tracking-widest font-sans font-semibold">ID NO</span>
-              <span className="text-xl sm:text-2xl tracking-wider text-white font-extrabold">{resident.resident_number}</span>
+            {/* Resident Profile Photo + Badge Number */}
+            <div className="flex items-center gap-3 shrink-0">
+              <ResidentPhotoAvatar
+                residentNumber={residentState.resident_number}
+                fullName={residentState.full_name}
+                hasProfilePhoto={Boolean(residentState.has_profile_photo || residentState.profile_photo_uploaded_at)}
+                viewerRole="admin"
+                size="xl"
+                allowFullPreview={true}
+                refreshKey={residentState.profile_photo_uploaded_at}
+              />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-900 text-emerald-400 border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold shadow-md shrink-0">
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-sans font-semibold">ID NO</span>
+                <span className="text-xl sm:text-2xl tracking-wider text-white font-extrabold">{residentState.resident_number}</span>
+              </div>
             </div>
 
             <div>
               <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
                 <h1 className="font-display font-bold text-xl sm:text-2xl text-slate-900 tracking-tight">
-                  {resident.full_name}
+                  {residentState.full_name}
                 </h1>
                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  resident.status === 'Active'
+                  residentState.status === 'Active'
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     : 'bg-slate-100 text-slate-600 border border-slate-200'
                 }`}>
-                  {resident.status === 'Active' ? (
+                  {residentState.status === 'Active' ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                   ) : (
                     <XCircle className="w-3.5 h-3.5 text-slate-400" />
                   )}
-                  {resident.status}
+                  {residentState.status}
                 </span>
+                <LivenessStatusBadge
+                  status={residentState.liveness_status}
+                  verifiedAt={residentState.liveness_verified_at}
+                />
               </div>
 
               <p className="text-xs sm:text-sm text-slate-500 flex items-center gap-2">
-                <span className="font-semibold text-slate-800">{resident.house_number}</span>
+                <span className="font-semibold text-slate-800">{residentState.house_number}</span>
                 <span>·</span>
-                <span>{resident.address}</span>
+                <span>{residentState.address}</span>
               </p>
 
-              <div className="text-[11px] text-slate-400 mt-2 flex items-center gap-2 font-mono">
-                <span>Registered: {resident.registration_date}</span>
+              <div className="text-[11px] text-slate-400 mt-2 flex flex-wrap items-center gap-2 font-mono">
+                <span>Registered: {residentState.registration_date}</span>
                 <span>·</span>
-                <span>Finger of God Estate Security Registry</span>
+                <span>
+                  Liveness Verified:{' '}
+                  {residentState.liveness_verified_at
+                    ? new Date(residentState.liveness_verified_at).toLocaleString('en-NG')
+                    : 'Pending'}
+                </span>
               </div>
             </div>
           </div>
@@ -306,6 +368,130 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
                   </p>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Biometric Liveness & Profile Photo Verification Card */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <h2 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-emerald-600" />
+                <span>Biometric Liveness &amp; Live Profile Photo Verification</span>
+              </h2>
+              <LivenessStatusBadge
+                status={residentState.liveness_status}
+                verifiedAt={residentState.liveness_verified_at}
+              />
+            </div>
+
+            {reviewMessage && (
+              <div
+                className={`p-3.5 rounded-2xl border text-xs font-semibold flex items-center gap-2 ${
+                  reviewMessage.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}
+              >
+                {reviewMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{reviewMessage.text}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+              <ResidentPhotoAvatar
+                residentNumber={residentState.resident_number}
+                fullName={residentState.full_name}
+                hasProfilePhoto={Boolean(residentState.has_profile_photo || residentState.profile_photo_uploaded_at)}
+                viewerRole="admin"
+                size="xl"
+                allowFullPreview={true}
+                refreshKey={residentState.profile_photo_uploaded_at}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 text-xs w-full">
+                <div>
+                  <span className="text-slate-400 block font-medium">Verification Outcome</span>
+                  <span className="font-bold text-slate-900">
+                    {residentState.liveness_status || 'NOT_STARTED'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-medium">Verification Timestamp</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {residentState.liveness_verified_at
+                      ? new Date(residentState.liveness_verified_at).toLocaleString('en-NG')
+                      : 'Not verified yet'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-medium">Verification Provider / Method</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {residentState.liveness_provider || 'N/A'}
+                    {typeof residentState.liveness_confidence === 'number'
+                      ? ` (${residentState.liveness_confidence.toFixed(1)}% PAD score)`
+                      : ''}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block font-medium">Bound Session ID</span>
+                  <span className="font-mono text-[11px] text-slate-700 break-all">
+                    {residentState.liveness_session_id || 'None'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Authorized Admin Manual Review Section */}
+            <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Authorized Administrator Manual Review Controls
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Manual approval is logged under <code className="font-mono">MANUAL_REVIEW_APPROVED</code> and never represented as automated PAD liveness verification.
+                  </p>
+                </div>
+                {residentState.liveness_reviewed_by && (
+                  <span className="text-[11px] font-mono text-slate-500">
+                    Reviewed by: {residentState.liveness_reviewed_by}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={reviewNotesInput}
+                  onChange={(e) => setReviewNotesInput(e.target.value)}
+                  placeholder="Optional administrator review note or reason..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={reviewLoading}
+                  onClick={() => handleManualLivenessDecision('APPROVE')}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  {reviewLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  <span>Approve Manual Review &amp; Activate Photo</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={reviewLoading}
+                  onClick={() => handleManualLivenessDecision('REJECT')}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-800 border border-rose-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>Reject Verification</span>
+                </button>
+              </div>
             </div>
           </div>
 

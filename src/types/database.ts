@@ -6,6 +6,63 @@
 export type ResidentStatus = 'Active' | 'Inactive';
 export type ResidentAccountStatus = 'NOT ACTIVATED' | 'ACTIVE' | 'PROFILE UPDATE REQUIRED' | 'SUSPENDED' | 'Not Activated' | 'Active' | 'Profile Update Required' | 'Suspended';
 
+export type LivenessVerificationStatus =
+  | 'NOT_STARTED'
+  | 'NOT_VERIFIED'
+  | 'LIVENESS_VERIFIED'
+  | 'PENDING_MANUAL_REVIEW'
+  | 'MANUAL_REVIEW_APPROVED'
+  | 'REJECTED'
+  | 'INCONCLUSIVE'
+  | 'EXPIRED';
+
+export type LivenessChallengeStep =
+  | 'CENTER_FACE'
+  | 'TURN_HEAD_LEFT'
+  | 'TURN_HEAD_RIGHT'
+  | 'NOD_HEAD'
+  | 'HOLD_STILL';
+
+export interface LivenessSessionRecord {
+  id: string;
+  session_id: string;
+  resident_number: string;
+  purpose: 'ACTIVATION' | 'PHOTO_REPLACEMENT';
+  challenge_nonce: string;
+  challenge_sequence: LivenessChallengeStep[];
+  provider: string;
+  provider_session_id?: string | null;
+  status:
+    | 'INITIATED'
+    | 'LIVENESS_VERIFIED'
+    | 'SPOOF_DETECTED'
+    | 'INCONCLUSIVE'
+    | 'PROVIDER_UNCONFIGURED'
+    | 'PROVIDER_UNAVAILABLE'
+    | 'PENDING_MANUAL_REVIEW'
+    | 'MANUAL_REVIEW_APPROVED'
+    | 'REJECTED'
+    | 'EXPIRED';
+  is_live: boolean;
+  confidence_score?: number | null;
+  spoof_reason?: string | null;
+  photo_storage_path?: string | null;
+  photo_sha256?: string | null;
+  photo_mime_type?: string | null;
+  photo_size_bytes?: number | null;
+  manual_review_reason?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  consent_accepted: boolean;
+  consent_timestamp?: string | null;
+  expires_at: string;
+  verified_at?: string | null;
+  used_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Resident {
   id: string;
   auth_user_id?: string | null; // Linked Supabase Auth User ID
@@ -24,9 +81,22 @@ export interface Resident {
   notes?: string | null; // Optional resident notes/remarks
   registration_date: string; // YYYY-MM-DD
   status: ResidentStatus;
+  // Profile Photo & Liveness Verification Fields (Private Storage — never expose raw public URLs)
+  profile_photo_path?: string | null;
+  profile_photo_sha256?: string | null;
+  profile_photo_uploaded_at?: string | null;
+  has_profile_photo?: boolean;
+  liveness_status?: LivenessVerificationStatus;
+  liveness_verified_at?: string | null;
+  liveness_provider?: string | null;
+  liveness_session_id?: string | null;
+  liveness_confidence?: number | null;
+  liveness_review_notes?: string | null;
+  liveness_reviewed_by?: string | null;
   created_at: string;
   updated_at: string;
 }
+
 
 export interface EstateSettings {
   id: string;

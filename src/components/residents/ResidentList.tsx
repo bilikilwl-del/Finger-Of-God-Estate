@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Resident, EstateSettings } from '../../types/database';
 import { normalizeNigerianPhone } from '../../lib/phoneUtils';
+import { ResidentPhotoAvatar, LivenessStatusBadge } from '../common/ResidentPhotoAvatar';
 
 interface ResidentListProps {
   residents: Resident[];
@@ -121,6 +122,8 @@ export const ResidentList: React.FC<ResidentListProps> = ({
       'LGA',
       'Registration Date',
       'Resident Status',
+      'Liveness Status',
+      'Liveness Verified At',
       'Notes'
     ];
 
@@ -136,6 +139,8 @@ export const ResidentList: React.FC<ResidentListProps> = ({
       `"${r.lga}"`,
       r.registration_date,
       r.status,
+      `"${r.liveness_status || 'NOT_STARTED'}"`,
+      `"${r.liveness_verified_at || ''}"`,
       `"${(r.notes || '').replace(/"/g, '""')}"`
     ]);
 
@@ -329,11 +334,11 @@ export const ResidentList: React.FC<ResidentListProps> = ({
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
                   <th className="py-3.5 px-4 w-24">Resident No.</th>
-                  <th className="py-3.5 px-4">Resident Name</th>
+                  <th className="py-3.5 px-4">Photo & Resident Name</th>
                   <th className="py-3.5 px-4">Phone Number</th>
                   <th className="py-3.5 px-4">Building / House</th>
                   <th className="py-3.5 px-4">Account Status</th>
-                  <th className="py-3.5 px-4">Profile Setup</th>
+                  <th className="py-3.5 px-4">Liveness Verification</th>
                   <th className="py-3.5 px-4">Oct 2026 Levy</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -358,19 +363,32 @@ export const ResidentList: React.FC<ResidentListProps> = ({
                         </span>
                       </td>
 
-                      {/* Name */}
+                      {/* Photo + Name + Email */}
                       <td className="py-3.5 px-4">
-                        <button
-                          onClick={() => onViewResident(resident)}
-                          className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left block"
-                        >
-                          {resident.full_name || <span className="italic font-normal text-slate-400">Unactivated Profile</span>}
-                        </button>
-                        {resident.email && (
-                          <span className="text-[11px] text-slate-400 block truncate max-w-[180px]">
-                            {resident.email}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <ResidentPhotoAvatar
+                            residentNumber={resident.resident_number}
+                            fullName={resident.full_name}
+                            hasProfilePhoto={Boolean(resident.has_profile_photo || resident.profile_photo_uploaded_at)}
+                            viewerRole="admin"
+                            size="sm"
+                            allowFullPreview={true}
+                            refreshKey={resident.profile_photo_uploaded_at}
+                          />
+                          <div className="min-w-0">
+                            <button
+                              onClick={() => onViewResident(resident)}
+                              className="font-bold text-slate-900 hover:text-emerald-700 transition-colors text-left block truncate max-w-[190px]"
+                            >
+                              {resident.full_name || <span className="italic font-normal text-slate-400">Unactivated Profile</span>}
+                            </button>
+                            {resident.email && (
+                              <span className="text-[11px] text-slate-400 block truncate max-w-[190px]">
+                                {resident.email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Phone */}
@@ -427,15 +445,30 @@ export const ResidentList: React.FC<ResidentListProps> = ({
                         </span>
                       </td>
 
-                      {/* Profile Setup Status */}
+                      {/* Liveness Verification Status & Timestamp */}
                       <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                          isProfileDone 
-                            ? 'bg-emerald-50 text-emerald-800 font-bold' 
-                            : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {isProfileDone ? 'Completed' : 'Pending'}
-                        </span>
+                        <div className="space-y-1">
+                          <LivenessStatusBadge
+                            status={resident.liveness_status}
+                            verifiedAt={resident.liveness_verified_at}
+                            compact={true}
+                          />
+                          {resident.liveness_verified_at ? (
+                            <span className="text-[10px] font-mono text-slate-400 block">
+                              {new Date(resident.liveness_verified_at).toLocaleString('en-NG', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 block">
+                              {isProfileDone ? 'Profile Completed' : 'Awaiting Capture'}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Payment Status (Oct 2026) */}

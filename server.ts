@@ -13,6 +13,13 @@ import { serverDb, supabaseAdmin, verifyAdminToken, VerifiedAdminUser, ensureDes
 import { normalizeNigerianPhone, validateNigerianPhone, arePhoneNumbersEqual, formatNigerianPhoneForSMS } from './src/lib/phoneUtils.ts';
 import { isValidResidentNumber, normalizeResidentNumber, validateResidentNumber, checkDuplicatePhone } from './src/lib/residentUtils.ts';
 import { emailService } from './src/server/emailService.ts';
+import {
+  registerLivenessRoutes,
+  validateAndConsumeLivenessForActivation,
+  sanitizeResidentPhotoForClient,
+  acquireResidentActivationLock,
+  releaseResidentActivationLock
+} from './src/server/livenessServer.ts';
 
 dotenv.config();
 
@@ -159,6 +166,17 @@ interface ServerResidentRecord {
   lga: string;
   status: 'Active' | 'Inactive';
   registration_date: string;
+  profile_photo_path?: string | null;
+  profile_photo_sha256?: string | null;
+  profile_photo_uploaded_at?: string | null;
+  has_profile_photo?: boolean;
+  liveness_status?: string;
+  liveness_verified_at?: string | null;
+  liveness_provider?: string | null;
+  liveness_session_id?: string | null;
+  liveness_confidence?: number | null;
+  liveness_review_notes?: string | null;
+  liveness_reviewed_by?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -1702,7 +1720,7 @@ app.post('/api/resident/auth', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       token: sessionToken,
-      resident: {
+      resident: sanitizeResidentPhotoForClient({
         id: resident.id,
         auth_user_id: resident.auth_user_id || null,
         account_activated: !!resident.account_activated,
@@ -1718,8 +1736,15 @@ app.post('/api/resident/auth', async (req: Request, res: Response) => {
         state: resident.state || 'Delta',
         lga: resident.lga || 'Oshimili South',
         status: resident.status,
-        registration_date: resident.registration_date
-      }
+        registration_date: resident.registration_date,
+        profile_photo_path: resident.profile_photo_path,
+        profile_photo_uploaded_at: resident.profile_photo_uploaded_at || null,
+        liveness_status: resident.liveness_status || 'NOT_VERIFIED',
+        liveness_verified_at: resident.liveness_verified_at || null,
+        liveness_provider: resident.liveness_provider || null,
+        liveness_confidence: resident.liveness_confidence ?? null,
+        liveness_review_notes: resident.liveness_review_notes || null
+      })
     });
   } catch (err: any) {
     console.error('Resident auth error:', err);
@@ -1802,10 +1827,19 @@ app.post('/api/resident/verify-activation', async (req: Request, res: Response) 
   }
 });
 
-// STAGE 9: RESIDENT ACCOUNT ACTIVATION & LINKING
+// STAGE 9: RESIDENT ACCOUNT ACTIVATION & LINKING (WITH SERVER-VALIDATED LIVENESS ENFORCEMENT)
 app.post('/api/resident/activate', async (req: Request, res: Response) => {
+  const rawResidentNum = req.body?.residentNumber;
+  const cleanLockNum = rawResidentNum ? normalizeResidentNumber(String(rawResidentNum)) : '';
+  if (cleanLockNum && !acquireResidentActivationLock(cleanLockNum)) {
+    return res.status(409).json({
+      success: false,
+      message: 'An activation request for this resident slot is already in progress. Please wait.'
+    });
+  }
+
   try {
-    const { residentNumber, identifier, email, password, auth_user_id } = req.body;
+    const { residentNumber, identifier, email, password, auth_user_id, livenessSessionId } = req.body;
 
     if (!residentNumber || !identifier || !email || !password) {
       return res.status(400).json({
@@ -1864,6 +1898,20 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
       });
     }
 
+    // STRICT LIVENESS ENFORCEMENT: Require server-validated liveness session bound to this resident slot
+    const livenessCheck = await validateAndConsumeLivenessForActivation(cleanNum, livenessSessionId);
+    if (!livenessCheck.valid || !livenessCheck.livenessFields) {
+      return res.status(livenessCheck.httpStatus || 400).json({
+        success: false,
+        requiresLiveness: true,
+        message: livenessCheck.error || 'Live profile photo capture and human liveness verification are required before activation.'
+      });
+    }
+
+    const isAutomatedLivenessVerified =
+      livenessCheck.livenessFields.liveness_status === 'LIVENESS_VERIFIED' ||
+      livenessCheck.livenessFields.liveness_status === 'MANUAL_REVIEW_APPROVED';
+
     // Provision or link with Supabase Auth
     let finalAuthUserId = auth_user_id || resident.auth_user_id;
     const cleanEmail = email.trim().toLowerCase();
@@ -1880,8 +1928,9 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
             role: 'Resident',
             full_name: resident.full_name,
             phone_number: resident.phone_number,
-            account_activated: true,
-            account_status: 'PROFILE UPDATE REQUIRED'
+            account_activated: isAutomatedLivenessVerified,
+            account_status: isAutomatedLivenessVerified ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED',
+            liveness_status: livenessCheck.livenessFields.liveness_status
           }
         });
       } else {
@@ -1894,8 +1943,9 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
             role: 'Resident',
             full_name: resident.full_name,
             phone_number: resident.phone_number,
-            account_activated: true,
-            account_status: 'PROFILE UPDATE REQUIRED'
+            account_activated: isAutomatedLivenessVerified,
+            account_status: isAutomatedLivenessVerified ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED',
+            liveness_status: livenessCheck.livenessFields.liveness_status
           }
         });
         if (!createErr && newUser?.user) {
@@ -1906,18 +1956,23 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
       console.warn('[Supabase Auth Activation Notice]', authErr);
     }
 
-    // Link Account and Update Status
+    // Link Account and Update Status Atomically
     const userId = finalAuthUserId || `auth_usr_${crypto.randomBytes(12).toString('hex')}`;
     resident.auth_user_id = userId;
     resident.account_activated = true;
-    resident.profile_completed = false;
-    resident.account_status = 'PROFILE UPDATE REQUIRED';
+    resident.profile_completed = isAutomatedLivenessVerified;
+    resident.account_status = isAutomatedLivenessVerified ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED';
     resident.email = cleanEmail;
     resident.password_hash = crypto.createHash('sha256').update(password).digest('hex');
+    Object.assign(resident, livenessCheck.livenessFields);
 
-    residentsStore.set(cleanNum, resident);
-    // PERMANENT STORAGE IN SUPABASE & PERSISTENT FILE DATABASE
-    await serverDb.saveResident(resident);
+    try {
+      const saved = await serverDb.saveResident(resident);
+      residentsStore.set(cleanNum, saved);
+    } catch (saveErr) {
+      if (livenessCheck.rollback) await livenessCheck.rollback();
+      throw saveErr;
+    }
 
     const sessionToken = `fog_res_${crypto.randomBytes(16).toString('hex')}`;
     residentSessionsStore.set(sessionToken, { resident_number: cleanNum, created_at: Date.now() });
@@ -1925,30 +1980,17 @@ app.post('/api/resident/activate', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: 'Account activated successfully.',
+      message: isAutomatedLivenessVerified
+        ? 'Account activated and live human liveness verified!'
+        : 'Account details and live profile photo submitted for Estate Administrator Manual Review.',
       token: sessionToken,
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id,
-        account_activated: true,
-        profile_completed: false,
-        account_status: 'PROFILE UPDATE REQUIRED',
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
-        registration_date: resident.registration_date
-      }
+      resident: sanitizeResidentPhotoForClient(resident)
     });
   } catch (err: any) {
     console.error('Activation error:', err);
     res.status(500).json({ success: false, message: 'Server error during account activation.' });
+  } finally {
+    if (cleanLockNum) releaseResidentActivationLock(cleanLockNum);
   }
 });
 
@@ -2118,14 +2160,23 @@ app.all('/api/resident/check-id', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION
-// Activates account with Full Names, Phone Numbers, Email Address and Home Address
+// RESIDENT PORTAL: ONE-TIME ACCOUNT ACTIVATION (WITH MANDATORY LIVENESS VERIFICATION)
+// Activates account with Full Names, Phone Numbers, Email Address, Home Address & Verified Live Profile Photo.
 // Strictly enforced: can ONLY be done ONCE per resident account.
 // Requires the resident to log in afterwards using Email OTP.
 // -------------------------------------------------------------
 app.post('/api/resident/update-details', async (req: Request, res: Response) => {
+  const rawResidentNum = req.body?.residentNumber;
+  const cleanLockNum = rawResidentNum ? normalizeResidentNumber(String(rawResidentNum)) : '';
+  if (cleanLockNum && !acquireResidentActivationLock(cleanLockNum)) {
+    return res.status(409).json({
+      success: false,
+      message: 'An activation request for this resident slot is already in progress. Please wait.'
+    });
+  }
+
   try {
-    const { residentNumber, full_name, phone_number, email, house_number, address } = req.body;
+    const { residentNumber, full_name, phone_number, email, house_number, address, livenessSessionId } = req.body;
 
     if (!residentNumber) {
       return res.status(400).json({ success: false, message: 'Resident ID number is required.' });
@@ -2196,7 +2247,18 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
       });
     }
 
-    // Apply one-time activation updates
+    // STRICT SERVER-SIDE LIVENESS & LIVE PROFILE PHOTO VERIFICATION
+    // Never activate an account solely because the client claims verification succeeded.
+    const livenessValidation = await validateAndConsumeLivenessForActivation(cleanNum, livenessSessionId);
+    if (!livenessValidation.valid || !livenessValidation.livenessFields) {
+      return res.status(livenessValidation.httpStatus || 400).json({
+        success: false,
+        requiresLiveness: true,
+        message: livenessValidation.error || 'Live profile photo capture and human liveness verification are required before activating your resident account.'
+      });
+    }
+
+    // Apply one-time activation updates + bound profile photo & liveness metadata
     resident.full_name = String(full_name).trim();
     resident.phone_number = phoneVal.normalized;
     resident.email = cleanEmail;
@@ -2209,39 +2271,52 @@ app.post('/api/resident/update-details', async (req: Request, res: Response) => 
     resident.profile_completed = true;
     resident.account_activated = true;
     resident.account_status = 'ACTIVE';
+    Object.assign(resident, livenessValidation.livenessFields);
     resident.updated_at = new Date().toISOString();
 
-    // Save to persistent storage (Supabase + localDb)
-    await serverDb.saveResident(resident);
-    residentsStore.set(cleanNum, resident);
+    // Atomically save to persistent storage (rollback session consumption if DB save fails)
+    let savedResident: any;
+    try {
+      savedResident = await serverDb.saveResident(resident);
+      residentsStore.set(cleanNum, savedResident);
+    } catch (saveErr) {
+      if (livenessValidation.rollback) {
+        await livenessValidation.rollback();
+      }
+      throw saveErr;
+    }
+
+    await serverDb.saveLivenessAuditLog({
+      resident_number: cleanNum,
+      session_id: livenessSessionId,
+      actor_type: 'RESIDENT',
+      actor_identifier: `Resident #${cleanNum} (${resident.full_name})`,
+      event_type: 'RESIDENT_ACTIVATED_WITH_PHOTO',
+      outcome: livenessValidation.livenessFields.liveness_status,
+      details: {
+        email: maskEmailAddress(cleanEmail),
+        liveness_status: livenessValidation.livenessFields.liveness_status,
+        liveness_provider: livenessValidation.livenessFields.liveness_provider
+      }
+    });
+
+    const isAutomatedVerified = livenessValidation.livenessFields.liveness_status === 'LIVENESS_VERIFIED';
 
     // Do NOT auto-login upon activation; require resident to log in via Email OTP
     return res.json({
       success: true,
       requires_login: true,
-      message: `Account for Resident #${cleanNum} has been activated! Please log in with your Resident ID and Email (${cleanEmail}) to receive your 6-digit login OTP.`,
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
-        account_activated: true,
-        profile_completed: true,
-        account_status: 'ACTIVE',
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status || 'Active',
-        registration_date: resident.registration_date
-      }
+      liveness_status: livenessValidation.livenessFields.liveness_status,
+      message: isAutomatedVerified
+        ? `Account for Resident #${cleanNum} has been activated with verified human liveness! Please log in with your Resident ID and Email (${cleanEmail}) to receive your 6-digit login OTP.`
+        : `Account for Resident #${cleanNum} has been activated and your live profile photo is queued for Estate Administrator Manual Review (Status: ${livenessValidation.livenessFields.liveness_status}). Please log in with your Resident ID and Email (${cleanEmail}) to receive your 6-digit login OTP.`,
+      resident: sanitizeResidentPhotoForClient(savedResident)
     });
   } catch (err: any) {
     console.error('Resident account activation error:', err);
-    res.status(500).json({ success: false, message: 'Server error activating resident account.' });
+    res.status(500).json({ success: false, message: err?.message || 'Server error activating resident account.' });
+  } finally {
+    if (cleanLockNum) releaseResidentActivationLock(cleanLockNum);
   }
 });
 
@@ -2377,24 +2452,12 @@ app.post('/api/resident/login-id-email', async (req: Request, res: Response) => 
         success: true,
         message: `Welcome back, ${resident.full_name}!`,
         token: sessionToken,
-        resident: {
-          id: resident.id,
-          auth_user_id: resident.auth_user_id || null,
+        resident: sanitizeResidentPhotoForClient({
+          ...resident,
           account_activated: true,
           profile_completed: true,
-          account_status: 'ACTIVE',
-          resident_number: resident.resident_number,
-          full_name: resident.full_name,
-          phone_number: resident.phone_number,
-          additional_phone: resident.additional_phone || null,
-          email: resident.email,
-          house_number: resident.house_number,
-          address: resident.address,
-          state: resident.state || 'Delta',
-          lga: resident.lga || 'Oshimili South',
-          status: resident.status,
-          registration_date: resident.registration_date
-        }
+          account_status: 'ACTIVE'
+        })
       });
     }
 
@@ -2818,24 +2881,12 @@ app.post('/api/resident/verify-otp', async (req: Request, res: Response) => {
       message: `Welcome back, ${resident.full_name}!`,
       token: sessionToken,
       rememberDevice: Boolean(rememberDevice),
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
+      resident: sanitizeResidentPhotoForClient({
+        ...resident,
         account_activated: !!resident.account_activated,
         profile_completed: !!resident.profile_completed,
-        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
-        registration_date: resident.registration_date
-      }
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED')
+      })
     });
   } catch (err: any) {
     console.error('Verify OTP error:', err);
@@ -3045,7 +3096,7 @@ app.post('/api/resident/request-activation-code', async (req: Request, res: Resp
 // RESIDENT PORTAL: VERIFY ACTIVATION CODE & ACTIVATE ACCOUNT
 app.post('/api/resident/verify-activation-otp', async (req: Request, res: Response) => {
   try {
-    const { residentNumber, phoneNumber, otp, rememberDevice } = req.body;
+    const { residentNumber, phoneNumber, otp, rememberDevice, livenessSessionId } = req.body;
 
     if (!residentNumber || !otp) {
       return res.status(400).json({
@@ -3116,6 +3167,16 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       });
     }
 
+    // Enforce liveness verification before completing OTP activation
+    const livenessValidation = await validateAndConsumeLivenessForActivation(cleanNum, livenessSessionId);
+    if (!livenessValidation.valid || !livenessValidation.livenessFields) {
+      return res.status(livenessValidation.httpStatus || 400).json({
+        success: false,
+        requiresLiveness: true,
+        message: livenessValidation.error || 'Live profile photo capture and human liveness verification are required before completing account activation.'
+      });
+    }
+
     // Retrieve pending email from verified record
     const verifiedPendingEmail = otpRecord.pending_email;
 
@@ -3128,42 +3189,26 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       resident = residentsStore.get(cleanNum) || Array.from(residentsStore.values()).find(r => r.resident_number === cleanNum);
     }
     if (!resident) {
+      if (livenessValidation.rollback) await livenessValidation.rollback();
       return res.status(404).json({
         success: false,
         message: 'Resident record could not be found.'
       });
     }
 
-    // Permanently save the supplied verified email and activate the resident account!
+    // Permanently save the supplied verified email, bound profile photo & liveness metadata, and activate the resident account!
     if (verifiedPendingEmail) {
       resident.email = verifiedPendingEmail;
     }
     resident.account_activated = true;
     resident.account_status = 'ACTIVE';
+    Object.assign(resident, livenessValidation.livenessFields);
     resident.updated_at = new Date().toISOString();
 
-    residentsStore.set(cleanNum, resident);
-    await serverDb.saveResident(resident);
-
-    // Sync permanent email and activation state to production Supabase
-    if (supabaseAdmin) {
-      try {
-        await supabaseAdmin
-          .from('residents')
-          .update({
-            email: resident.email,
-            account_activated: true,
-            account_status: 'ACTIVE',
-            updated_at: new Date().toISOString()
-          })
-          .eq('resident_number', cleanNum);
-      } catch (sbErr) {
-        console.warn('[Supabase Sync Notice during Activation]', sbErr);
-      }
-    }
+    const savedResident = await serverDb.saveResident(resident);
+    residentsStore.set(cleanNum, savedResident);
 
     // Issue session token
-    const tokenValidityMs = rememberDevice ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
     const sessionToken = `fog_res_${crypto.randomBytes(24).toString('hex')}`;
     residentSessionsStore.set(sessionToken, {
       resident_number: cleanNum,
@@ -3178,8 +3223,12 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       action: 'RESIDENT_ACCOUNT_ACTIVATION',
       entity_type: 'resident',
       entity_id: cleanNum,
-      description: `Resident #${cleanNum} (${resident.full_name}) successfully activated their Resident Portal account with verified email ${maskEmailAddress(resident.email || '')}.`,
-      metadata: { resident_number: cleanNum, resident_name: resident.full_name },
+      description: `Resident #${cleanNum} (${resident.full_name}) activated their Resident Portal account with verified email ${maskEmailAddress(resident.email || '')} and liveness status ${livenessValidation.livenessFields.liveness_status}.`,
+      metadata: {
+        resident_number: cleanNum,
+        resident_name: resident.full_name,
+        liveness_status: livenessValidation.livenessFields.liveness_status
+      },
       created_at: new Date().toISOString()
     };
     auditLogsStore.unshift(auditEntry);
@@ -3189,24 +3238,7 @@ app.post('/api/resident/verify-activation-otp', async (req: Request, res: Respon
       message: `Account activated successfully! Welcome to Finger of God Estate Resident Portal, ${resident.full_name}.`,
       token: sessionToken,
       rememberDevice: Boolean(rememberDevice),
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
-        account_activated: true,
-        profile_completed: !!resident.profile_completed,
-        account_status: 'ACTIVE',
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
-        registration_date: resident.registration_date
-      }
+      resident: sanitizeResidentPhotoForClient(savedResident)
     });
   } catch (err: any) {
     console.error('Verify activation OTP error:', err);
@@ -3313,6 +3345,14 @@ app.put('/api/resident/profile', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// REGISTER RESIDENT LIVENESS VERIFICATION & PRIVATE PHOTO ROUTES
+// -------------------------------------------------------------
+registerLivenessRoutes(app, {
+  residentsStore,
+  requireAuthenticatedResident
+});
+
+// -------------------------------------------------------------
 // ADMIN RESIDENT MANAGEMENT REST ENDPOINTS
 // -------------------------------------------------------------
 app.get('/api/admin/residents', requireAdminAuth, async (_req: Request, res: Response) => {
@@ -3325,7 +3365,7 @@ app.get('/api/admin/residents', requireAdminAuth, async (_req: Request, res: Res
       }
     }
 
-    const list = Array.from(residentsStore.values()).map(r => ({
+    const list = Array.from(residentsStore.values()).map(r => sanitizeResidentPhotoForClient({
       ...r,
       account_activated: !!r.account_activated,
       profile_completed: !!r.profile_completed,
@@ -3603,24 +3643,12 @@ app.post('/api/resident/first-login-setup', async (req: Request, res: Response) 
     res.json({
       success: true,
       message: 'Your account is ready. Welcome to the Resident Portal.',
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
+      resident: sanitizeResidentPhotoForClient({
+        ...resident,
         account_activated: true,
         profile_completed: true,
-        account_status: 'ACTIVE',
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
-        registration_date: resident.registration_date
-      }
+        account_status: 'ACTIVE'
+      })
     });
   } catch (err: any) {
     console.error('First login setup error:', err);
@@ -3636,26 +3664,12 @@ app.get('/api/resident/me', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email || null,
-        house_number: resident.house_number,
-        address: resident.address,
-        state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status,
+      resident: sanitizeResidentPhotoForClient({
+        ...resident,
         account_activated: !!resident.account_activated,
         profile_completed: !!resident.profile_completed,
-        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
-        registration_date: resident.registration_date,
-        created_at: resident.created_at,
-        updated_at: resident.updated_at
-      }
+        account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED')
+      })
     });
   } catch (err: any) {
     console.error('Resident me error:', err);
@@ -3750,23 +3764,14 @@ app.get('/api/resident/dashboard', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      resident: {
-        id: resident.id,
-        auth_user_id: resident.auth_user_id || null,
+      resident: sanitizeResidentPhotoForClient({
+        ...resident,
         account_activated: !!resident.account_activated,
         profile_completed: !!resident.profile_completed,
         account_status: resident.account_status || (resident.account_activated ? (resident.profile_completed ? 'ACTIVE' : 'PROFILE UPDATE REQUIRED') : 'NOT ACTIVATED'),
-        resident_number: resident.resident_number,
-        full_name: resident.full_name,
-        phone_number: resident.phone_number,
-        additional_phone: resident.additional_phone || null,
-        email: resident.email,
-        house_number: resident.house_number,
-        address: resident.address,
         state: resident.state || 'Delta',
-        lga: resident.lga || 'Oshimili South',
-        status: resident.status
-      },
+        lga: resident.lga || 'Oshimili South'
+      }),
       summary: {
         currentMonthStatus: currentMonthPayment.status,
         currentMonthLabel: currentMonthPayment.period_label,
