@@ -197,26 +197,14 @@ export const LivenessStatusBadge: React.FC<{
 }> = ({ status, verifiedAt, compact = false }) => {
   const norm = status || 'NOT_VERIFIED';
 
-  if (norm === 'LIVENESS_VERIFIED') {
+  if (norm === 'LIVENESS_VERIFIED' || norm === 'MANUAL_REVIEW_APPROVED') {
     return (
       <span
-        title={verifiedAt ? `Verified at ${new Date(verifiedAt).toLocaleString('en-NG')}` : 'Automated Live Human PAD Verified'}
+        title={verifiedAt ? `Captured at ${new Date(verifiedAt).toLocaleString('en-NG')}` : 'Face Photo Verified'}
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"
       >
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-        <span>{compact ? 'Liveness Verified' : 'Live Human Verified (PAD)'}</span>
-      </span>
-    );
-  }
-
-  if (norm === 'MANUAL_REVIEW_APPROVED') {
-    return (
-      <span
-        title={verifiedAt ? `Approved by Admin at ${new Date(verifiedAt).toLocaleString('en-NG')}` : 'Approved via Admin Manual Review'}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-50 text-teal-800 border border-teal-200"
-      >
-        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-        <span>{compact ? 'Admin Approved' : 'Manual Review Approved'}</span>
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <span>{compact ? 'Photo Verified' : 'Face Photo Verified'}</span>
       </span>
     );
   }
@@ -225,7 +213,7 @@ export const LivenessStatusBadge: React.FC<{
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
         <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-        <span>{compact ? 'Pending Review' : 'Pending Admin Manual Review'}</span>
+        <span>{compact ? 'Pending Review' : 'Pending Photo Review'}</span>
       </span>
     );
   }
@@ -234,7 +222,7 @@ export const LivenessStatusBadge: React.FC<{
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200">
         <ShieldAlert className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-        <span>{compact ? 'Rejected' : 'Liveness/Photo Rejected'}</span>
+        <span>{compact ? 'Rejected' : 'Photo Rejected'}</span>
       </span>
     );
   }
@@ -242,7 +230,7 @@ export const LivenessStatusBadge: React.FC<{
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
       <Camera className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-      <span>{compact ? 'Not Verified' : 'No Verified Live Photo'}</span>
+      <span>{compact ? 'No Photo' : 'No Profile Photo'}</span>
     </span>
   );
 };

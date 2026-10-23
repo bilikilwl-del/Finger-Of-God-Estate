@@ -84,7 +84,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
                 </span>
                 <h2 className="font-display text-lg font-bold">{activeResident.full_name}</h2>
               </div>
-              <p className="text-xs text-slate-400">Resident Identification &amp; Biometric Security Record</p>
+              <p className="text-xs text-slate-400">Resident Identification &amp; Profile Record</p>
             </div>
           </div>
           <button 
@@ -97,7 +97,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
 
         {/* Modal Content */}
         <div className="p-6 space-y-6">
-          {/* Liveness Verification & Profile Photo Summary Banner */}
+          {/* Resident Profile Photo Summary Banner */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
                 />
                 <div className="space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Biometric Liveness &amp; Photo Verification
+                    Resident Profile Photo
                   </div>
                   <LivenessStatusBadge
                     status={activeResident.liveness_status}
@@ -120,7 +120,7 @@ export const ResidentDetailModal: React.FC<ResidentDetailModalProps> = ({
                   />
                   {activeResident.liveness_verified_at && (
                     <div className="text-[11px] font-mono text-slate-500">
-                      Timestamp: {new Date(activeResident.liveness_verified_at).toLocaleString('en-NG')}
+                      Captured: {new Date(activeResident.liveness_verified_at).toLocaleString('en-NG')}
                     </div>
                   )}
                 </div>

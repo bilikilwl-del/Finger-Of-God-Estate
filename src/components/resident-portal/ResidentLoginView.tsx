@@ -341,7 +341,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setUpdateHomeAddress('');
         setLivenessSessionId('');
         setLivenessStatus('NOT_STARTED');
-        setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, Home Address, and complete Live Profile Photo & Liveness Verification to activate your account.`);
+        setSuccessMessage(`Resident #${cleanNum} verified! Please enter your Full Names, Phone Number, Email Address, Home Address, and snap your face photo to activate your account.`);
       } else {
         setErrorMessage(res.message || `Resident ID #${cleanNum} not found in estate directory (valid IDs: 001 - 100).`);
       }
@@ -498,14 +498,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
     if (!livenessSessionId) {
       setErrorMessage(
-        'Live profile photo capture and human liveness verification are required before activating your resident account. Please complete the Live Camera Verification step below.'
-      );
-      return;
-    }
-
-    if (livenessStatus === 'PENDING_MANUAL_REVIEW') {
-      setErrorMessage(
-        'Your live photo and liveness capture have been submitted for Estate Administrator manual review. Automated activation will unlock once an authorized administrator approves your verification.'
+        'Please snap a clear photo of your face using the camera below to set your resident profile photo before activating your account.'
       );
       return;
     }
@@ -534,7 +527,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
         setIdEmailStep('enter_credentials');
         setActiveTab('id_email_login');
         setSuccessMessage(
-          `Account for Resident #${cleanNum} has been activated with verified live profile photo! Please log in below — a 6-digit OTP will be sent to ${activatedEmail} to access your account.`
+          `Account for Resident #${cleanNum} has been activated with your profile photo! Please log in below — a 6-digit OTP will be sent to ${activatedEmail} to access your account.`
         );
       } else {
         if (res.already_activated) {
@@ -799,14 +792,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
 
     if (!livenessSessionId) {
       setErrorMessage(
-        'Live profile photo capture and human liveness verification are required before completing account activation.'
-      );
-      return;
-    }
-
-    if (livenessStatus === 'PENDING_MANUAL_REVIEW') {
-      setErrorMessage(
-        'Your live photo and liveness capture are awaiting Estate Administrator manual review. Automated activation requires verified liveness or administrator approval.'
+        'Please snap a photo of your face using the camera below to set your profile photo before completing account activation.'
       );
       return;
     }
@@ -1471,7 +1457,7 @@ export const ResidentLoginView: React.FC<ResidentLoginViewProps> = ({
                         <span>
                           {livenessStatus === 'LIVENESS_VERIFIED' || livenessStatus === 'MANUAL_REVIEW_APPROVED'
                             ? 'COMPLETE ACCOUNT ACTIVATION'
-                            : 'VERIFY LIVENESS TO ACTIVATE'}
+                            : 'SNAP FACE PHOTO TO ACTIVATE'}
                         </span>
                       </>
                     )}

@@ -1886,12 +1886,12 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                     </h4>
                     <p className="text-xs text-slate-500">
                       {residentProfile.has_profile_photo || residentProfile.profile_photo_uploaded_at
-                        ? `Approved live profile photo stored in private estate storage${
+                        ? `Official resident profile photo${
                             residentProfile.liveness_verified_at
-                              ? ` • Verified ${new Date(residentProfile.liveness_verified_at).toLocaleString('en-NG')}`
+                              ? ` • Snapped ${new Date(residentProfile.liveness_verified_at).toLocaleString('en-NG')}`
                               : ''
                           }`
-                        : 'No verified live profile photo on file yet.'}
+                        : 'No profile photo on file yet.'}
                     </p>
                   </div>
                 </div>
@@ -1902,16 +1902,13 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                     onClick={() => setIsReplacingPhoto((prev) => !prev)}
                     className="px-3.5 py-2 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
                   >
-                    {isReplacingPhoto ? 'Cancel Photo Update' : 'Update Live Profile Photo'}
+                    {isReplacingPhoto ? 'Cancel Photo Update' : 'Snap New Profile Photo'}
                   </button>
                 </div>
               </div>
 
               {isReplacingPhoto && (
                 <div className="pt-3 border-t border-slate-200 space-y-3">
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950">
-                    <strong>Re-Verification Requirement:</strong> Replacing your profile photo never inherits a previous photo&apos;s liveness status. You must complete a new live camera capture and human liveness check for the new image.
-                  </div>
                   <ResidentLivenessCapture
                     residentNumber={residentProfile.resident_number}
                     purpose="PHOTO_REPLACEMENT"
@@ -1923,21 +1920,14 @@ export const ResidentDashboardView: React.FC<ResidentDashboardViewProps> = ({
                         setIsReplacingPhoto(false);
                         setProfileMsg({
                           type: 'success',
-                          text: res.message || 'Your profile photo has been updated and re-verified for human liveness.'
+                          text: 'Your profile photo has been updated.'
                         });
                       } else {
                         setProfileMsg({
                           type: 'error',
-                          text: res.message || 'Failed to replace profile photo. Please try again.'
+                          text: res.message || 'Failed to update profile photo. Please try again.'
                         });
                       }
-                    }}
-                    onManualReviewQueued={({ message }) => {
-                      setIsReplacingPhoto(false);
-                      setProfileMsg({
-                        type: 'success',
-                        text: message || 'Your new live photo has been submitted for Estate Administrator manual review.'
-                      });
                     }}
                   />
                 </div>

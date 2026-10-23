@@ -371,12 +371,12 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
             </div>
           </div>
 
-          {/* Biometric Liveness & Profile Photo Verification Card */}
+          {/* Resident Profile Photo Card */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <h2 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
                 <Shield className="w-4 h-4 text-emerald-600" />
-                <span>Biometric Liveness &amp; Live Profile Photo Verification</span>
+                <span>Resident Profile Photo</span>
               </h2>
               <LivenessStatusBadge
                 status={residentState.liveness_status}
@@ -413,84 +413,21 @@ export const ResidentProfileView: React.FC<ResidentProfileViewProps> = ({
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 text-xs w-full">
                 <div>
-                  <span className="text-slate-400 block font-medium">Verification Outcome</span>
+                  <span className="text-slate-400 block font-medium">Profile Photo Status</span>
                   <span className="font-bold text-slate-900">
-                    {residentState.liveness_status || 'NOT_STARTED'}
+                    {residentState.has_profile_photo || residentState.profile_photo_uploaded_at
+                      ? 'Face Photo Captured'
+                      : 'No Photo Captured Yet'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block font-medium">Verification Timestamp</span>
+                  <span className="text-slate-400 block font-medium">Captured Timestamp</span>
                   <span className="font-mono font-semibold text-slate-800">
                     {residentState.liveness_verified_at
                       ? new Date(residentState.liveness_verified_at).toLocaleString('en-NG')
-                      : 'Not verified yet'}
+                      : 'Not captured yet'}
                   </span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block font-medium">Verification Provider / Method</span>
-                  <span className="font-mono font-semibold text-slate-800">
-                    {residentState.liveness_provider || 'N/A'}
-                    {typeof residentState.liveness_confidence === 'number'
-                      ? ` (${residentState.liveness_confidence.toFixed(1)}% PAD score)`
-                      : ''}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block font-medium">Bound Session ID</span>
-                  <span className="font-mono text-[11px] text-slate-700 break-all">
-                    {residentState.liveness_session_id || 'None'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Authorized Admin Manual Review Section */}
-            <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Authorized Administrator Manual Review Controls
-                  </h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Manual approval is logged under <code className="font-mono">MANUAL_REVIEW_APPROVED</code> and never represented as automated PAD liveness verification.
-                  </p>
-                </div>
-                {residentState.liveness_reviewed_by && (
-                  <span className="text-[11px] font-mono text-slate-500">
-                    Reviewed by: {residentState.liveness_reviewed_by}
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <input
-                  type="text"
-                  value={reviewNotesInput}
-                  onChange={(e) => setReviewNotesInput(e.target.value)}
-                  placeholder="Optional administrator review note or reason..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={reviewLoading}
-                  onClick={() => handleManualLivenessDecision('APPROVE')}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  {reviewLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  <span>Approve Manual Review &amp; Activate Photo</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={reviewLoading}
-                  onClick={() => handleManualLivenessDecision('REJECT')}
-                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-800 border border-rose-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <XCircle className="w-3.5 h-3.5" />
-                  <span>Reject Verification</span>
-                </button>
               </div>
             </div>
           </div>
